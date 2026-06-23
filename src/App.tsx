@@ -253,6 +253,24 @@ function App() {
     setSelectedNodeId(null);
   };
 
+  const onPaneDoubleClick = useCallback((event: React.MouseEvent) => {
+    // Only spawn node if we double clicked the canvas pane itself
+    const target = event.target as HTMLElement;
+    if (!target.classList.contains("react-flow__pane")) return;
+
+    const reactFlowBounds = document.getElementById("rf-canvas")?.getBoundingClientRect();
+    if (!reactFlowBounds || !rfInstance) return;
+
+    // Get position relative to canvas bounding box
+    const position = rfInstance.screenToFlowPosition({
+      x: event.clientX,
+      y: event.clientY,
+    });
+
+    addTaskNode(position.x - 75, position.y - 30);
+    console.log("Pane double clicked: Created task node at position", position);
+  }, [rfInstance, addTaskNode]);
+
   // Socket communication runner to coordinate Pi Sidecar edits
   const executeNode = (nodeId: string) => {
     const node = nodes.find((n) => n.id === nodeId);
@@ -623,7 +641,7 @@ function App() {
                 </div>
 
                 {/* React Flow Board */}
-                <div className="flex-1 w-full relative min-h-0">
+                <div className="flex-1 w-full relative min-h-0" onDoubleClick={onPaneDoubleClick}>
                   <ReactFlow
                     nodes={nodes}
                     edges={edges}
@@ -635,7 +653,10 @@ function App() {
                     onPaneClick={onPaneClick}
                     onInit={setRfInstance}
                     proOptions={{ hideAttribution: true }}
+                    maxZoom={1.2}
+                    minZoom={0.2}
                     fitView
+                    fitViewOptions={{ maxZoom: 1.2 }}
                   >
                     <Background color="#1f2937" gap={16} size={1} variant={BackgroundVariant.Dots} />
                   </ReactFlow>

@@ -48,7 +48,6 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ activeTab, onExecuteNo
 
   // --- 1. File Tab Writable Editor Logic ---
   const [fileContent, setFileContent] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
   const saveTimeoutRef = useRef<any>(null);
 
   useEffect(() => {
@@ -77,7 +76,6 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ activeTab, onExecuteNo
   const handleEditorChange = (value: string | undefined) => {
     if (value === undefined || !activeTab) return;
     setFileContent(value);
-    setIsSaving(true);
 
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
@@ -85,12 +83,10 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ activeTab, onExecuteNo
 
     saveTimeoutRef.current = setTimeout(async () => {
       try {
-        await invoke("write_file_vfs", { path: activeTab.key, content: value });
-        console.log(`EditorPanel [FileTab] auto-saved VFS content: ${activeTab.title}`);
+        await invoke("write_file_disk", { path: activeTab.key, content: value });
+        console.log(`EditorPanel [FileTab] auto-saved directly to disk: ${activeTab.title}`);
       } catch (err) {
-        console.error("EditorPanel [FileTab] auto-save failed:", err);
-      } finally {
-        setIsSaving(false);
+        console.error("EditorPanel [FileTab] disk save failed:", err);
       }
     }, 500);
   };
@@ -174,14 +170,6 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ activeTab, onExecuteNo
         {/* FILE TAB VIEW */}
         {activeTab.type === "file" && (
           <div className="flex-1 flex flex-col overflow-hidden relative">
-            <div className="px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/30 text-[10px] font-mono text-[var(--text-muted)] flex justify-between items-center select-none">
-              <span className="truncate">VFS Sandbox Path: {activeTab.key}</span>
-              {isSaving ? (
-                <span className="text-[var(--accent-color)] font-bold animate-pulse">Saving changes...</span>
-              ) : (
-                <span className="text-emerald-500">Changes buffered in VFS</span>
-              )}
-            </div>
             <div className="flex-1 w-full h-full relative">
               <Editor
                 height="100%"
@@ -190,7 +178,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ activeTab, onExecuteNo
                 value={fileContent}
                 onChange={handleEditorChange}
                 options={{
-                  minimap: { enabled: false },
+                  minimap: { enabled: true },
                   scrollBeyondLastLine: false,
                   lineNumbers: "on",
                   fontSize: 12,

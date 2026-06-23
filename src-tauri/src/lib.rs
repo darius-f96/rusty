@@ -95,6 +95,25 @@ fn read_file_disk(path: String) -> Result<String, String> {
     }
 }
 
+#[tauri::command]
+fn write_file_disk(
+    state: tauri::State<'_, VfsState>,
+    path: String,
+    content: String,
+) -> Result<(), String> {
+    println!("Rust [write_file_disk] writing path directly to disk: {}", path);
+    let path_buf = PathBuf::from(&path);
+    if let Some(parent) = path_buf.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&path_buf, content).map_err(|e| e.to_string())?;
+
+    // Evict this path from VFS memory cache so subsequent VFS reads fall back to this physical disk file
+    let mut vfs = state.0.lock().map_err(|e| e.to_string())?;
+    vfs.remove(&path);
+    Ok(())
+}
+
 fn read_dir_recursive(path: &Path) -> Result<Vec<FileEntry>, String> {
     let mut entries = Vec::new();
     let read_dir = std::fs::read_dir(path).map_err(|e| e.to_string())?;
@@ -153,7 +172,8 @@ pub fn run() {
             write_file_vfs,
             apply_vfs_to_disk,
             get_directory_structure,
-            read_file_disk
+            read_file_disk,
+            write_file_disk
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
