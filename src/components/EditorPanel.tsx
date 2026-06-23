@@ -3,6 +3,7 @@ import Editor, { DiffEditor } from "@monaco-editor/react";
 import { Terminal, MessageSquare, Code, Play, Sparkles } from "lucide-react";
 import { useWorkspaceStore } from "../store";
 import { invoke } from "@tauri-apps/api/core";
+import { getFileTypeDetails } from "../services/fileTypeService";
 
 const EMPTY_ARRAY: any[] = [];
 
@@ -133,27 +134,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ activeTab, onExecuteNo
 
   // Simple language detector based on extension
   const getEditorLanguage = (filePath: string): string => {
-    const ext = filePath.split(".").pop()?.toLowerCase();
-    switch (ext) {
-      case "ts":
-      case "tsx":
-        return "typescript";
-      case "js":
-      case "jsx":
-        return "javascript";
-      case "json":
-        return "json";
-      case "rs":
-        return "rust";
-      case "css":
-        return "css";
-      case "html":
-        return "html";
-      case "md":
-        return "markdown";
-      default:
-        return "plaintext";
-    }
+    return getFileTypeDetails(filePath).language;
   };
 
   return (

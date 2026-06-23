@@ -1,13 +1,14 @@
 import React from "react";
 import { Handle, Position } from "@xyflow/react";
-import { FileCode, Link } from "lucide-react";
+import { Link } from "lucide-react";
+import { FileIcon } from "../services/fileTypeService";
 
 export const FileNode: React.FC<{ data: { path: string; name: string } }> = ({ data }) => {
   return (
     <div className="w-64 rounded-xl border border-zinc-700/60 bg-zinc-900/90 text-gray-200 shadow-2xl backdrop-blur-md overflow-hidden transition-all duration-300 hover:border-zinc-500/80 hover:shadow-emerald-950/20">
       <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-950/80 px-3 py-2">
         <div className="flex items-center space-x-2">
-          <FileCode size={16} className="text-emerald-400" />
+          <FileIcon fileName={data.name} size={16} className="flex-shrink-0" />
           <span className="font-mono text-sm font-semibold truncate max-w-[180px]">{data.name}</span>
         </div>
         <Link size={12} className="text-zinc-500" />

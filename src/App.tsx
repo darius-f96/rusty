@@ -11,9 +11,10 @@ import { FileNode } from "./components/FileNode";
 import { TaskNode } from "./components/TaskNode";
 import { EditorPanel } from "./components/EditorPanel";
 import { SidePane } from "./components/SidePane";
+import { FileIcon } from "./services/fileTypeService";
 import { useWorkspaceStore, CustomProvider } from "./store";
 import { invoke } from "@tauri-apps/api/core";
-import { Folder, CheckSquare, Layers, Settings, Plus, X, FileCode, Cpu, Maximize } from "lucide-react";
+import { Folder, CheckSquare, Layers, Settings, Plus, X, Cpu, Maximize } from "lucide-react";
 
 // Register custom nodes for React Flow
 const nodeTypes = {
@@ -547,7 +548,7 @@ function App() {
                   }`}
                 >
                   {tab.type === "canvas" && <Layers size={11} className={isActive ? "text-indigo-400" : "text-zinc-500"} />}
-                  {tab.type === "file" && <FileCode size={11} className={isActive ? "text-indigo-400" : "text-zinc-500"} />}
+                  {tab.type === "file" && <FileIcon fileName={tab.title} size={11} className="flex-shrink-0" />}
                   {tab.type === "task" && <Cpu size={11} className={isActive ? "text-indigo-400" : "text-zinc-500"} />}
                   
                   <span className="truncate max-w-[120px]">{tab.title}</span>
