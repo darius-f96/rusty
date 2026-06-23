@@ -116,31 +116,31 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
   };
 
   return (
-    <div className="w-[500px] border-l border-zinc-800 bg-zinc-950/95 flex flex-col h-full text-zinc-300 font-sans shadow-2xl">
+    <div className="w-[500px] border-l border-[var(--border-color)] bg-[var(--bg-app)]/95 flex flex-col h-full text-[var(--text-normal)] font-sans shadow-2xl">
       {/* Pane Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 bg-zinc-900/40">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/40">
         <div className="flex flex-col">
-          <span className="font-mono text-xs text-zinc-500 uppercase tracking-wider">Inspector</span>
+          <span className="font-mono text-xs text-[var(--text-muted)] uppercase tracking-wider">Inspector</span>
           <span className="font-semibold text-sm truncate max-w-[320px]">
             {selectedNode.type === "fileNode" ? (selectedNode.data as any).name : `Task Node (${selectedNode.id})`}
           </span>
         </div>
         <button
           onClick={onClose}
-          className="text-zinc-500 hover:text-zinc-200 transition-colors p-1 rounded-lg hover:bg-zinc-800"
+          className="text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors p-1 rounded-lg hover:bg-[var(--bg-sidebar)]"
         >
           <X size={16} />
         </button>
       </div>
 
       {/* Tabs Row */}
-      <div className="flex border-b border-zinc-800 bg-zinc-900/10 text-xs font-mono">
+      <div className="flex border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/10 text-xs font-mono">
         <button
           onClick={() => setActiveTab("diff")}
           className={`flex items-center space-x-1.5 px-4 py-2.5 border-b-2 transition-all ${
             activeTab === "diff"
-              ? "border-indigo-500 text-white bg-indigo-500/5 font-semibold"
-              : "border-transparent text-zinc-500 hover:text-zinc-300"
+              ? "border-[var(--accent-color)] text-[var(--text-light)] bg-[var(--accent-bg)] font-semibold"
+              : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-light)]"
           }`}
         >
           <Code size={14} />
@@ -152,8 +152,8 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
               onClick={() => setActiveTab("chat")}
               className={`flex items-center space-x-1.5 px-4 py-2.5 border-b-2 transition-all ${
                 activeTab === "chat"
-                  ? "border-indigo-500 text-white bg-indigo-500/5 font-semibold"
-                  : "border-transparent text-zinc-500 hover:text-zinc-300"
+                  ? "border-[var(--accent-color)] text-[var(--text-light)] bg-[var(--accent-bg)] font-semibold"
+                  : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-light)]"
               }`}
             >
               <MessageSquare size={14} />
@@ -163,14 +163,14 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
               onClick={() => setActiveTab("console")}
               className={`flex items-center space-x-1.5 px-4 py-2.5 border-b-2 transition-all relative ${
                 activeTab === "console"
-                  ? "border-indigo-500 text-white bg-indigo-500/5 font-semibold"
-                  : "border-transparent text-zinc-500 hover:text-zinc-300"
+                  ? "border-[var(--accent-color)] text-[var(--text-light)] bg-[var(--accent-bg)] font-semibold"
+                  : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-light)]"
               }`}
             >
               <Terminal size={14} />
               <span>Console Stream</span>
               {nodeStatus === "running" && (
-                <span className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-indigo-500 animate-ping" />
+                <span className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-[var(--accent-color)] animate-ping" />
               )}
             </button>
           </>
@@ -179,12 +179,12 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
 
       {/* File Diff Dropdown Selector (only for TaskNode when files are edited) */}
       {selectedNode.type === "taskNode" && modifiedFiles.length > 0 && (
-        <div className="px-4 py-2 border-b border-zinc-800 bg-[#111318] flex items-center justify-between text-xs font-mono">
-          <span className="text-zinc-500">File Diff:</span>
+        <div className="px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)] flex items-center justify-between text-xs font-mono">
+          <span className="text-[var(--text-muted)]">File Diff:</span>
           <select
             value={activeDiffFile}
             onChange={(e) => setActiveDiffFile(e.target.value)}
-            className="bg-zinc-950 text-zinc-300 border border-zinc-800 rounded px-2.5 py-1 outline-none text-[11px] max-w-[300px] truncate focus:border-zinc-700 cursor-pointer"
+            className="bg-[var(--bg-app)] text-[var(--text-normal)] border border-[var(--border-color)] rounded px-2.5 py-1 outline-none text-[11px] max-w-[300px] truncate focus:border-[var(--border-active)] cursor-pointer"
           >
             {modifiedFiles.map((file) => (
               <option key={file} value={file}>
@@ -196,14 +196,14 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
       )}
 
       {/* Tabs Content */}
-      <div className="flex-1 overflow-hidden relative bg-zinc-950">
+      <div className="flex-1 overflow-hidden relative bg-[var(--bg-app)]">
         {activeTab === "diff" && (
           activeDiffFile ? (
             <div className="w-full h-full">
               <DiffEditor
                 height="100%"
                 language={getEditorLanguage(activeDiffFile)}
-                theme="vs-dark"
+                theme="axiom-custom-theme"
                 original={originalCode}
                 modified={modifiedCode}
                 options={{
@@ -217,9 +217,9 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
               />
             </div>
           ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center p-8 text-center text-zinc-500 font-mono text-xs space-y-2">
-              <span className="text-indigo-400 font-bold">// Sandbox VFS Standby</span>
-              <span className="text-[11px] text-zinc-600 max-w-[280px]">
+            <div className="w-full h-full flex flex-col items-center justify-center p-8 text-center text-[var(--text-muted)] font-mono text-xs space-y-2">
+              <span className="text-[var(--accent-color)] font-bold">// Sandbox VFS Standby</span>
+              <span className="text-[11px] text-[var(--text-muted)] max-w-[280px]">
                 No files modified by this task node yet. Connect a source File Node, type prompt instructions, and click "Run Executor".
               </span>
             </div>
@@ -241,44 +241,44 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
         )}
 
         {activeTab === "chat" && (
-          <div className="flex flex-col h-full bg-zinc-950">
+          <div className="flex flex-col h-full bg-[var(--bg-app)]">
             {/* Mocked conversation preview */}
             <div className="flex-1 p-4 space-y-4 overflow-y-auto text-xs">
-              <div className="flex flex-col bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-3 max-w-[85%] self-start space-y-1">
-                <span className="font-mono text-[9px] uppercase font-bold text-zinc-500">System Agent</span>
+              <div className="flex flex-col bg-[var(--bg-sidebar)]/60 border border-[var(--border-color)]/80 rounded-xl p-3 max-w-[85%] self-start space-y-1">
+                <span className="font-mono text-[9px] uppercase font-bold text-[var(--text-muted)]">System Agent</span>
                 <span className="leading-relaxed">
                   I will check the attached file inputs and execute your modifications. You can type instructions below to refine my work.
                 </span>
               </div>
               {chatMessage && nodeStatus === "success" && (
-                <div className="flex flex-col bg-indigo-950/20 border border-indigo-900/50 rounded-xl p-3 max-w-[85%] ml-auto space-y-1 text-right">
-                  <span className="font-mono text-[9px] uppercase font-bold text-indigo-400">User</span>
-                  <span className="leading-relaxed text-zinc-100">{chatMessage}</span>
+                <div className="flex flex-col bg-[var(--accent-bg)] border border-[var(--accent-color)]/50 rounded-xl p-3 max-w-[85%] ml-auto space-y-1 text-right">
+                  <span className="font-mono text-[9px] uppercase font-bold text-[var(--accent-color)]">User</span>
+                  <span className="leading-relaxed text-[var(--text-light)]">{chatMessage}</span>
                 </div>
               )}
             </div>
 
             {/* Input prompt area */}
-            <div className="p-3 border-t border-zinc-800 bg-zinc-900/20">
+            <div className="p-3 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/20">
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
                   if (!chatMessage.trim()) return;
                   onExecuteNode(selectedNode.id);
                 }}
-                className="flex items-center space-x-2 bg-zinc-950 border border-zinc-800 p-1.5 rounded-lg focus-within:border-zinc-700"
+                className="flex items-center space-x-2 bg-[var(--bg-app)] border border-[var(--border-color)] p-1.5 rounded-lg focus-within:border-[var(--border-active)]"
               >
                 <input
                   type="text"
                   placeholder="e.g. Refactor this helper into a separate hook..."
                   value={chatMessage}
                   onChange={(e) => setChatMessage(e.target.value)}
-                  className="flex-1 bg-transparent border-none outline-none text-xs px-2 py-1 focus:ring-0"
+                  className="flex-1 bg-transparent border-none outline-none text-xs px-2 py-1 focus:ring-0 text-[var(--text-normal)]"
                 />
                 <button
                   type="submit"
                   disabled={nodeStatus === "running"}
-                  className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white text-xs font-mono font-bold px-3 py-1.5 rounded-md flex items-center space-x-1.5 transition-all glow-btn"
+                  className="bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 disabled:bg-[var(--bg-sidebar)] disabled:text-[var(--text-muted)] text-white text-xs font-mono font-bold px-3 py-1.5 rounded-md flex items-center space-x-1.5 transition-all glow-btn cursor-pointer"
                 >
                   <Play size={12} />
                   <span>Prompt</span>
@@ -291,14 +291,14 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
 
       {/* Footer controls for executing node */}
       {selectedNode.type === "taskNode" && activeTab !== "chat" && (
-        <div className="p-3 border-t border-zinc-800 bg-zinc-900/20 flex items-center justify-between">
-          <span className="text-[10px] uppercase font-mono text-zinc-500">
-            Status: <span className="font-bold text-zinc-300">{nodeStatus}</span>
+        <div className="p-3 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/20 flex items-center justify-between">
+          <span className="text-[10px] uppercase font-mono text-[var(--text-muted)]">
+            Status: <span className="font-bold text-[var(--text-normal)]">{nodeStatus}</span>
           </span>
           <button
             onClick={() => onExecuteNode(selectedNode.id)}
             disabled={nodeStatus === "running"}
-            className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all glow-btn shadow-md"
+            className="bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 disabled:bg-[var(--bg-sidebar)] disabled:text-[var(--text-muted)] text-white text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all glow-btn shadow-md cursor-pointer"
           >
             <Sparkles size={14} className={nodeStatus === "running" ? "animate-spin" : ""} />
             <span>{nodeStatus === "running" ? "Running..." : "Run Executor"}</span>

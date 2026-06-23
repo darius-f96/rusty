@@ -409,21 +409,21 @@ function App() {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#0d0e12] text-zinc-100 font-sans">
+    <div className="flex h-screen w-screen overflow-hidden bg-[var(--bg-app)] text-[var(--text-light)] font-sans">
       {/* 1. Left Sidebar - Navigation & Filetree */}
       <div 
-        className="border-r border-zinc-800 bg-[#111318]/90 flex flex-col h-full z-10 relative"
+        className="border-r border-[var(--border-color)] bg-[var(--bg-sidebar)]/90 flex flex-col h-full z-10 relative"
         style={{ width: `${sidebarWidth}px` }}
       >
         {/* Workspace selector */}
-        <div className="p-4 border-b border-zinc-850 space-y-3">
+        <div className="p-4 border-b border-[var(--border-color)] space-y-3">
           <div className="flex items-center justify-between text-zinc-400">
             <div className="flex items-center space-x-2">
-              <Folder size={16} className="text-indigo-400" />
+              <Folder size={16} className="text-[var(--accent-color)]" />
               <span className="text-xs uppercase tracking-wider font-mono font-bold">Workspace</span>
             </div>
             {rootPath && (
-              <span className="text-[9px] text-zinc-500 font-mono">// Click to select</span>
+              <span className="text-[9px] text-[var(--text-muted)] font-mono">// Click to select</span>
             )}
           </div>
           <div className="flex space-x-2">
@@ -433,11 +433,11 @@ function App() {
               placeholder="Click Open to select folder..."
               value={rootPath || ""}
               onClick={handleOpenWorkspace}
-              className="flex-1 bg-zinc-950/80 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-zinc-400 cursor-pointer select-none focus:outline-none truncate hover:border-zinc-700 transition-colors"
+              className="flex-1 bg-[var(--bg-app)] border border-[var(--border-color)] rounded-lg px-2.5 py-1.5 text-xs font-mono text-[var(--text-muted)] cursor-pointer select-none focus:outline-none truncate hover:border-[var(--border-active)] transition-colors"
             />
             <button
               onClick={handleOpenWorkspace}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white font-mono font-bold text-xs px-3.5 py-1.5 rounded-lg transition-colors shadow-lg cursor-pointer flex items-center"
+              className="bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 text-white font-mono font-bold text-xs px-3.5 py-1.5 rounded-lg transition-colors shadow-lg cursor-pointer flex items-center"
             >
               Open
             </button>
@@ -448,10 +448,10 @@ function App() {
         <div className="flex-1 overflow-auto px-4 py-3 min-w-0">
           <div className="flex items-center justify-between mb-3 text-zinc-400">
             <span className="text-xs uppercase tracking-wider font-mono font-bold">Project Explorer</span>
-            <span className="text-[10px] text-zinc-500 font-mono">// Drag items to canvas</span>
+            <span className="text-[10px] text-[var(--text-muted)] font-mono">// Drag items to canvas</span>
           </div>
           {fileTree.length === 0 ? (
-            <div className="text-center py-8 text-xs text-zinc-600 font-mono">
+            <div className="text-center py-8 text-xs text-[var(--text-muted)] font-mono">
               No workspace loaded. Enter a valid directory target above.
             </div>
           ) : (
@@ -460,62 +460,62 @@ function App() {
         </div>
 
         {/* dynamic LLM selection/settings configuration */}
-        <div className="p-4 border-t border-zinc-850 bg-zinc-950/30">
+        <div className="p-4 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/30">
           <button
             onClick={() => setShowSettings(!showSettings)}
-            className="w-full border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-800/80 text-zinc-300 text-xs font-mono py-2 rounded-lg flex items-center justify-center space-x-2 transition-all cursor-pointer"
+            className="w-full border border-[var(--border-color)] bg-[var(--bg-sidebar)]/40 hover:bg-[var(--bg-sidebar)]/80 text-[var(--text-normal)] text-xs font-mono py-2 rounded-lg flex items-center justify-center space-x-2 transition-all cursor-pointer"
           >
             <Settings size={14} />
             <span>LLM Provider Setup</span>
           </button>
           
           {showSettings && (
-            <form onSubmit={handleAddNewProvider} className="mt-3 space-y-2 border-t border-zinc-850 pt-3 text-xs">
+            <form onSubmit={handleAddNewProvider} className="mt-3 space-y-2 border-t border-[var(--border-color)] pt-3 text-xs">
               <div>
-                <label className="block text-[9px] uppercase font-mono text-zinc-500 mb-1">Provider ID</label>
+                <label className="block text-[9px] uppercase font-mono text-[var(--text-muted)] mb-1">Provider ID</label>
                 <input
                   type="text"
                   placeholder="e.g. ollama, openrouter"
                   value={provId}
                   onChange={(e) => setProvId(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded p-1 text-[11px] font-mono"
+                  className="w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded p-1 text-[11px] font-mono"
                   required
                 />
               </div>
               <div>
-                <label className="block text-[9px] uppercase font-mono text-zinc-500 mb-1">Provider Name</label>
+                <label className="block text-[9px] uppercase font-mono text-[var(--text-muted)] mb-1">Provider Name</label>
                 <input
                   type="text"
                   placeholder="e.g. Local Ollama"
                   value={provName}
                   onChange={(e) => setProvName(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded p-1 text-[11px] font-mono"
+                  className="w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded p-1 text-[11px] font-mono"
                   required
                 />
               </div>
               <div>
-                <label className="block text-[9px] uppercase font-mono text-zinc-500 mb-1">API Base URL</label>
+                <label className="block text-[9px] uppercase font-mono text-[var(--text-muted)] mb-1">API Base URL</label>
                 <input
                   type="text"
                   placeholder="e.g. http://localhost:11434/v1"
                   value={provUrl}
                   onChange={(e) => setProvUrl(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded p-1 text-[11px] font-mono"
+                  className="w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded p-1 text-[11px] font-mono"
                 />
               </div>
               <div>
-                <label className="block text-[9px] uppercase font-mono text-zinc-500 mb-1">Models (Comma-separated)</label>
+                <label className="block text-[9px] uppercase font-mono text-[var(--text-muted)] mb-1">Models (Comma-separated)</label>
                 <input
                   type="text"
                   placeholder="e.g. qwen2.5-coder:7b, llama3.1"
                   value={provModels}
                   onChange={(e) => setProvModels(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded p-1 text-[11px] font-mono"
+                  className="w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded p-1 text-[11px] font-mono"
                 />
               </div>
               <button
                 type="submit"
-                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-mono font-bold py-1 rounded text-xs transition-all cursor-pointer"
+                className="w-full bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 text-white font-mono font-bold py-1 rounded text-xs transition-all cursor-pointer"
               >
                 Register Provider
               </button>
@@ -526,14 +526,14 @@ function App() {
         {/* Draggable Sidebar Resizer Handle */}
         <div
           onMouseDown={handleSidebarMouseDown}
-          className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-500/50 active:bg-indigo-500 hover:w-1.5 transition-all z-20"
+          className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-[var(--accent-color)]/50 active:bg-[var(--accent-color)] hover:w-1.5 transition-all z-20"
         />
       </div>
 
       {/* 2. Central Main Panel Workspace */}
       <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative">
         {/* Unified Tab Bar */}
-        <div className="flex items-center justify-between border-b border-zinc-800 bg-[#14161a] h-9 select-none z-20">
+        <div className="flex items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-header)] h-9 select-none z-20">
           <div className="flex items-stretch h-full overflow-x-auto scrollbar-none">
             {openTabs.map((tab) => {
               const isActive = tab.id === activeTabId;
@@ -541,15 +541,15 @@ function App() {
                 <div
                   key={tab.id}
                   onClick={() => setActiveTabId(tab.id)}
-                  className={`group flex items-center space-x-2 px-4 h-full border-r border-zinc-800 text-[11px] font-mono cursor-pointer select-none transition-all ${
+                  className={`group flex items-center space-x-2 px-4 h-full border-r border-[var(--border-color)] text-[11px] font-mono cursor-pointer select-none transition-all ${
                     isActive
-                      ? "bg-[#0d0e12] text-zinc-100 font-semibold border-t-2 border-t-indigo-500"
-                      : "bg-[#14161a] text-zinc-400 hover:text-zinc-200 hover:bg-[#1b1d24]"
+                      ? "bg-[var(--bg-app)] text-[var(--text-light)] font-semibold border-t-2 border-t-[var(--accent-color)]"
+                      : "bg-[var(--bg-header)] text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]"
                   }`}
                 >
-                  {tab.type === "canvas" && <Layers size={11} className={isActive ? "text-indigo-400" : "text-zinc-500"} />}
+                  {tab.type === "canvas" && <Layers size={11} className={isActive ? "text-[var(--accent-color)]" : "text-[var(--text-muted)]"} />}
                   {tab.type === "file" && <FileIcon fileName={tab.title} size={11} className="flex-shrink-0" />}
-                  {tab.type === "task" && <Cpu size={11} className={isActive ? "text-indigo-400" : "text-zinc-500"} />}
+                  {tab.type === "task" && <Cpu size={11} className={isActive ? "text-[var(--accent-color)]" : "text-[var(--text-muted)]"} />}
                   
                   <span className="truncate max-w-[120px]">{tab.title}</span>
                   
@@ -559,7 +559,7 @@ function App() {
                         e.stopPropagation();
                         closeTab(tab.id);
                       }}
-                      className="p-0.5 rounded-sm hover:bg-zinc-800/80 text-zinc-500 hover:text-zinc-300 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity animate-fade-in"
+                      className="p-0.5 rounded-sm hover:bg-[var(--border-color)]/80 text-[var(--text-muted)] hover:text-[var(--text-light)] opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity animate-fade-in"
                     >
                       <X size={10} />
                     </button>
@@ -570,35 +570,35 @@ function App() {
           </div>
           
           {rootPath && (
-            <span className="text-[10px] text-zinc-500 font-mono hidden sm:inline truncate max-w-[250px] px-4">
+            <span className="text-[10px] text-[var(--text-muted)] font-mono hidden sm:inline truncate max-w-[250px] px-4">
               VFS: {rootPath.split("/").pop()}
             </span>
           )}
         </div>
 
         {/* Tab Content Display View */}
-        <div className="flex-1 min-h-0 relative bg-[#0d0e12]">
+        <div className="flex-1 min-h-0 relative bg-[var(--bg-app)]">
           {activeTabId === "canvas" ? (
             <div className="w-full h-full flex relative">
-              <div className="flex-1 flex flex-col h-full relative bg-[#0d0e12]" id="rf-canvas" onDragOver={onDragOver} onDrop={onDrop}>
+              <div className="flex-1 flex flex-col h-full relative bg-[var(--bg-app)]" id="rf-canvas" onDragOver={onDragOver} onDrop={onDrop}>
                 {/* Workspace Toolbar Header */}
                 <div className="absolute top-4 left-4 right-4 h-14 glass-panel rounded-xl flex items-center justify-between px-4 z-10">
                   <div className="flex items-center space-x-3">
-                    <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-600/20 text-indigo-400 border border-indigo-500/20">
+                    <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-[var(--accent-bg)] text-[var(--accent-color)] border border-[var(--accent-color)]/20">
                       <Layers size={18} />
                     </span>
                     <div className="flex flex-col">
                       <span className="font-bold text-sm tracking-wide">Orchestration Canvas</span>
-                      <span className="text-[10px] text-zinc-500 font-mono">Tauri VFS Sandbox Mode</span>
+                      <span className="text-[10px] text-[var(--text-muted)] font-mono">Tauri VFS Sandbox Mode</span>
                     </div>
                   </div>
 
                   <div className="flex items-center space-x-2">
                     <button
                       onClick={() => rfInstance?.fitView()}
-                      className="bg-[#181920]/80 border border-zinc-800 hover:bg-zinc-800 text-zinc-200 text-xs font-mono font-bold px-3.5 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer hover:border-zinc-700"
+                      className="bg-[var(--bg-sidebar)]/80 border border-[var(--border-color)] hover:bg-[var(--bg-header)] text-[var(--text-normal)] text-xs font-mono font-bold px-3.5 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer hover:border-[var(--border-active)]"
                     >
-                      <Maximize size={13} className="text-indigo-400" />
+                      <Maximize size={13} className="text-[var(--accent-color)]" />
                       <span>Center</span>
                     </button>
 
@@ -606,15 +606,15 @@ function App() {
                       onClick={() => {
                         addTaskNode(300, 200);
                       }}
-                      className="bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-200 text-xs font-mono font-bold px-3 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer"
+                      className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] hover:bg-[var(--bg-header)] text-[var(--text-normal)] text-xs font-mono font-bold px-3 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer hover:border-[var(--border-active)]"
                     >
-                      <Plus size={14} className="text-indigo-400" />
+                      <Plus size={14} className="text-[var(--accent-color)]" />
                       <span>Add Task Node</span>
                     </button>
                     
                     <button
                       onClick={handleApplyChanges}
-                      className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-lg glow-btn cursor-pointer"
+                      className="bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/85 text-white text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-lg glow-btn cursor-pointer"
                     >
                       <CheckSquare size={14} />
                       <span>Apply Pipeline</span>
@@ -656,19 +656,19 @@ function App() {
         </div>
 
         {/* Collapsible Bottom Developer Console (Pinned Globally) */}
-        <div className={`border-t border-zinc-800/80 bg-[#0c0d10] flex flex-col transition-all duration-300 ${
+        <div className={`border-t border-[var(--border-color)] bg-[var(--bg-header)] flex flex-col transition-all duration-300 ${
           showDevConsole ? "h-60" : "h-9"
         } z-10 overflow-hidden font-sans`}>
           {/* Header Bar */}
           <div
             onClick={() => setShowDevConsole(!showDevConsole)}
-            className="h-9 px-4 flex items-center justify-between border-b border-zinc-900 bg-zinc-950/60 hover:bg-zinc-900/20 cursor-pointer select-none text-[11px] font-mono text-zinc-400"
+            className="h-9 px-4 flex items-center justify-between border-b border-[var(--border-color)]/60 bg-[var(--bg-app)]/60 hover:bg-[var(--bg-sidebar)]/20 cursor-pointer select-none text-[11px] font-mono text-[var(--text-muted)]"
           >
             <div className="flex items-center space-x-3">
               <span className={`w-2 h-2 rounded-full ${
                 devLogs.some(l => l.type === "error") ? "bg-rose-500 animate-pulse" : "bg-emerald-500"
               }`} />
-              <span className="font-bold text-zinc-300 uppercase tracking-wider">Dev Logs Terminal</span>
+              <span className="font-bold text-[var(--text-light)] uppercase tracking-wider">Dev Logs Terminal</span>
               <span>
                 ({devLogs.filter(l => l.type === "error").length} Errors, {devLogs.filter(l => l.type === "warn").length} Warnings)
               </span>
@@ -679,11 +679,11 @@ function App() {
                   e.stopPropagation();
                   clearDevLogs();
                 }}
-                className="hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 px-2 py-0.5 rounded text-[10px] uppercase font-bold transition-all border border-zinc-800 hover:border-zinc-700 cursor-pointer"
+                className="hover:bg-[var(--bg-app)] text-[var(--text-normal)] hover:text-[var(--text-light)] px-2 py-0.5 rounded text-[10px] uppercase font-bold transition-all border border-[var(--border-color)] hover:border-[var(--border-active)] cursor-pointer"
               >
                 Clear
               </button>
-              <span className="text-[10px] text-zinc-500 font-bold uppercase">
+              <span className="text-[10px] text-[var(--text-muted)] font-bold uppercase">
                 {showDevConsole ? "[ Collapse ]" : "[ Expand ]"}
               </span>
             </div>
@@ -696,7 +696,7 @@ function App() {
               className="flex-1 p-4 font-mono text-[11px] overflow-y-auto space-y-1 bg-black text-zinc-400 select-text selection:bg-indigo-900 selection:text-white"
             >
               {devLogs.length === 0 ? (
-                <span className="text-zinc-600">// No console logs captured yet.</span>
+                <span className="text-[var(--text-muted)] select-none">// No console logs captured yet.</span>
               ) : (
                 devLogs.map((log) => {
                   const colors = {
@@ -707,7 +707,7 @@ function App() {
                   };
                   return (
                     <div key={log.id} className="flex items-start space-x-2 leading-relaxed border-b border-zinc-950 pb-0.5 hover:bg-zinc-900/10">
-                      <span className="text-zinc-600 select-none">[{log.timestamp}]</span>
+                      <span className="text-[var(--text-muted)] select-none">[{log.timestamp}]</span>
                       <span className={colors[log.type]}>{log.text}</span>
                     </div>
                   );

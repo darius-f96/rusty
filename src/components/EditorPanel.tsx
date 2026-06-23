@@ -1,9 +1,39 @@
 import React, { useState, useEffect, useRef } from "react";
-import Editor, { DiffEditor } from "@monaco-editor/react";
+import Editor, { DiffEditor, loader } from "@monaco-editor/react";
 import { Terminal, MessageSquare, Code, Play, Sparkles } from "lucide-react";
 import { useWorkspaceStore } from "../store";
 import { invoke } from "@tauri-apps/api/core";
 import { getFileTypeDetails } from "../services/fileTypeService";
+import { theme } from "../theme";
+
+// Register custom Monaco theme
+loader.init().then((monaco) => {
+  monaco.editor.defineTheme("axiom-custom-theme", {
+    base: "vs-dark",
+    inherit: true,
+    rules: [
+      { token: "", foreground: theme.textNormal.replace("#", "") },
+      { token: "comment", foreground: theme.syntax.comments.replace("#", ""), fontStyle: "italic" },
+      { token: "keyword", foreground: theme.syntax.keywords.replace("#", "") },
+      { token: "string", foreground: theme.syntax.strings.replace("#", "") },
+      { token: "number", foreground: theme.syntax.numbers.replace("#", "") },
+      { token: "regexp", foreground: theme.syntax.strings.replace("#", "") },
+      { token: "type", foreground: theme.syntax.types.replace("#", "") },
+      { token: "class", foreground: theme.syntax.types.replace("#", "") },
+      { token: "function", foreground: theme.syntax.functions.replace("#", "") },
+      { token: "variable", foreground: theme.syntax.variables.replace("#", "") },
+    ],
+    colors: {
+      "editor.background": theme.bgEditor,
+      "editor.foreground": theme.textNormal,
+      "editorLineNumber.foreground": theme.textMuted,
+      "editorLineNumber.activeForeground": theme.textLight,
+      "editor.lineHighlightBackground": theme.bgSidebar + "33", // transparent overlay
+      "editor.selectionBackground": theme.accent + "44",
+      "editorCursor.foreground": theme.accent,
+    },
+  });
+});
 
 const EMPTY_ARRAY: any[] = [];
 
@@ -138,16 +168,16 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ activeTab, onExecuteNo
   };
 
   return (
-    <div className="w-full h-full bg-[#0d0e12] flex flex-col text-zinc-300 font-sans relative">
+    <div className="w-full h-full bg-[var(--bg-app)] flex flex-col text-[var(--text-normal)] font-sans relative">
       {/* Tab Content View */}
       <div className="flex-1 flex flex-col overflow-hidden relative">
         {/* FILE TAB VIEW */}
         {activeTab.type === "file" && (
           <div className="flex-1 flex flex-col overflow-hidden relative">
-            <div className="px-4 py-2 border-b border-zinc-850 bg-zinc-950/30 text-[10px] font-mono text-zinc-500 flex justify-between items-center select-none">
+            <div className="px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/30 text-[10px] font-mono text-[var(--text-muted)] flex justify-between items-center select-none">
               <span className="truncate">VFS Sandbox Path: {activeTab.key}</span>
               {isSaving ? (
-                <span className="text-indigo-400 font-bold animate-pulse">Saving changes...</span>
+                <span className="text-[var(--accent-color)] font-bold animate-pulse">Saving changes...</span>
               ) : (
                 <span className="text-emerald-500">Changes buffered in VFS</span>
               )}
@@ -156,7 +186,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ activeTab, onExecuteNo
               <Editor
                 height="100%"
                 language={getEditorLanguage(activeTab.key)}
-                theme="vs-dark"
+                theme="axiom-custom-theme"
                 value={fileContent}
                 onChange={handleEditorChange}
                 options={{
@@ -175,13 +205,13 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ activeTab, onExecuteNo
         {activeTab.type === "task" && taskNode && (
           <div className="flex-1 flex flex-col overflow-hidden relative">
             {/* Task Sub Tabs Row */}
-            <div className="flex border-b border-zinc-850 bg-[#111318]/50 text-xs font-mono">
+            <div className="flex border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/50 text-xs font-mono">
               <button
                 onClick={() => setTaskSubTab("diff")}
                 className={`flex items-center space-x-1.5 px-4 py-2 border-b-2 transition-all ${
                   taskSubTab === "diff"
-                    ? "border-indigo-500 text-white bg-indigo-500/5 font-semibold"
-                    : "border-transparent text-zinc-500 hover:text-zinc-300"
+                    ? "border-[var(--accent-color)] text-[var(--text-light)] bg-[var(--accent-bg)] font-semibold"
+                    : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-light)]"
                 }`}
               >
                 <Code size={14} />
@@ -191,8 +221,8 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ activeTab, onExecuteNo
                 onClick={() => setTaskSubTab("chat")}
                 className={`flex items-center space-x-1.5 px-4 py-2 border-b-2 transition-all ${
                   taskSubTab === "chat"
-                    ? "border-indigo-500 text-white bg-indigo-500/5 font-semibold"
-                    : "border-transparent text-zinc-500 hover:text-zinc-300"
+                    ? "border-[var(--accent-color)] text-[var(--text-light)] bg-[var(--accent-bg)] font-semibold"
+                    : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-light)]"
                 }`}
               >
                 <MessageSquare size={14} />
@@ -202,26 +232,26 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ activeTab, onExecuteNo
                 onClick={() => setTaskSubTab("console")}
                 className={`flex items-center space-x-1.5 px-4 py-2 border-b-2 transition-all relative ${
                   taskSubTab === "console"
-                    ? "border-indigo-500 text-white bg-indigo-500/5 font-semibold"
-                    : "border-transparent text-zinc-500 hover:text-zinc-300"
+                    ? "border-[var(--accent-color)] text-[var(--text-light)] bg-[var(--accent-bg)] font-semibold"
+                    : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-light)]"
                 }`}
               >
                 <Terminal size={14} />
                 <span>Console Stream</span>
                 {nodeStatus === "running" && (
-                  <span className="absolute top-2.5 right-2 w-1.5 h-1.5 rounded-full bg-indigo-500 animate-ping" />
+                  <span className="absolute top-2.5 right-2 w-1.5 h-1.5 rounded-full bg-[var(--accent-color)] animate-ping" />
                 )}
               </button>
             </div>
 
             {/* Task Diff Selector Dropdown */}
             {taskSubTab === "diff" && modifiedFiles.length > 0 && (
-              <div className="px-4 py-2 border-b border-zinc-850 bg-[#111318] flex items-center justify-between text-xs font-mono">
-                <span className="text-zinc-500">File Diff:</span>
+              <div className="px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)] flex items-center justify-between text-xs font-mono">
+                <span className="text-[var(--text-muted)]">File Diff:</span>
                 <select
                   value={activeDiffFile}
                   onChange={(e) => setActiveDiffFile(e.target.value)}
-                  className="bg-zinc-950 text-zinc-300 border border-zinc-800 rounded px-2.5 py-1 outline-none text-[11px] max-w-[300px] truncate focus:border-zinc-700 cursor-pointer"
+                  className="bg-[var(--bg-app)] text-[var(--text-normal)] border border-[var(--border-color)] rounded px-2.5 py-1 outline-none text-[11px] max-w-[300px] truncate focus:border-[var(--border-active)] cursor-pointer"
                 >
                   {modifiedFiles.map((file) => (
                     <option key={file} value={file}>
@@ -233,14 +263,14 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ activeTab, onExecuteNo
             )}
 
             {/* Task Sub Tab Content */}
-            <div className="flex-1 overflow-hidden relative bg-zinc-950">
+            <div className="flex-1 overflow-hidden relative bg-[var(--bg-app)]">
               {taskSubTab === "diff" && (
                 activeDiffFile ? (
                   <div className="w-full h-full">
                     <DiffEditor
                       height="100%"
                       language={getEditorLanguage(activeDiffFile)}
-                      theme="vs-dark"
+                      theme="axiom-custom-theme"
                       original={originalCode}
                       modified={modifiedCode}
                       options={{
@@ -254,9 +284,9 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ activeTab, onExecuteNo
                     />
                   </div>
                 ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center p-8 text-center text-zinc-500 font-mono text-xs space-y-2 select-none">
-                    <span className="text-indigo-400 font-bold">// Sandbox VFS Standby</span>
-                    <span className="text-[11px] text-zinc-600 max-w-[280px]">
+                  <div className="w-full h-full flex flex-col items-center justify-center p-8 text-center text-[var(--text-muted)] font-mono text-xs space-y-2 select-none">
+                    <span className="text-[var(--accent-color)] font-bold">// Sandbox VFS Standby</span>
+                    <span className="text-[11px] text-[var(--text-muted)] max-w-[280px]">
                       No files modified by this task node yet. Connect a source File Node, type prompt instructions, and click "Run Executor".
                     </span>
                   </div>
@@ -278,30 +308,30 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ activeTab, onExecuteNo
               )}
 
               {taskSubTab === "chat" && (
-                <div className="flex flex-col h-full bg-zinc-950">
+                <div className="flex flex-col h-full bg-[var(--bg-app)]">
                   <div className="flex-1 p-4 space-y-4 overflow-y-auto text-xs">
-                    <div className="flex flex-col bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-3 max-w-[85%] self-start space-y-1">
-                      <span className="font-mono text-[9px] uppercase font-bold text-zinc-500">System Agent</span>
+                    <div className="flex flex-col bg-[var(--bg-sidebar)]/60 border border-[var(--border-color)]/80 rounded-xl p-3 max-w-[85%] self-start space-y-1">
+                      <span className="font-mono text-[9px] uppercase font-bold text-[var(--text-muted)]">System Agent</span>
                       <span className="leading-relaxed">
                         I will check the attached file inputs and execute your modifications. You can type instructions below to refine my work.
                       </span>
                     </div>
                     {chatMessage && nodeStatus === "success" && (
-                      <div className="flex flex-col bg-indigo-950/20 border border-indigo-900/50 rounded-xl p-3 max-w-[85%] ml-auto space-y-1 text-right text-zinc-100">
-                        <span className="font-mono text-[9px] uppercase font-bold text-indigo-400">User</span>
+                      <div className="flex flex-col bg-[var(--accent-bg)]/20 border border-[var(--accent-color)]/50 rounded-xl p-3 max-w-[85%] ml-auto space-y-1 text-right text-[var(--text-light)]">
+                        <span className="font-mono text-[9px] uppercase font-bold text-[var(--accent-color)]">User</span>
                         <span className="leading-relaxed">{chatMessage}</span>
                       </div>
                     )}
                   </div>
 
-                  <div className="p-3 border-t border-zinc-800 bg-zinc-900/20">
+                  <div className="p-3 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/20">
                     <form
                       onSubmit={(e) => {
                         e.preventDefault();
                         if (!chatMessage.trim()) return;
                         onExecuteNode(taskNodeId);
                       }}
-                      className="flex items-center space-x-2 bg-zinc-950 border border-zinc-800 p-1.5 rounded-lg focus-within:border-zinc-700"
+                      className="flex items-center space-x-2 bg-[var(--bg-app)] border border-[var(--border-color)] p-1.5 rounded-lg focus-within:border-[var(--border-active)]"
                     >
                       <input
                         type="text"
@@ -313,7 +343,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ activeTab, onExecuteNo
                       <button
                         type="submit"
                         disabled={nodeStatus === "running"}
-                        className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white text-xs font-mono font-bold px-3 py-1.5 rounded-md flex items-center space-x-1.5 transition-all glow-btn cursor-pointer"
+                        className="bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 disabled:bg-[var(--bg-sidebar)] disabled:text-[var(--text-muted)] text-white text-xs font-mono font-bold px-3 py-1.5 rounded-md flex items-center space-x-1.5 transition-all glow-btn cursor-pointer"
                       >
                         <Play size={12} />
                         <span>Prompt</span>
@@ -326,14 +356,14 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ activeTab, onExecuteNo
 
             {/* Task Executive Footer Controls */}
             {taskSubTab !== "chat" && (
-              <div className="p-3 border-t border-zinc-800 bg-zinc-900/20 flex items-center justify-between select-none">
-                <span className="text-[10px] uppercase font-mono text-zinc-500">
-                  Status: <span className="font-bold text-zinc-300">{nodeStatus}</span>
+              <div className="p-3 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/20 flex items-center justify-between select-none">
+                <span className="text-[10px] uppercase font-mono text-[var(--text-muted)]">
+                  Status: <span className="font-bold text-[var(--text-normal)]">{nodeStatus}</span>
                 </span>
                 <button
                   onClick={() => onExecuteNode(taskNodeId)}
                   disabled={nodeStatus === "running"}
-                  className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all glow-btn shadow-md cursor-pointer"
+                  className="bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 disabled:bg-[var(--bg-sidebar)] disabled:text-[var(--text-muted)] text-white text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all glow-btn shadow-md cursor-pointer"
                 >
                   <Sparkles size={14} className={nodeStatus === "running" ? "animate-spin" : ""} />
                   <span>{nodeStatus === "running" ? "Running..." : "Run Executor"}</span>

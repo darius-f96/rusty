@@ -2,8 +2,8 @@
 
 @layer base {
   body {
-    background-color: #0d0e12;
-    color: #f3f4f6;
+    background-color: var(--bg-app);
+    color: var(--text-normal);
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     margin: 0;
     overflow: hidden;
@@ -35,14 +35,14 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: #0d0e12;
+  background: var(--bg-app);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #27272a;
+  background: var(--border-color);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3f3f46;
+  background: var(--accent-color);
 }
