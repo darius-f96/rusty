@@ -1,8 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import {
   ReactFlow,
-  MiniMap,
-  Controls,
   Background,
   BackgroundVariant,
 } from "@xyflow/react";
@@ -15,7 +13,7 @@ import { EditorPanel } from "./components/EditorPanel";
 import { SidePane } from "./components/SidePane";
 import { useWorkspaceStore, CustomProvider } from "./store";
 import { invoke } from "@tauri-apps/api/core";
-import { Folder, CheckSquare, Layers, Settings, Plus, X, FileCode, Cpu } from "lucide-react";
+import { Folder, CheckSquare, Layers, Settings, Plus, X, FileCode, Cpu, Maximize } from "lucide-react";
 
 // Register custom nodes for React Flow
 const nodeTypes = {
@@ -63,8 +61,37 @@ function App() {
   const clearDevLogs = useWorkspaceStore((state) => state.clearDevLogs);
 
   const [showSettings, setShowSettings] = useState(false);
+  const [rfInstance, setRfInstance] = useState<any>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const consoleScrollRef = useRef<HTMLDivElement>(null);
+
+  const [sidebarWidth, setSidebarWidth] = useState(320);
+  const isSidebarDraggingRef = useRef(false);
+
+  const handleSidebarMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    isSidebarDraggingRef.current = true;
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!isSidebarDraggingRef.current) return;
+      const dx = moveEvent.clientX - startX;
+      const newWidth = Math.max(200, Math.min(600, startWidth + dx));
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      isSidebarDraggingRef.current = false;
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "";
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    document.body.style.cursor = "col-resize";
+  };
 
   // Global console/rejection interceptor
   useEffect(() => {
@@ -120,6 +147,28 @@ function App() {
       consoleScrollRef.current.scrollTop = consoleScrollRef.current.scrollHeight;
     }
   }, [devLogs, showDevConsole]);
+
+  // Global Keyboard Shortcuts (Cmd+W or Ctrl+W to close active tab)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "w") {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const state = useWorkspaceStore.getState();
+        const currentActive = state.activeTabId;
+        if (currentActive && currentActive !== "canvas") {
+          state.closeTab(currentActive);
+          console.log(`Shortcut captured: Closed active tab ${currentActive}`);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, true);
+    };
+  }, []);
 
   // Settings state for new custom providers
   const [provId, setProvId] = useState("");
@@ -361,7 +410,10 @@ function App() {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#0d0e12] text-zinc-100 font-sans">
       {/* 1. Left Sidebar - Navigation & Filetree */}
-      <div className="w-80 border-r border-zinc-800 bg-[#111318]/90 flex flex-col h-full z-10">
+      <div 
+        className="border-r border-zinc-800 bg-[#111318]/90 flex flex-col h-full z-10 relative"
+        style={{ width: `${sidebarWidth}px` }}
+      >
         {/* Workspace selector */}
         <div className="p-4 border-b border-zinc-850 space-y-3">
           <div className="flex items-center justify-between text-zinc-400">
@@ -392,7 +444,7 @@ function App() {
         </div>
 
         {/* Dynamic explorer sidebar */}
-        <div className="flex-1 overflow-y-auto px-4 py-3">
+        <div className="flex-1 overflow-auto px-4 py-3 min-w-0">
           <div className="flex items-center justify-between mb-3 text-zinc-400">
             <span className="text-xs uppercase tracking-wider font-mono font-bold">Project Explorer</span>
             <span className="text-[10px] text-zinc-500 font-mono">// Drag items to canvas</span>
@@ -469,28 +521,34 @@ function App() {
             </form>
           )}
         </div>
+
+        {/* Draggable Sidebar Resizer Handle */}
+        <div
+          onMouseDown={handleSidebarMouseDown}
+          className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-500/50 active:bg-indigo-500 hover:w-1.5 transition-all z-20"
+        />
       </div>
 
       {/* 2. Central Main Panel Workspace */}
       <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative">
         {/* Unified Tab Bar */}
-        <div className="flex items-center justify-between border-b border-zinc-800 bg-[#111318]/70 px-4 py-1.5 select-none z-20">
-          <div className="flex items-center space-x-1 overflow-x-auto scrollbar-none py-1">
+        <div className="flex items-center justify-between border-b border-zinc-800 bg-[#14161a] h-9 select-none z-20">
+          <div className="flex items-stretch h-full overflow-x-auto scrollbar-none">
             {openTabs.map((tab) => {
               const isActive = tab.id === activeTabId;
               return (
                 <div
                   key={tab.id}
                   onClick={() => setActiveTabId(tab.id)}
-                  className={`group flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-mono border transition-all cursor-pointer select-none ${
+                  className={`group flex items-center space-x-2 px-4 h-full border-r border-zinc-800 text-[11px] font-mono cursor-pointer select-none transition-all ${
                     isActive
-                      ? "bg-indigo-600/10 border-indigo-500/30 text-white font-semibold shadow-inner"
-                      : "bg-transparent border-transparent text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/30"
+                      ? "bg-[#0d0e12] text-zinc-100 font-semibold border-t-2 border-t-indigo-500"
+                      : "bg-[#14161a] text-zinc-400 hover:text-zinc-200 hover:bg-[#1b1d24]"
                   }`}
                 >
-                  {tab.type === "canvas" && <Layers size={12} className={isActive ? "text-indigo-400" : "text-zinc-500"} />}
-                  {tab.type === "file" && <FileCode size={12} className={isActive ? "text-indigo-400" : "text-zinc-500"} />}
-                  {tab.type === "task" && <Cpu size={12} className={isActive ? "text-indigo-400" : "text-zinc-500"} />}
+                  {tab.type === "canvas" && <Layers size={11} className={isActive ? "text-indigo-400" : "text-zinc-500"} />}
+                  {tab.type === "file" && <FileCode size={11} className={isActive ? "text-indigo-400" : "text-zinc-500"} />}
+                  {tab.type === "task" && <Cpu size={11} className={isActive ? "text-indigo-400" : "text-zinc-500"} />}
                   
                   <span className="truncate max-w-[120px]">{tab.title}</span>
                   
@@ -500,7 +558,7 @@ function App() {
                         e.stopPropagation();
                         closeTab(tab.id);
                       }}
-                      className="p-0.5 rounded-md hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity animate-fade-in"
+                      className="p-0.5 rounded-sm hover:bg-zinc-800/80 text-zinc-500 hover:text-zinc-300 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity animate-fade-in"
                     >
                       <X size={10} />
                     </button>
@@ -511,7 +569,7 @@ function App() {
           </div>
           
           {rootPath && (
-            <span className="text-[10px] text-zinc-500 font-mono hidden sm:inline truncate max-w-[250px]">
+            <span className="text-[10px] text-zinc-500 font-mono hidden sm:inline truncate max-w-[250px] px-4">
               VFS: {rootPath.split("/").pop()}
             </span>
           )}
@@ -535,6 +593,14 @@ function App() {
                   </div>
 
                   <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => rfInstance?.fitView()}
+                      className="bg-[#181920]/80 border border-zinc-800 hover:bg-zinc-800 text-zinc-200 text-xs font-mono font-bold px-3.5 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer hover:border-zinc-700"
+                    >
+                      <Maximize size={13} className="text-indigo-400" />
+                      <span>Center</span>
+                    </button>
+
                     <button
                       onClick={() => {
                         addTaskNode(300, 200);
@@ -566,16 +632,11 @@ function App() {
                     nodeTypes={nodeTypes}
                     onNodeClick={onNodeClick}
                     onPaneClick={onPaneClick}
+                    onInit={setRfInstance}
+                    proOptions={{ hideAttribution: true }}
                     fitView
                   >
                     <Background color="#1f2937" gap={16} size={1} variant={BackgroundVariant.Dots} />
-                    <Controls className="!bg-zinc-900 !border-zinc-800 !rounded-lg" />
-                    <MiniMap 
-                      className="!bg-zinc-950/80 !border-zinc-850 !rounded-xl !overflow-hidden"
-                      nodeColor={() => "#18181b"}
-                      maskColor="rgba(0, 0, 0, 0.4)"
-                      style={{ bottom: 16, right: 16 }}
-                    />
                   </ReactFlow>
                 </div>
               </div>
