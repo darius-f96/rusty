@@ -1,0 +1,199 @@
+import { create } from "zustand";
+import {
+  Node,
+  Edge,
+  Connection,
+  addEdge,
+  OnNodesChange,
+  OnEdgesChange,
+  applyNodeChanges,
+  applyEdgeChanges,
+} from "@xyflow/react";
+
+export interface CustomProvider {
+  id: string;
+  name: string;
+  baseUrl: string;
+  apiKey: string;
+  apiType: string;
+  models: { id: string; name: string }[];
+}
+
+export interface DevLog {
+  id: string;
+  type: "log" | "error" | "warn" | "system";
+  text: string;
+  timestamp: string;
+}
+
+export interface WorkspaceState {
+  rootPath: string;
+  nodes: Node[];
+  edges: Edge[];
+  selectedNodeId: string | null;
+  fileTree: any[];
+  nodeLogs: Record<string, string[]>;
+  nodeStatus: Record<string, "idle" | "running" | "success" | "error">;
+  customProviders: CustomProvider[];
+  activeCustomProviderId: string | null;
+  activeModel: string;
+  
+  setRootPath: (path: string) => void;
+  setFileTree: (tree: any[]) => void;
+  setSelectedNodeId: (id: string | null) => void;
+  setNodes: (nodes: Node[]) => void;
+  setEdges: (edges: Edge[]) => void;
+  onNodesChange: OnNodesChange;
+  onEdgesChange: OnEdgesChange;
+  onConnect: (connection: Connection) => void;
+  
+  addFileNode: (filePath: string, fileName: string, x: number, y: number) => void;
+  addTaskNode: (x: number, y: number) => void;
+  updateTaskNode: (id: string, data: any) => void;
+  addLog: (nodeId: string, message: string) => void;
+  clearLogs: (nodeId: string) => void;
+  setNodeStatus: (nodeId: string, status: "idle" | "running" | "success" | "error") => void;
+  
+  addCustomProvider: (provider: CustomProvider) => void;
+  setActiveCustomProviderId: (id: string | null) => void;
+  setActiveModel: (model: string) => void;
+  
+  devLogs: DevLog[];
+  showDevConsole: boolean;
+  addDevLog: (type: "log" | "error" | "warn" | "system", text: string) => void;
+  clearDevLogs: () => void;
+  setShowDevConsole: (show: boolean) => void;
+}
+
+export const useWorkspaceStore = create<WorkspaceState>((set) => ({
+  rootPath: "",
+  nodes: [],
+  edges: [],
+  selectedNodeId: null,
+  fileTree: [],
+  nodeLogs: {},
+  nodeStatus: {},
+  customProviders: [
+    {
+      id: "anthropic",
+      name: "Anthropic",
+      baseUrl: "",
+      apiKey: "",
+      apiType: "anthropic",
+      models: [
+        { id: "anthropic/claude-3-5-sonnet", name: "Claude 3.5 Sonnet" },
+        { id: "anthropic/claude-3-haiku", name: "Claude 3 Haiku" }
+      ]
+    },
+    {
+      id: "openai",
+      name: "OpenAI",
+      baseUrl: "",
+      apiKey: "",
+      apiType: "openai-completions",
+      models: [
+        { id: "openai/gpt-4o", name: "GPT-4o" },
+        { id: "openai/gpt-4o-mini", name: "GPT-4o Mini" }
+      ]
+    }
+  ],
+  activeCustomProviderId: "anthropic",
+  activeModel: "anthropic/claude-3-5-sonnet",
+  devLogs: [],
+  showDevConsole: false,
+
+  setRootPath: (path) => set({ rootPath: path }),
+  setFileTree: (tree) => set({ fileTree: tree }),
+  setSelectedNodeId: (id) => set({ selectedNodeId: id }),
+  setNodes: (nodes) => set({ nodes }),
+  setEdges: (edges) => set({ edges }),
+  
+  onNodesChange: (changes) => set((state) => ({
+    nodes: applyNodeChanges(changes, state.nodes),
+  })),
+  
+  onEdgesChange: (changes) => set((state) => ({
+    edges: applyEdgeChanges(changes, state.edges),
+  })),
+  
+  onConnect: (connection) => set((state) => ({
+    edges: addEdge(connection, state.edges),
+  })),
+
+  addFileNode: (filePath, fileName, x, y) => set((state) => {
+    // Prevent adding duplicates for the exact same file in the exact same spot
+    const id = `file_${filePath.replace(/[^a-zA-Z0-9]/g, "_")}`;
+    if (state.nodes.some(n => n.id === id)) return {};
+
+    const newNode: Node = {
+      id,
+      type: "fileNode",
+      position: { x, y },
+      data: { path: filePath, name: fileName }
+    };
+    return { nodes: [...state.nodes, newNode] };
+  }),
+
+  addTaskNode: (x, y) => set((state) => {
+    const id = `task_${Date.now()}`;
+    const newNode: Node = {
+      id,
+      type: "taskNode",
+      position: { x, y },
+      data: {
+        id,
+        prompt: "",
+        model: state.activeModel,
+        status: "idle"
+      }
+    };
+    return { nodes: [...state.nodes, newNode] };
+  }),
+
+  updateTaskNode: (id, data) => set((state) => ({
+    nodes: state.nodes.map((node) => {
+      if (node.id === id) {
+        return { ...node, data: { ...node.data, ...data } };
+      }
+      return node;
+    })
+  })),
+
+  addLog: (nodeId, message) => set((state) => {
+    const currentLogs = state.nodeLogs[nodeId] || [];
+    return {
+      nodeLogs: {
+        ...state.nodeLogs,
+        [nodeId]: [...currentLogs, `[${new Date().toLocaleTimeString()}] ${message}`]
+      }
+    };
+  }),
+
+  clearLogs: (nodeId) => set((state) => ({
+    nodeLogs: { ...state.nodeLogs, [nodeId]: [] }
+  })),
+
+  setNodeStatus: (nodeId, status) => set((state) => ({
+    nodeStatus: { ...state.nodeStatus, [nodeId]: status }
+  })),
+
+  addCustomProvider: (provider) => set((state) => ({
+    customProviders: [...state.customProviders.filter(p => p.id !== provider.id), provider]
+  })),
+
+  setActiveCustomProviderId: (id) => set({ activeCustomProviderId: id }),
+  setActiveModel: (model) => set({ activeModel: model }),
+  
+  addDevLog: (type, text) => set((state) => {
+    const newLog: DevLog = {
+      id: `dev_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      type,
+      text,
+      timestamp: new Date().toLocaleTimeString()
+    };
+    const slicedLogs = state.devLogs.slice(-499);
+    return { devLogs: [...slicedLogs, newLog] };
+  }),
+  clearDevLogs: () => set({ devLogs: [] }),
+  setShowDevConsole: (show) => set({ showDevConsole: show })
+}));
