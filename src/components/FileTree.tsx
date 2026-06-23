@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Folder, FolderOpen, FileCode, ChevronDown, ChevronRight } from "lucide-react";
+import { useWorkspaceStore } from "../store";
 
 interface FileEntry {
   name: string;
@@ -25,10 +26,21 @@ export const FileTree: React.FC<FileTreeProps> = ({ entries }) => {
 const FileTreeNode: React.FC<{ node: any }> = ({ node }) => {
   const [isOpen, setIsOpen] = useState(false);
 
+  const openTab = useWorkspaceStore((state) => state.openTab);
+
   const handleDragStart = (e: React.DragEvent) => {
     e.dataTransfer.setData("application/reactflow-file-path", node.path);
     e.dataTransfer.setData("application/reactflow-file-name", node.name);
     e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDoubleClick = () => {
+    openTab({
+      id: `file_${node.path.replace(/[^a-zA-Z0-9]/g, "_")}`,
+      type: "file",
+      title: node.name,
+      key: node.path
+    });
   };
 
   if (node.is_dir) {
@@ -61,6 +73,7 @@ const FileTreeNode: React.FC<{ node: any }> = ({ node }) => {
     <div
       draggable
       onDragStart={handleDragStart}
+      onDoubleClick={handleDoubleClick}
       className="flex items-center px-2 py-1 ml-5 rounded cursor-grab active:cursor-grabbing hover:bg-zinc-800/80 hover:text-white transition-colors border border-transparent hover:border-zinc-700/50"
     >
       <span className="mr-2 text-emerald-400">

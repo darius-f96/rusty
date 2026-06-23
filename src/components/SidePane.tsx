@@ -4,6 +4,8 @@ import { X, Terminal, MessageSquare, Code, Play, Sparkles } from "lucide-react";
 import { useWorkspaceStore } from "../store";
 import { invoke } from "@tauri-apps/api/core";
 
+const EMPTY_ARRAY: any[] = [];
+
 interface SidePaneProps {
   onClose: () => void;
   onExecuteNode: (nodeId: string) => void;
@@ -12,7 +14,8 @@ interface SidePaneProps {
 export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) => {
   const selectedNodeId = useWorkspaceStore((state) => state.selectedNodeId);
   const nodes = useWorkspaceStore((state) => state.nodes);
-  const nodeLogs = useWorkspaceStore((state) => state.nodeLogs[selectedNodeId || ""] || []);
+  const rawNodeLogs = useWorkspaceStore((state) => state.nodeLogs[selectedNodeId || ""]);
+  const nodeLogs = rawNodeLogs || EMPTY_ARRAY;
   const nodeStatus = useWorkspaceStore((state) => state.nodeStatus[selectedNodeId || ""] || "idle");
 
   const [activeTab, setActiveTab] = useState<"diff" | "chat" | "console">("diff");
@@ -21,24 +24,29 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
   const [modifiedCode, setModifiedCode] = useState("// Loading modified content...");
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
-  const modifiedFiles = (selectedNode?.data?.modifiedFiles as string[]) || [];
+  const modifiedFiles = (selectedNode?.data?.modifiedFiles as string[]) || EMPTY_ARRAY;
   const [activeDiffFile, setActiveDiffFile] = useState<string>("");
 
   // Select which file should be shown in the diff viewer
   useEffect(() => {
     if (!selectedNode) return;
     if (selectedNode.type === "fileNode") {
-      setActiveDiffFile(selectedNode.data.path as string);
+      const path = selectedNode.data.path as string;
+      if (activeDiffFile !== path) {
+        setActiveDiffFile(path);
+      }
     } else if (selectedNode.type === "taskNode") {
       if (modifiedFiles.length > 0) {
         if (!modifiedFiles.includes(activeDiffFile)) {
           setActiveDiffFile(modifiedFiles[0]);
         }
       } else {
-        setActiveDiffFile("");
+        if (activeDiffFile !== "") {
+          setActiveDiffFile("");
+        }
       }
     }
-  }, [selectedNode, modifiedFiles]);
+  }, [selectedNode?.id, modifiedFiles, activeDiffFile]);
 
   // Fetch file content for preview / diffing
   useEffect(() => {
@@ -78,7 +86,7 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
     return () => {
       active = false;
     };
-  }, [selectedNode, activeDiffFile, nodeStatus]);
+  }, [selectedNode?.id, activeDiffFile, nodeStatus]);
 
   if (!selectedNode) return null;
 

@@ -26,6 +26,13 @@ export interface DevLog {
   timestamp: string;
 }
 
+export interface Tab {
+  id: string;
+  type: "canvas" | "file" | "task";
+  title: string;
+  key: string;
+}
+
 export interface WorkspaceState {
   rootPath: string;
   nodes: Node[];
@@ -63,6 +70,12 @@ export interface WorkspaceState {
   addDevLog: (type: "log" | "error" | "warn" | "system", text: string) => void;
   clearDevLogs: () => void;
   setShowDevConsole: (show: boolean) => void;
+
+  openTabs: Tab[];
+  activeTabId: string | null;
+  openTab: (tab: Tab) => void;
+  closeTab: (id: string) => void;
+  setActiveTabId: (id: string | null) => void;
 }
 
 export const useWorkspaceStore = create<WorkspaceState>((set) => ({
@@ -101,6 +114,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   activeModel: "anthropic/claude-3-5-sonnet",
   devLogs: [],
   showDevConsole: false,
+  openTabs: [
+    { id: "canvas", type: "canvas", title: "Orchestrator Canvas", key: "canvas" }
+  ],
+  activeTabId: "canvas",
 
   setRootPath: (path) => set({ rootPath: path }),
   setFileTree: (tree) => set({ fileTree: tree }),
@@ -195,5 +212,21 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     return { devLogs: [...slicedLogs, newLog] };
   }),
   clearDevLogs: () => set({ devLogs: [] }),
-  setShowDevConsole: (show) => set({ showDevConsole: show })
+  setShowDevConsole: (show) => set({ showDevConsole: show }),
+
+  openTab: (tab) => set((state) => {
+    const exists = state.openTabs.some((t) => t.id === tab.id);
+    const newTabs = exists ? state.openTabs : [...state.openTabs, tab];
+    return { openTabs: newTabs, activeTabId: tab.id };
+  }),
+  closeTab: (id) => set((state) => {
+    if (id === "canvas") return {};
+    const remainingTabs = state.openTabs.filter((t) => t.id !== id);
+    let nextActiveTabId = state.activeTabId;
+    if (state.activeTabId === id) {
+      nextActiveTabId = remainingTabs.length > 0 ? remainingTabs[remainingTabs.length - 1].id : null;
+    }
+    return { openTabs: remainingTabs, activeTabId: nextActiveTabId };
+  }),
+  setActiveTabId: (id) => set({ activeTabId: id })
 }));

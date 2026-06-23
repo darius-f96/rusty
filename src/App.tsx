@@ -8,13 +8,14 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
-import { useWorkspaceStore, CustomProvider } from "./store";
 import { FileTree } from "./components/FileTree";
 import { FileNode } from "./components/FileNode";
 import { TaskNode } from "./components/TaskNode";
+import { EditorPanel } from "./components/EditorPanel";
 import { SidePane } from "./components/SidePane";
+import { useWorkspaceStore, CustomProvider } from "./store";
 import { invoke } from "@tauri-apps/api/core";
-import { Folder, CheckSquare, Layers, Settings, Plus } from "lucide-react";
+import { Folder, CheckSquare, Layers, Settings, Plus, X, FileCode, Cpu } from "lucide-react";
 
 // Register custom nodes for React Flow
 const nodeTypes = {
@@ -39,6 +40,14 @@ function App() {
   const addFileNode = useWorkspaceStore((state) => state.addFileNode);
   const addTaskNode = useWorkspaceStore((state) => state.addTaskNode);
   
+  const openTab = useWorkspaceStore((state) => state.openTab);
+  const openTabs = useWorkspaceStore((state) => state.openTabs);
+  const activeTabId = useWorkspaceStore((state) => state.activeTabId);
+  const setActiveTabId = useWorkspaceStore((state) => state.setActiveTabId);
+  const closeTab = useWorkspaceStore((state) => state.closeTab);
+
+  const activeTab = openTabs.find((t) => t.id === activeTabId);
+  
   const addLog = useWorkspaceStore((state) => state.addLog);
   const clearLogs = useWorkspaceStore((state) => state.clearLogs);
   const setNodeStatus = useWorkspaceStore((state) => state.setNodeStatus);
@@ -53,7 +62,6 @@ function App() {
   const setShowDevConsole = useWorkspaceStore((state) => state.setShowDevConsole);
   const clearDevLogs = useWorkspaceStore((state) => state.clearDevLogs);
 
-  const [dirInput, setDirInput] = useState("");
   const [showSettings, setShowSettings] = useState(false);
   const socketRef = useRef<WebSocket | null>(null);
   const consoleScrollRef = useRef<HTMLDivElement>(null);
@@ -131,6 +139,24 @@ function App() {
     }
   };
 
+  // Open directory selection dialog
+  const handleOpenWorkspace = async () => {
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: "Select Workspace Folder"
+      });
+      if (selected && typeof selected === "string") {
+        console.log("Selected workspace directory:", selected);
+        loadDirectory(selected);
+      }
+    } catch (err: any) {
+      console.error("Failed to open directory dialog:", err);
+    }
+  };
+
   // Handles dragging files onto React Flow canvas
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
@@ -162,6 +188,15 @@ function App() {
   // Connection selection callback
   const onNodeClick = (_event: React.MouseEvent, node: any) => {
     setSelectedNodeId(node.id);
+    
+    if (node.type === "fileNode") {
+      openTab({
+        id: `file_${node.data.path.replace(/[^a-zA-Z0-9]/g, "_")}`,
+        type: "file",
+        title: node.data.name,
+        key: node.data.path
+      });
+    }
   };
 
   const onPaneClick = () => {
@@ -329,30 +364,31 @@ function App() {
       <div className="w-80 border-r border-zinc-800 bg-[#111318]/90 flex flex-col h-full z-10">
         {/* Workspace selector */}
         <div className="p-4 border-b border-zinc-850 space-y-3">
-          <div className="flex items-center space-x-2 text-zinc-400">
-            <Folder size={16} className="text-indigo-400" />
-            <span className="text-xs uppercase tracking-wider font-mono font-bold">Workspace Target</span>
+          <div className="flex items-center justify-between text-zinc-400">
+            <div className="flex items-center space-x-2">
+              <Folder size={16} className="text-indigo-400" />
+              <span className="text-xs uppercase tracking-wider font-mono font-bold">Workspace</span>
+            </div>
+            {rootPath && (
+              <span className="text-[9px] text-zinc-500 font-mono">// Click to select</span>
+            )}
           </div>
           <div className="flex space-x-2">
             <input
               type="text"
-              placeholder="e.g. /Users/workspace/project"
-              value={dirInput}
-              onChange={(e) => setDirInput(e.target.value)}
-              className="flex-1 bg-zinc-950/80 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-gray-300 focus:outline-none focus:border-zinc-700"
+              readOnly
+              placeholder="Click Open to select folder..."
+              value={rootPath || ""}
+              onClick={handleOpenWorkspace}
+              className="flex-1 bg-zinc-950/80 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-zinc-400 cursor-pointer select-none focus:outline-none truncate hover:border-zinc-700 transition-colors"
             />
             <button
-              onClick={() => dirInput && loadDirectory(dirInput)}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white font-mono font-bold text-xs px-3 rounded-lg transition-colors shadow-lg"
+              onClick={handleOpenWorkspace}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white font-mono font-bold text-xs px-3.5 py-1.5 rounded-lg transition-colors shadow-lg cursor-pointer flex items-center"
             >
               Open
             </button>
           </div>
-          {rootPath && (
-            <p className="text-[10px] font-mono text-zinc-500 truncate mt-1">
-              Active: <span className="text-zinc-400">{rootPath}</span>
-            </p>
-          )}
         </div>
 
         {/* Dynamic explorer sidebar */}
@@ -435,67 +471,129 @@ function App() {
         </div>
       </div>
 
-      {/* 2. Central Miro-style Infinite Canvas */}
-      <div className="flex-1 flex flex-col h-full relative" id="rf-canvas" onDragOver={onDragOver} onDrop={onDrop}>
-        {/* Workspace Toolbar Header */}
-        <div className="absolute top-4 left-4 right-4 h-14 glass-panel rounded-xl flex items-center justify-between px-4 z-10">
-          <div className="flex items-center space-x-3">
-            <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-600/20 text-indigo-400 border border-indigo-500/20">
-              <Layers size={18} />
+      {/* 2. Central Main Panel Workspace */}
+      <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative">
+        {/* Unified Tab Bar */}
+        <div className="flex items-center justify-between border-b border-zinc-800 bg-[#111318]/70 px-4 py-1.5 select-none z-20">
+          <div className="flex items-center space-x-1 overflow-x-auto scrollbar-none py-1">
+            {openTabs.map((tab) => {
+              const isActive = tab.id === activeTabId;
+              return (
+                <div
+                  key={tab.id}
+                  onClick={() => setActiveTabId(tab.id)}
+                  className={`group flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-mono border transition-all cursor-pointer select-none ${
+                    isActive
+                      ? "bg-indigo-600/10 border-indigo-500/30 text-white font-semibold shadow-inner"
+                      : "bg-transparent border-transparent text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/30"
+                  }`}
+                >
+                  {tab.type === "canvas" && <Layers size={12} className={isActive ? "text-indigo-400" : "text-zinc-500"} />}
+                  {tab.type === "file" && <FileCode size={12} className={isActive ? "text-indigo-400" : "text-zinc-500"} />}
+                  {tab.type === "task" && <Cpu size={12} className={isActive ? "text-indigo-400" : "text-zinc-500"} />}
+                  
+                  <span className="truncate max-w-[120px]">{tab.title}</span>
+                  
+                  {tab.id !== "canvas" && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        closeTab(tab.id);
+                      }}
+                      className="p-0.5 rounded-md hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity animate-fade-in"
+                    >
+                      <X size={10} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          
+          {rootPath && (
+            <span className="text-[10px] text-zinc-500 font-mono hidden sm:inline truncate max-w-[250px]">
+              VFS: {rootPath.split("/").pop()}
             </span>
-            <div className="flex flex-col">
-              <span className="font-bold text-sm tracking-wide">Orchestration Canvas</span>
-              <span className="text-[10px] text-zinc-500 font-mono">Tauri VFS Sandbox Mode</span>
+          )}
+        </div>
+
+        {/* Tab Content Display View */}
+        <div className="flex-1 min-h-0 relative bg-[#0d0e12]">
+          {activeTabId === "canvas" ? (
+            <div className="w-full h-full flex relative">
+              <div className="flex-1 flex flex-col h-full relative bg-[#0d0e12]" id="rf-canvas" onDragOver={onDragOver} onDrop={onDrop}>
+                {/* Workspace Toolbar Header */}
+                <div className="absolute top-4 left-4 right-4 h-14 glass-panel rounded-xl flex items-center justify-between px-4 z-10">
+                  <div className="flex items-center space-x-3">
+                    <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-600/20 text-indigo-400 border border-indigo-500/20">
+                      <Layers size={18} />
+                    </span>
+                    <div className="flex flex-col">
+                      <span className="font-bold text-sm tracking-wide">Orchestration Canvas</span>
+                      <span className="text-[10px] text-zinc-500 font-mono">Tauri VFS Sandbox Mode</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => {
+                        addTaskNode(300, 200);
+                      }}
+                      className="bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-200 text-xs font-mono font-bold px-3 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer"
+                    >
+                      <Plus size={14} className="text-indigo-400" />
+                      <span>Add Task Node</span>
+                    </button>
+                    
+                    <button
+                      onClick={handleApplyChanges}
+                      className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-lg glow-btn cursor-pointer"
+                    >
+                      <CheckSquare size={14} />
+                      <span>Apply Pipeline</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* React Flow Board */}
+                <div className="flex-1 w-full relative min-h-0">
+                  <ReactFlow
+                    nodes={nodes}
+                    edges={edges}
+                    onNodesChange={onNodesChange}
+                    onEdgesChange={onEdgesChange}
+                    onConnect={onConnect}
+                    nodeTypes={nodeTypes}
+                    onNodeClick={onNodeClick}
+                    onPaneClick={onPaneClick}
+                    fitView
+                  >
+                    <Background color="#1f2937" gap={16} size={1} variant={BackgroundVariant.Dots} />
+                    <Controls className="!bg-zinc-900 !border-zinc-800 !rounded-lg" />
+                    <MiniMap 
+                      className="!bg-zinc-950/80 !border-zinc-850 !rounded-xl !overflow-hidden"
+                      nodeColor={() => "#18181b"}
+                      maskColor="rgba(0, 0, 0, 0.4)"
+                      style={{ bottom: 16, right: 16 }}
+                    />
+                  </ReactFlow>
+                </div>
+              </div>
+
+              {/* Sliding Inspector Side Pane */}
+              {selectedNodeId && (
+                <SidePane
+                  onClose={() => setSelectedNodeId(null)}
+                  onExecuteNode={executeNode}
+                />
+              )}
             </div>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => {
-                // Spawn a new task node in the center of the canvas view
-                addTaskNode(300, 200);
-              }}
-              className="bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-200 text-xs font-mono font-bold px-3 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer"
-            >
-              <Plus size={14} className="text-indigo-400" />
-              <span>Add Task Node</span>
-            </button>
-            
-            <button
-              onClick={handleApplyChanges}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-lg glow-btn cursor-pointer"
-            >
-              <CheckSquare size={14} />
-              <span>Apply Pipeline</span>
-            </button>
-          </div>
+          ) : (
+            <EditorPanel activeTab={activeTab} onExecuteNode={executeNode} />
+          )}
         </div>
 
-        {/* React Flow Board */}
-        <div className="flex-1 w-full relative min-h-0">
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            nodeTypes={nodeTypes}
-            onNodeClick={onNodeClick}
-            onPaneClick={onPaneClick}
-            fitView
-          >
-            <Background color="#1f2937" gap={16} size={1} variant={BackgroundVariant.Dots} />
-            <Controls className="!bg-zinc-900 !border-zinc-800 !rounded-lg" />
-            <MiniMap 
-              className="!bg-zinc-950/80 !border-zinc-850 !rounded-xl !overflow-hidden"
-              nodeColor={() => "#18181b"}
-              maskColor="rgba(0, 0, 0, 0.4)"
-              style={{ bottom: 16, right: 16 }}
-            />
-          </ReactFlow>
-        </div>
-
-        {/* Collapsible Bottom Developer Console */}
+        {/* Collapsible Bottom Developer Console (Pinned Globally) */}
         <div className={`border-t border-zinc-800/80 bg-[#0c0d10] flex flex-col transition-all duration-300 ${
           showDevConsole ? "h-60" : "h-9"
         } z-10 overflow-hidden font-sans`}>
@@ -557,14 +655,6 @@ function App() {
           )}
         </div>
       </div>
-
-      {/* 3. Sliding Inspector Side Pane */}
-      {selectedNodeId && (
-        <SidePane
-          onClose={() => setSelectedNodeId(null)}
-          onExecuteNode={executeNode}
-        />
-      )}
     </div>
   );
 }
