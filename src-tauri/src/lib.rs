@@ -1,4 +1,6 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+mod git;
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -173,7 +175,22 @@ pub fn run() {
             apply_vfs_to_disk,
             get_directory_structure,
             read_file_disk,
-            write_file_disk
+            write_file_disk,
+            git::git_status,
+            git::git_init,
+            git::git_stage_file,
+            git::git_unstage_file,
+            git::git_discard_changes,
+            git::git_commit,
+            git::git_get_head_content,
+            git::git_get_branches,
+            git::git_checkout_branch,
+            git::git_get_index_content,
+            git::git_pull,
+            git::git_push,
+            git::git_get_commit_history,
+            git::git_get_commit_files,
+            git::git_get_file_content_at_rev
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

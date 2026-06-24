@@ -9,6 +9,7 @@ import {
   applyNodeChanges,
   applyEdgeChanges,
 } from "@xyflow/react";
+import { invoke } from "@tauri-apps/api/core";
 
 export interface CustomProvider {
   id: string;
@@ -26,11 +27,26 @@ export interface DevLog {
   timestamp: string;
 }
 
+export interface GitFileStatus {
+  path: string;
+  name: string;
+  status_type: "modified" | "added" | "deleted" | "untracked";
+}
+
+export interface GitStatusResult {
+  isRepo: boolean;
+  currentBranch: string;
+  staged: GitFileStatus[];
+  unstaged: GitFileStatus[];
+}
+
 export interface Tab {
   id: string;
-  type: "canvas" | "file" | "task" | "settings" | "llm-setup";
+  type: "canvas" | "file" | "task" | "settings" | "llm-setup" | "git-diff" | "git-history";
   title: string;
   key: string;
+  diffType?: "staged" | "unstaged" | "commit";
+  commitHash?: string;
 }
 
 export interface WorkspaceState {
@@ -44,8 +60,11 @@ export interface WorkspaceState {
   customProviders: CustomProvider[];
   activeCustomProviderId: string | null;
   activeModel: string;
+  gitStatus: GitStatusResult | null;
   
   setRootPath: (path: string) => void;
+  setGitStatus: (status: GitStatusResult | null) => void;
+  loadGitStatus: () => Promise<void>;
   setFileTree: (tree: any[]) => void;
   setSelectedNodeId: (id: string | null) => void;
   setNodes: (nodes: Node[]) => void;
@@ -113,6 +132,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   ],
   activeCustomProviderId: "anthropic",
   activeModel: "anthropic/claude-3-5-sonnet",
+  gitStatus: null,
   devLogs: [],
   showDevConsole: false,
   openTabs: [
@@ -120,7 +140,38 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   ],
   activeTabId: "canvas",
 
-  setRootPath: (path) => set({ rootPath: path }),
+  setRootPath: (path) => {
+    set({ rootPath: path });
+    useWorkspaceStore.getState().loadGitStatus();
+  },
+  setGitStatus: (status) => set({ gitStatus: status }),
+  loadGitStatus: async () => {
+    const rootPath = useWorkspaceStore.getState().rootPath;
+    if (!rootPath) {
+      set({ gitStatus: null });
+      return;
+    }
+    try {
+      const res: any = await invoke("git_status", { rootDir: rootPath });
+      const mappedStatus: GitStatusResult = {
+        isRepo: res.is_repo,
+        currentBranch: res.current_branch,
+        staged: (res.staged || []).map((f: any) => ({
+          path: f.path,
+          name: f.name,
+          status_type: f.status_type
+        })),
+        unstaged: (res.unstaged || []).map((f: any) => ({
+          path: f.path,
+          name: f.name,
+          status_type: f.status_type
+        }))
+      };
+      set({ gitStatus: mappedStatus });
+    } catch (err) {
+      console.error("Failed to load git status:", err);
+    }
+  },
   setFileTree: (tree) => set({ fileTree: tree }),
   setSelectedNodeId: (id) => set({ selectedNodeId: id }),
   setNodes: (nodes) => set({ nodes }),

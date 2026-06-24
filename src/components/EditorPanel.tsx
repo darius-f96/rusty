@@ -45,6 +45,7 @@ interface EditorPanelProps {
 export const EditorPanel: React.FC<EditorPanelProps> = ({ activeTab, onExecuteNode }) => {
   const nodes = useWorkspaceStore((state) => state.nodes);
   const openTabs = useWorkspaceStore((state) => state.openTabs);
+  const rootPath = useWorkspaceStore((state) => state.rootPath);
 
   // --- 1. File Tab Writable Editor Logic ---
   const [fileContent, setFileContent] = useState("");
@@ -85,11 +86,90 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ activeTab, onExecuteNo
       try {
         await invoke("write_file_disk", { path: activeTab.key, content: value });
         console.log(`EditorPanel [FileTab] auto-saved directly to disk: ${activeTab.title}`);
+        useWorkspaceStore.getState().loadGitStatus(); // Reload git changes list
       } catch (err) {
         console.error("EditorPanel [FileTab] disk save failed:", err);
       }
     }, 500);
   };
+
+  // --- 1.5. Git Diff Tab View Logic ---
+  const [gitOriginalCode, setGitOriginalCode] = useState("");
+  const [gitModifiedCode, setGitModifiedCode] = useState("");
+  const [isGitDiffLoading, setIsGitDiffLoading] = useState(false);
+
+  useEffect(() => {
+    if (!activeTab || activeTab.type !== "git-diff" || !rootPath) return;
+
+    let active = true;
+    const fetchGitDiffContent = async () => {
+      setIsGitDiffLoading(true);
+      try {
+        console.log(`EditorPanel [GitDiffTab] loading diff for: ${activeTab.key} (${activeTab.diffType || "unstaged"})`);
+        let original = "";
+        let modified = "";
+
+        if (activeTab.diffType === "commit" && activeTab.commitHash) {
+          // Commit: compare parent commit revision vs commit revision
+          original = await invoke("git_get_file_content_at_rev", {
+            rootDir: rootPath,
+            revision: `${activeTab.commitHash}~1`,
+            filePath: activeTab.key,
+          });
+          modified = await invoke("git_get_file_content_at_rev", {
+            rootDir: rootPath,
+            revision: activeTab.commitHash,
+            filePath: activeTab.key,
+          });
+        } else if (activeTab.diffType === "staged") {
+          // Staged: compare HEAD vs Index
+          original = await invoke("git_get_head_content", {
+            rootDir: rootPath,
+            filePath: activeTab.key,
+          });
+          modified = await invoke("git_get_index_content", {
+            rootDir: rootPath,
+            filePath: activeTab.key,
+          });
+        } else {
+          // Unstaged: compare Index vs Working Tree (VFS/Disk)
+          original = await invoke("git_get_index_content", {
+            rootDir: rootPath,
+            filePath: activeTab.key,
+          });
+          try {
+            modified = await invoke("read_file_vfs", { path: activeTab.key });
+          } catch (e) {
+            try {
+              modified = await invoke("read_file_disk", { path: activeTab.key });
+            } catch (err) {
+              modified = "";
+            }
+          }
+        }
+
+        if (active) {
+          setGitOriginalCode(original);
+          setGitModifiedCode(modified);
+        }
+      } catch (err: any) {
+        console.error("EditorPanel [GitDiffTab] failed to load git diff:", err);
+        if (active) {
+          setGitOriginalCode(`// Error reading original content: ${err.message}`);
+          setGitModifiedCode(`// Error reading modified content: ${err.message}`);
+        }
+      } finally {
+        if (active) {
+          setIsGitDiffLoading(false);
+        }
+      }
+    };
+
+    fetchGitDiffContent();
+    return () => {
+      active = false;
+    };
+  }, [activeTab?.key, activeTab?.type, rootPath]);
 
   // --- 2. Task Tab Diff & Inspector Logic ---
   const taskNodeId = activeTab?.type === "task" ? activeTab.key : "";
@@ -185,6 +265,44 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ activeTab, onExecuteNo
                   tabSize: 2
                 }}
               />
+            </div>
+          </div>
+        )}
+
+        {/* GIT DIFF TAB VIEW */}
+        {activeTab.type === "git-diff" && (
+          <div className="flex-1 flex flex-col overflow-hidden relative">
+            {/* Header info */}
+            <div className="px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)] flex items-center justify-between text-xs font-mono">
+              <span className="text-[var(--text-light)] font-bold">{activeTab.title}</span>
+              <span className="text-[var(--text-muted)] text-[10px] truncate max-w-[400px]">
+                {activeTab.key}
+              </span>
+            </div>
+            
+            {/* Diff editor viewport */}
+            <div className="flex-1 w-full h-full relative">
+              {isGitDiffLoading ? (
+                <div className="w-full h-full flex flex-col items-center justify-center font-mono text-xs text-[var(--text-muted)]">
+                  <span>Loading Git changes...</span>
+                </div>
+              ) : (
+                <DiffEditor
+                  height="100%"
+                  language={getEditorLanguage(activeTab.key)}
+                  theme="axiom-custom-theme"
+                  original={gitOriginalCode}
+                  modified={gitModifiedCode}
+                  options={{
+                    readOnly: true,
+                    minimap: { enabled: false },
+                    scrollBeyondLastLine: false,
+                    lineNumbers: "on",
+                    renderSideBySide: true,
+                    fontSize: 11
+                  }}
+                />
+              )}
             </div>
           </div>
         )}

@@ -14,6 +14,7 @@ import {
   ChevronDown,
   Folder,
   Settings,
+  GitCommit,
 } from "lucide-react";
 import { useWorkspaceStore, CustomProvider } from "../store";
 import { EditorPanel } from "./EditorPanel";
@@ -23,6 +24,7 @@ import { TaskNode } from "./TaskNode";
 import { FileIcon } from "../services/fileTypeService";
 import { invoke } from "@tauri-apps/api/core";
 import { AxiomIcon } from "./AxiomIcon";
+import { GitHistoryTabContent } from "./GitHistoryTabContent";
 
 // Register custom nodes for React Flow
 const nodeTypes = {
@@ -269,6 +271,7 @@ export const Workspace: React.FC = () => {
       if (rootPath) {
         const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
         useWorkspaceStore.getState().setFileTree(tree);
+        await useWorkspaceStore.getState().loadGitStatus(); // Refresh git changes
       }
     } catch (e: any) {
       alert(`Error applying VFS: ${e}`);
@@ -340,6 +343,7 @@ export const Workspace: React.FC = () => {
                 {tab.type === "task" && <Cpu size={11} className={isActive ? "text-[var(--accent-color)]" : "text-[var(--text-muted)]"} />}
                 {tab.type === "llm-setup" && <Cpu size={11} className={isActive ? "text-[var(--accent-color)]" : "text-[var(--text-muted)]"} />}
                 {tab.type === "settings" && <Settings size={11} className={isActive ? "text-[var(--accent-color)]" : "text-[var(--text-muted)]"} />}
+                {tab.type === "git-history" && <GitCommit size={11} className={isActive ? "text-[var(--accent-color)]" : "text-[var(--text-muted)]"} />}
                 
                 <span className="truncate max-w-[120px]">{tab.title}</span>
                 
@@ -496,6 +500,8 @@ export const Workspace: React.FC = () => {
           <LlmIntegrationsTabContent />
         ) : activeTab?.type === "settings" ? (
           <SettingsTabContent />
+        ) : activeTab?.type === "git-history" ? (
+          <GitHistoryTabContent />
         ) : (
           <EditorPanel activeTab={activeTab} onExecuteNode={executeNode} />
         )}
