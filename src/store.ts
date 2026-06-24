@@ -28,7 +28,7 @@ export interface DevLog {
 
 export interface Tab {
   id: string;
-  type: "canvas" | "file" | "task";
+  type: "canvas" | "file" | "task" | "settings" | "llm-setup";
   title: string;
   key: string;
 }
