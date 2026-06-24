@@ -212,6 +212,28 @@ export const SourceControl: React.FC = () => {
     }
   };
 
+  // Discard all changes in the working tree
+  const handleDiscardAllChanges = async () => {
+    const confirmDiscard = window.confirm(
+      "Are you sure you want to discard ALL unstaged modifications and untracked files? This action CANNOT BE UNDONE."
+    );
+    if (!confirmDiscard) return;
+
+    try {
+      console.log(`Git: Discarding all unstaged changes in ${rootPath}`);
+      await invoke("git_discard_all_changes", { rootDir: rootPath });
+      await loadGitStatus();
+      await fetchHistory();
+      // Reload workspace directory tree structure
+      const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
+      useWorkspaceStore.getState().setFileTree(tree);
+      alert("All unstaged changes have been discarded.");
+    } catch (err: any) {
+      console.error("Failed to discard all changes:", err);
+      alert(`Discard failed: ${err}`);
+    }
+  };
+
   // Handles checking out another local branch
   const handleSwitchBranch = async (branchName: string) => {
     if (!rootPath) return;
@@ -412,10 +434,20 @@ export const SourceControl: React.FC = () => {
         {gitStatus && gitStatus.unstaged.length > 0 && (
           <div className="space-y-1">
             <div className="px-2 py-1 flex items-center justify-between text-[10px] font-mono font-bold text-[var(--text-muted)] uppercase tracking-wider">
-              <span>Changes</span>
-              <span className="bg-[var(--border-color)] px-1.5 py-0.2 rounded-full text-[9px] text-[var(--text-normal)]">
-                {gitStatus.unstaged.length}
-              </span>
+              <div className="flex items-center space-x-1.5">
+                <span>Changes</span>
+                <span className="bg-[var(--border-color)] px-1.5 py-0.2 rounded-full text-[9px] text-[var(--text-normal)]">
+                  {gitStatus.unstaged.length}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleDiscardAllChanges}
+                className="p-1 rounded hover:bg-rose-500/10 text-[var(--text-muted)] hover:text-rose-400 transition-colors cursor-pointer"
+                title="Discard All Unstaged Changes"
+              >
+                <RotateCcw size={12} />
+              </button>
             </div>
 
             <div className="space-y-0.5">

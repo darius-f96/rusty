@@ -658,3 +658,56 @@ pub fn git_get_file_content_at_rev(root_dir: String, revision: String, file_path
         Err(_) => Ok("".to_string()),
     }
 }
+
+/// Discards all unstaged changes in the repository.
+/// Executes `git checkout -- .` and `git clean -df` to remove untracked files.
+#[tauri::command]
+pub fn git_discard_all_changes(root_dir: String) -> Result<(), String> {
+    // Discard changes to tracked files
+    Command::new("git")
+        .args(&["checkout", "--", "."])
+        .current_dir(&root_dir)
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    // Discard untracked files and directories
+    Command::new("git")
+        .args(&["clean", "-df"])
+        .current_dir(&root_dir)
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+/// Reverts a specific commit by executing `git revert --no-edit <commit_hash>`.
+#[tauri::command]
+pub fn git_revert_commit(root_dir: String, commit_hash: String) -> Result<(), String> {
+    let output = Command::new("git")
+        .args(&["revert", "--no-edit", &commit_hash])
+        .current_dir(&root_dir)
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).into_owned())
+    }
+}
+
+/// Resets the current branch to a specific commit by executing `git reset --hard <commit_hash>`.
+#[tauri::command]
+pub fn git_reset_to_commit(root_dir: String, commit_hash: String) -> Result<(), String> {
+    let output = Command::new("git")
+        .args(&["reset", "--hard", &commit_hash])
+        .current_dir(&root_dir)
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).into_owned())
+    }
+}

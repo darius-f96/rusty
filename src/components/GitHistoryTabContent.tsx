@@ -75,6 +75,46 @@ export const GitHistoryTabContent: React.FC = () => {
     });
   };
 
+  const handleRevertCommit = async (commitHash: string) => {
+    const confirmRevert = window.confirm(
+      `Are you sure you want to revert commit ${commitHash.substring(0, 7)}? This will create a new commit undoing its modifications.`
+    );
+    if (!confirmRevert) return;
+
+    try {
+      console.log(`Git Graph: Reverting commit ${commitHash}`);
+      await invoke("git_revert_commit", { rootDir: rootPath, commitHash });
+      await handleRefresh();
+      // Reload workspace directory tree structure
+      const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
+      useWorkspaceStore.getState().setFileTree(tree);
+      alert("Commit reverted successfully.");
+    } catch (err: any) {
+      console.error("Revert failed:", err);
+      alert(`Revert failed: ${err}`);
+    }
+  };
+
+  const handleResetToCommit = async (commitHash: string) => {
+    const confirmReset = window.confirm(
+      `WARNING: Are you sure you want to HARD RESET your current branch to commit ${commitHash.substring(0, 7)}? ALL uncommitted modifications and commits after this point will be DESTROYED.`
+    );
+    if (!confirmReset) return;
+
+    try {
+      console.log(`Git Graph: Resetting branch to ${commitHash}`);
+      await invoke("git_reset_to_commit", { rootDir: rootPath, commitHash });
+      await handleRefresh();
+      // Reload workspace directory tree structure
+      const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
+      useWorkspaceStore.getState().setFileTree(tree);
+      alert("Branch reset successfully.");
+    } catch (err: any) {
+      console.error("Reset failed:", err);
+      alert(`Reset failed: ${err}`);
+    }
+  };
+
   // Fetch the commit log from the backend
   const fetchCommitHistory = async () => {
     if (!rootPath) return;
@@ -411,8 +451,36 @@ export const GitHistoryTabContent: React.FC = () => {
                       {/* Files list container */}
                       <div className="flex-1 pr-6 py-2.5 space-y-1.5 select-none font-mono text-[11px] text-[var(--text-normal)]">
                         <div className="text-[9px] uppercase font-bold text-[var(--text-muted)] tracking-wider mb-1 flex items-center justify-between">
-                          <span>Changed Files</span>
-                          {loadingFiles ? <span>loading...</span> : <span>{commitFiles.length} item(s)</span>}
+                          <div className="flex items-center space-x-3">
+                            <span>Changed Files</span>
+                            {loadingFiles ? <span>loading...</span> : <span>{commitFiles.length} item(s)</span>}
+                          </div>
+
+                          {/* Commit Rollback Actions */}
+                          <div className="flex items-center space-x-2.5 font-mono select-none">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRevertCommit(commit.hash);
+                              }}
+                              className="text-[9px] hover:text-amber-400 text-[var(--text-muted)] hover:underline cursor-pointer flex items-center space-x-1 font-bold"
+                              title="Revert changes made by this commit"
+                            >
+                              <span>[ revert commit ]</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleResetToCommit(commit.hash);
+                              }}
+                              className="text-[9px] hover:text-rose-400 text-[var(--text-muted)] hover:underline cursor-pointer flex items-center space-x-1 font-bold"
+                              title="Hard reset branch to this commit point"
+                            >
+                              <span>[ reset branch to here ]</span>
+                            </button>
+                          </div>
                         </div>
 
                         {loadingFiles ? (

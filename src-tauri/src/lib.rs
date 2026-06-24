@@ -190,7 +190,10 @@ pub fn run() {
             git::git_push,
             git::git_get_commit_history,
             git::git_get_commit_files,
-            git::git_get_file_content_at_rev
+            git::git_get_file_content_at_rev,
+            git::git_discard_all_changes,
+            git::git_revert_commit,
+            git::git_reset_to_commit
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
