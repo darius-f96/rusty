@@ -46,3 +46,19 @@
 ::-webkit-scrollbar-thumb:hover {
   background: var(--accent-color);
 }
+
+/* Improve React Flow canvas text and border rendering sharpness */
+.react-flow__viewport {
+  will-change: transform;
+}
+
+.react-flow__node {
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.react-flow__edge-path {
+  shape-rendering: geometricPrecision;
+}

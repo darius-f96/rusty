@@ -30,7 +30,10 @@ export const ContextNode: React.FC<{ id: string; data: any }> = ({ id, data }) =
     setTempName(data.name || "");
   }, [data.name]);
 
-  const [isMinimized, setIsMinimized] = useState(false);
+  const isMinimized = !!data.isMinimized;
+  const setIsMinimized = (val: boolean) => {
+    updateNode(id, { isMinimized: val });
+  };
 
   // Auto-resize description textarea
   useEffect(() => {
@@ -104,14 +107,14 @@ export const ContextNode: React.FC<{ id: string; data: any }> = ({ id, data }) =
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`w-72 rounded-xl border text-gray-200 backdrop-blur-md overflow-hidden transition-all duration-300 ${
+      className={`w-72 rounded-xl border text-[var(--text-normal)] overflow-hidden transition-all duration-300 ${
         dragOver 
-          ? "border-emerald-500 bg-emerald-950/20 shadow-emerald-950/30 shadow-2xl" 
-          : "border-zinc-700/60 bg-zinc-900/90 hover:border-zinc-500/80 shadow-2xl"
+          ? "border-emerald-500 bg-[var(--bg-sidebar)] shadow-[rgba(16,185,129,0.15)] shadow-lg" 
+          : "border-[var(--border-color)] bg-[var(--bg-sidebar)] hover:border-[var(--border-active)] shadow-lg"
       }`}
     >
       {/* Node Header (Draggable surface) */}
-      <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-950/80 px-3 py-2 select-none cursor-move">
+      <div className="flex items-center justify-between border-b border-[var(--border-color)] bg-black/15 px-3 py-2 select-none cursor-move">
         <div className="flex items-center space-x-2 flex-1 mr-2 min-w-0">
           <Info size={14} className="text-emerald-400 flex-shrink-0" />
           
@@ -127,11 +130,11 @@ export const ContextNode: React.FC<{ id: string; data: any }> = ({ id, data }) =
                 if (e.key === "Enter") handleNameSave();
                 if (e.key === "Escape") setIsEditing(false);
               }}
-              className="nodrag bg-zinc-950 border border-zinc-800 rounded px-1.5 py-0.5 font-mono text-xs text-zinc-100 focus:outline-none focus:border-zinc-700 w-full"
+              className="nodrag bg-[var(--bg-app)] border border-[var(--border-color)] rounded px-1.5 py-0.5 font-sans text-xs text-[var(--text-light)] focus:outline-none focus:border-[var(--border-active)] w-full"
               autoFocus
             />
           ) : (
-            <span className="font-mono text-xs font-semibold text-zinc-300 truncate">{data.name || ""}</span>
+            <span className="font-sans text-xs font-semibold text-[var(--text-light)] truncate">{data.name || ""}</span>
           )}
         </div>
 
@@ -154,7 +157,7 @@ export const ContextNode: React.FC<{ id: string; data: any }> = ({ id, data }) =
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
-                className="nodrag text-zinc-500 hover:text-zinc-300 p-0.5 rounded transition-colors"
+                className="nodrag text-[var(--text-muted)] hover:text-[var(--text-light)] p-0.5 rounded transition-colors"
                 title="Rename node"
               >
                 <Pencil size={12} />
@@ -166,7 +169,7 @@ export const ContextNode: React.FC<{ id: string; data: any }> = ({ id, data }) =
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
-                className="nodrag text-zinc-500 hover:text-rose-400 p-0.5 rounded transition-colors"
+                className="nodrag text-[var(--text-muted)] hover:text-rose-400 p-0.5 rounded transition-colors"
                 title="Delete node"
               >
                 <Trash2 size={12} />
@@ -182,8 +185,8 @@ export const ContextNode: React.FC<{ id: string; data: any }> = ({ id, data }) =
         {data.path ? (
           <div 
             onClick={handleFileClick}
-            className={`flex items-center justify-between bg-zinc-950/80 border border-zinc-800 rounded-lg p-2.5 relative group ${
-              !data.isDir ? "cursor-pointer hover:border-zinc-700/80 hover:bg-zinc-950/90 transition-all" : ""
+            className={`flex items-center justify-between bg-[var(--bg-app)] border border-[var(--border-color)] rounded-lg p-2.5 relative group ${
+              !data.isDir ? "cursor-pointer hover:border-[var(--border-active)] hover:bg-[var(--bg-app)] transition-all" : ""
             }`}
           >
             <div className="flex items-center space-x-2.5 min-w-0">
@@ -191,7 +194,7 @@ export const ContextNode: React.FC<{ id: string; data: any }> = ({ id, data }) =
                 {data.isDir ? <Folder size={15} /> : <FileIcon fileName={data.fileName} size={15} />}
               </span>
               <div className="flex flex-col min-w-0">
-                <span className="font-mono text-xs font-semibold text-zinc-200 truncate">{data.fileName}</span>
+                <span className="font-sans text-xs font-semibold text-[var(--text-light)] truncate">{data.fileName}</span>
                 <span className="font-mono text-[9px] text-[var(--text-muted)] truncate max-w-[180px]">{data.path}</span>
               </div>
             </div>
@@ -199,14 +202,14 @@ export const ContextNode: React.FC<{ id: string; data: any }> = ({ id, data }) =
               onClick={clearAttachedContext}
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
-              className="nodrag absolute right-2 top-2 text-zinc-600 hover:text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded"
+              className="nodrag absolute right-2 top-2 text-[var(--text-muted)] hover:text-[var(--text-light)] opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded"
               title="Remove context file"
             >
               <X size={12} />
             </button>
           </div>
         ) : (
-          <div className="border border-dashed border-zinc-800 bg-zinc-950/30 rounded-lg py-4 px-3 text-center text-[10px] font-mono text-[var(--text-muted)] select-none">
+          <div className="border border-dashed border-[var(--border-color)] bg-[var(--bg-app)]/30 rounded-lg py-4 px-3 text-center text-[10px] font-sans text-[var(--text-muted)] select-none">
             Drop file/folder here from sidebar
           </div>
         )}
@@ -214,14 +217,14 @@ export const ContextNode: React.FC<{ id: string; data: any }> = ({ id, data }) =
         {/* Text Context Area */}
         <div>
           <div className="flex items-center justify-between mb-1">
-            <label className="block text-[9px] uppercase font-semibold text-zinc-500 font-mono">
+            <label className="block text-[9px] uppercase font-semibold text-[var(--text-muted)] font-sans">
               Description Context
             </label>
             <button
               onClick={() => setIsMinimized(!isMinimized)}
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
-              className="nodrag text-[9px] font-mono text-zinc-500 hover:text-zinc-300 transition-colors flex items-center space-x-1 cursor-pointer"
+              className="nodrag text-[9px] font-sans text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors flex items-center space-x-1 cursor-pointer"
             >
               {isMinimized ? <span>[Expand]</span> : <span>[Minimize]</span>}
             </button>
@@ -234,7 +237,7 @@ export const ContextNode: React.FC<{ id: string; data: any }> = ({ id, data }) =
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
             placeholder="Type notes or additional text context..."
-            className={`nodrag w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs font-mono text-zinc-300 focus:outline-none focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600 resize-none ${
+            className={`nodrag w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded-lg p-2 text-xs font-sans leading-relaxed text-[var(--text-light)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--border-active)] resize-none ${
               isMinimized ? "overflow-y-auto" : "overflow-hidden"
             }`}
             style={isMinimized ? { height: "60px" } : { minHeight: "45px", height: "auto" }}
@@ -247,13 +250,13 @@ export const ContextNode: React.FC<{ id: string; data: any }> = ({ id, data }) =
         type="source"
         position={Position.Top}
         id="context-out-top"
-        style={{ background: "#10b981", width: 10, height: 10, borderRadius: "50%" }}
+        style={{ background: "#10b981", width: 14, height: 14, border: "2.5px solid var(--bg-sidebar)" }}
       />
       <Handle
         type="source"
         position={Position.Bottom}
         id="context-out-bottom"
-        style={{ background: "#10b981", width: 10, height: 10, borderRadius: "50%" }}
+        style={{ background: "#10b981", width: 14, height: 14, border: "2.5px solid var(--bg-sidebar)" }}
       />
     </div>
   );
