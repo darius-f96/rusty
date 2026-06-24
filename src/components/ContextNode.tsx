@@ -6,7 +6,20 @@ import { useWorkspaceStore } from "../store";
 
 export const ContextNode: React.FC<{ id: string; data: any }> = ({ id, data }) => {
   const updateNode = useWorkspaceStore((state) => state.updateTaskNode); // Uses the store's update action
+  const openTab = useWorkspaceStore((state) => state.openTab);
   const [isEditing, setIsEditing] = useState(false);
+
+  const handleFileClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (data.path && !data.isDir) {
+      openTab({
+        id: `file_${data.path.replace(/[^a-zA-Z0-9]/g, "_")}`,
+        type: "file",
+        title: data.fileName,
+        key: data.path
+      });
+    }
+  };
   const [tempName, setTempName] = useState(data.name || "");
   const [dragOver, setDragOver] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -16,13 +29,19 @@ export const ContextNode: React.FC<{ id: string; data: any }> = ({ id, data }) =
     setTempName(data.name || "");
   }, [data.name]);
 
+  const [isMinimized, setIsMinimized] = useState(false);
+
   // Auto-resize description textarea
   useEffect(() => {
     if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+      if (isMinimized) {
+        textareaRef.current.style.height = "60px"; // Capped to roughly 3 rows
+      } else {
+        textareaRef.current.style.height = "auto";
+        textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+      }
     }
-  }, [data.description]);
+  }, [data.description, isMinimized]);
 
   const handleNameSave = () => {
     updateNode(id, { name: tempName });
@@ -145,7 +164,12 @@ export const ContextNode: React.FC<{ id: string; data: any }> = ({ id, data }) =
       <div className="p-3 space-y-3">
         {/* Attached File/Folder Context */}
         {data.path ? (
-          <div className="flex items-center justify-between bg-zinc-950/80 border border-zinc-800 rounded-lg p-2.5 relative group">
+          <div 
+            onClick={handleFileClick}
+            className={`flex items-center justify-between bg-zinc-950/80 border border-zinc-800 rounded-lg p-2.5 relative group ${
+              !data.isDir ? "cursor-pointer hover:border-zinc-700/80 hover:bg-zinc-950/90 transition-all" : ""
+            }`}
+          >
             <div className="flex items-center space-x-2.5 min-w-0">
               <span className="flex-shrink-0 text-emerald-400">
                 {data.isDir ? <Folder size={15} /> : <FileIcon fileName={data.fileName} size={15} />}
@@ -173,9 +197,19 @@ export const ContextNode: React.FC<{ id: string; data: any }> = ({ id, data }) =
 
         {/* Text Context Area */}
         <div>
-          <label className="block text-[9px] uppercase font-semibold text-zinc-500 mb-1 font-mono">
-            Description Context
-          </label>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-[9px] uppercase font-semibold text-zinc-500 font-mono">
+              Description Context
+            </label>
+            <button
+              onClick={() => setIsMinimized(!isMinimized)}
+              onPointerDown={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="nodrag text-[9px] font-mono text-zinc-500 hover:text-zinc-300 transition-colors flex items-center space-x-1 cursor-pointer"
+            >
+              {isMinimized ? <span>[Expand]</span> : <span>[Minimize]</span>}
+            </button>
+          </div>
           <textarea
             ref={textareaRef}
             value={data.description || ""}
@@ -184,8 +218,10 @@ export const ContextNode: React.FC<{ id: string; data: any }> = ({ id, data }) =
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
             placeholder="Type notes or additional text context..."
-            className="nodrag w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs font-mono text-zinc-300 focus:outline-none focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600 resize-none overflow-hidden"
-            style={{ minHeight: "45px", height: "auto" }}
+            className={`nodrag w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs font-mono text-zinc-300 focus:outline-none focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600 resize-none ${
+              isMinimized ? "overflow-y-auto" : "overflow-hidden"
+            }`}
+            style={isMinimized ? { height: "60px" } : { minHeight: "45px", height: "auto" }}
           />
         </div>
       </div>

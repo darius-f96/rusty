@@ -15,13 +15,19 @@ export const TaskNode: React.FC<{ id: string; data: any }> = ({ id, data }) => {
     setTempName(data.name || "AI Executor Node");
   }, [data.name]);
 
+  const [isMinimized, setIsMinimized] = useState(false);
+
   // Auto-resize the prompt textarea based on content length
   useEffect(() => {
     if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+      if (isMinimized) {
+        textareaRef.current.style.height = "76px"; // Capped to roughly 3 rows
+      } else {
+        textareaRef.current.style.height = "auto";
+        textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+      }
     }
-  }, [data.prompt]);
+  }, [data.prompt, isMinimized]);
 
   const handlePromptChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     updateTaskNode(id, { prompt: e.target.value });
@@ -104,9 +110,19 @@ export const TaskNode: React.FC<{ id: string; data: any }> = ({ id, data }) => {
       <div className="p-3">
         {/* Query Prompt Input */}
         <div>
-          <label className="block text-[10px] uppercase font-semibold text-zinc-500 mb-1 font-mono">
-            Prompt Instructions
-          </label>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-[10px] uppercase font-semibold text-zinc-500 font-mono">
+              Prompt Instructions
+            </label>
+            <button
+              onClick={() => setIsMinimized(!isMinimized)}
+              onPointerDown={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="nodrag text-[9px] font-mono text-zinc-500 hover:text-zinc-300 transition-colors flex items-center space-x-1 cursor-pointer"
+            >
+              {isMinimized ? <span>[Expand]</span> : <span>[Minimize]</span>}
+            </button>
+          </div>
           <textarea
             ref={textareaRef}
             value={data.prompt}
@@ -115,8 +131,10 @@ export const TaskNode: React.FC<{ id: string; data: any }> = ({ id, data }) => {
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
             placeholder="e.g. Add error logs to standard handlers, optimize map lookups..."
-            className="nodrag w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs font-mono text-gray-300 focus:outline-none focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600 resize-none overflow-hidden"
-            style={{ minHeight: "60px", height: "auto" }}
+            className={`nodrag w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs font-mono text-gray-300 focus:outline-none focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600 resize-none ${
+              isMinimized ? "overflow-y-auto" : "overflow-hidden"
+            }`}
+            style={isMinimized ? { height: "76px" } : { minHeight: "60px", height: "auto" }}
           />
         </div>
       </div>

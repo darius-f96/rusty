@@ -39,7 +39,6 @@ function App() {
   const addContextNode = useWorkspaceStore((state) => state.addContextNode);
   const addTaskNode = useWorkspaceStore((state) => state.addTaskNode);
   
-  const openTab = useWorkspaceStore((state) => state.openTab);
   const openTabs = useWorkspaceStore((state) => state.openTabs);
   const activeTabId = useWorkspaceStore((state) => state.activeTabId);
   const setActiveTabId = useWorkspaceStore((state) => state.setActiveTabId);
@@ -270,15 +269,6 @@ function App() {
       setSelectedNodeId(node.id);
     } else {
       setSelectedNodeId(null);
-    }
-    
-    if (node.type === "contextNode" && node.data.path && !node.data.isDir) {
-      openTab({
-        id: `file_${node.data.path.replace(/[^a-zA-Z0-9]/g, "_")}`,
-        type: "file",
-        title: node.data.fileName,
-        key: node.data.path
-      });
     }
   };
 
