@@ -7,7 +7,7 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import { FileTree } from "./components/FileTree";
-import { FileNode } from "./components/FileNode";
+import { ContextNode } from "./components/ContextNode";
 import { TaskNode } from "./components/TaskNode";
 import { EditorPanel } from "./components/EditorPanel";
 import { SidePane } from "./components/SidePane";
@@ -18,7 +18,7 @@ import { Folder, CheckSquare, Layers, Settings, Plus, X, Cpu, Maximize } from "l
 
 // Register custom nodes for React Flow
 const nodeTypes = {
-  fileNode: FileNode,
+  contextNode: ContextNode,
   taskNode: TaskNode,
 };
 
@@ -36,7 +36,7 @@ function App() {
   
   const selectedNodeId = useWorkspaceStore((state) => state.selectedNodeId);
   const setSelectedNodeId = useWorkspaceStore((state) => state.setSelectedNodeId);
-  const addFileNode = useWorkspaceStore((state) => state.addFileNode);
+  const addContextNode = useWorkspaceStore((state) => state.addContextNode);
   const addTaskNode = useWorkspaceStore((state) => state.addTaskNode);
   
   const openTab = useWorkspaceStore((state) => state.openTab);
@@ -210,40 +210,73 @@ function App() {
   // Handles dragging files onto React Flow canvas
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
+    console.log("App: onDragOver triggered. target:", event.target);
     event.dataTransfer.dropEffect = "move";
   }, []);
 
   const onDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault();
+      console.log("App: onDrop triggered. target:", event.target);
 
-      const filePath = event.dataTransfer.getData("application/reactflow-file-path");
-      const fileName = event.dataTransfer.getData("application/reactflow-file-name");
+      const rawData = event.dataTransfer.getData("text/plain");
+      console.log("App: onDrop rawData:", rawData);
+      if (!rawData) {
+        console.warn("App: onDrop dataTransfer rawData is empty or missing text/plain!");
+        return;
+      }
 
-      if (!filePath || !fileName) return;
+      try {
+        const dragData = JSON.parse(rawData);
+        console.log("App: onDrop parsed JSON dragData:", dragData);
+        if (!dragData || !dragData.path || !dragData.name) {
+          console.warn("App: dragData missing path or name fields");
+          return;
+        }
 
-      // Get drop position relative to canvas bounding rect
-      const reactFlowBounds = document.getElementById("rf-canvas")?.getBoundingClientRect();
-      if (!reactFlowBounds) return;
+        let position = { x: event.clientX, y: event.clientY };
+        if (rfInstance) {
+          position = rfInstance.screenToFlowPosition({
+            x: event.clientX,
+            y: event.clientY,
+          });
+          console.log("App: onDrop projected position with rfInstance:", position);
+        } else {
+          const reactFlowBounds = document.getElementById("rf-canvas")?.getBoundingClientRect();
+          if (reactFlowBounds) {
+            position = {
+              x: event.clientX - reactFlowBounds.left,
+              y: event.clientY - reactFlowBounds.top,
+            };
+            console.log("App: onDrop projected position fallback:", position);
+          }
+        }
 
-      // Calculate approximate position inside canvas view
-      const x = event.clientX - reactFlowBounds.left - 100;
-      const y = event.clientY - reactFlowBounds.top - 50;
-
-      addFileNode(filePath, fileName, x, y);
+        addContextNode(position.x - 75, position.y - 30, {
+          path: dragData.path,
+          name: dragData.name,
+          isDir: dragData.isDir
+        });
+      } catch (err) {
+        console.log("App canvas drop: Not a JSON string (could be file from Finder).", err);
+      }
     },
-    [addFileNode]
+    [addContextNode, rfInstance]
   );
 
   // Connection selection callback
   const onNodeClick = (_event: React.MouseEvent, node: any) => {
-    setSelectedNodeId(node.id);
+    if (node.type !== "contextNode") {
+      setSelectedNodeId(node.id);
+    } else {
+      setSelectedNodeId(null);
+    }
     
-    if (node.type === "fileNode") {
+    if (node.type === "contextNode" && node.data.path && !node.data.isDir) {
       openTab({
         id: `file_${node.data.path.replace(/[^a-zA-Z0-9]/g, "_")}`,
         type: "file",
-        title: node.data.name,
+        title: node.data.fileName,
         key: node.data.path
       });
     }
@@ -276,14 +309,15 @@ function App() {
     const node = nodes.find((n) => n.id === nodeId);
     if (!node || node.type !== "taskNode") return;
 
-    // Detect all FileNodes connected to this TaskNode
+    // Detect all Context Nodes connected to this TaskNode
     const connectedEdges = edges.filter((edge) => edge.target === nodeId);
     const inputFiles = connectedEdges
       .map((edge) => nodes.find((n) => n.id === edge.source))
-      .filter((n): n is Exclude<typeof n, undefined> => n !== undefined && n.type === "fileNode")
+      .filter((n): n is Exclude<typeof n, undefined> => n !== undefined && n.type === "contextNode" && !!n.data.path)
       .map((n) => ({
         path: n.data.path as string,
-        name: n.data.name as string,
+        name: n.data.fileName as string,
+        isDir: !!n.data.isDir
       }));
 
     console.log("WebSocket [executeNode] starting task execution", { nodeId, inputFiles });
@@ -629,6 +663,16 @@ function App() {
                       <Plus size={14} className="text-[var(--accent-color)]" />
                       <span>Add Task Node</span>
                     </button>
+
+                    <button
+                      onClick={() => {
+                        addContextNode(300, 200);
+                      }}
+                      className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] hover:bg-[var(--bg-header)] text-[var(--text-normal)] text-xs font-mono font-bold px-3 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer hover:border-[var(--border-active)]"
+                    >
+                      <Plus size={14} className="text-emerald-400" />
+                      <span>Add Context Node</span>
+                    </button>
                     
                     <button
                       onClick={handleApplyChanges}
@@ -641,7 +685,12 @@ function App() {
                 </div>
 
                 {/* React Flow Board */}
-                <div className="flex-1 w-full relative min-h-0" onDoubleClick={onPaneDoubleClick}>
+                <div 
+                  className="flex-1 w-full relative min-h-0" 
+                  onDoubleClick={onPaneDoubleClick}
+                  onDragOver={onDragOver}
+                  onDrop={onDrop}
+                >
                   <ReactFlow
                     nodes={nodes}
                     edges={edges}
@@ -652,6 +701,8 @@ function App() {
                     onNodeClick={onNodeClick}
                     onPaneClick={onPaneClick}
                     onInit={setRfInstance}
+                    onDragOver={onDragOver}
+                    onDrop={onDrop}
                     proOptions={{ hideAttribution: true }}
                     maxZoom={1.2}
                     minZoom={0.2}

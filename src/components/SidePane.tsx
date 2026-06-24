@@ -30,10 +30,12 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
   // Select which file should be shown in the diff viewer
   useEffect(() => {
     if (!selectedNode) return;
-    if (selectedNode.type === "fileNode") {
+    if (selectedNode.type === "contextNode") {
       const path = selectedNode.data.path as string;
-      if (activeDiffFile !== path) {
-        setActiveDiffFile(path);
+      if (path && !selectedNode.data.isDir) {
+        if (activeDiffFile !== path) {
+          setActiveDiffFile(path);
+        }
       }
     } else if (selectedNode.type === "taskNode") {
       if (modifiedFiles.length > 0) {
@@ -122,7 +124,9 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
         <div className="flex flex-col">
           <span className="font-mono text-xs text-[var(--text-muted)] uppercase tracking-wider">Inspector</span>
           <span className="font-semibold text-sm truncate max-w-[320px]">
-            {selectedNode.type === "fileNode" ? (selectedNode.data as any).name : `Task Node (${selectedNode.id})`}
+            {selectedNode.type === "contextNode"
+              ? (selectedNode.data as any).name
+              : (selectedNode.data as any).name || `Task Node (${selectedNode.id})`}
           </span>
         </div>
         <button

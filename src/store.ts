@@ -54,7 +54,7 @@ export interface WorkspaceState {
   onEdgesChange: OnEdgesChange;
   onConnect: (connection: Connection) => void;
   
-  addFileNode: (filePath: string, fileName: string, x: number, y: number) => void;
+  addContextNode: (x: number, y: number, fileContext?: { path: string; name: string; isDir: boolean }) => void;
   addTaskNode: (x: number, y: number) => void;
   updateTaskNode: (id: string, data: any) => void;
   addLog: (nodeId: string, message: string) => void;
@@ -137,28 +137,66 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     edges: addEdge(connection, state.edges),
   })),
 
-  addFileNode: (filePath, fileName, x, y) => set((state) => {
-    // Prevent adding duplicates for the exact same file in the exact same spot
-    const id = `file_${filePath.replace(/[^a-zA-Z0-9]/g, "_")}`;
-    if (state.nodes.some(n => n.id === id)) return {};
+  addContextNode: (x, y, fileContext) => set((state) => {
+    const id = `context_${Date.now()}`;
+    
+    // Prevent overlapping nodes by shifting coordinates if another node is placed too close (within 60px)
+    let finalX = x;
+    let finalY = y;
+    let attempts = 0;
+    while (
+      state.nodes.some(
+        (n) => Math.abs(n.position.x - finalX) < 60 && Math.abs(n.position.y - finalY) < 60
+      ) &&
+      attempts < 100
+    ) {
+      finalX += 50;
+      finalY += 50;
+      attempts++;
+    }
 
+    const name = fileContext ? `Context: ${fileContext.name}` : "";
     const newNode: Node = {
       id,
-      type: "fileNode",
-      position: { x, y },
-      data: { path: filePath, name: fileName }
+      type: "contextNode",
+      position: { x: finalX, y: finalY },
+      data: {
+        id,
+        name,
+        description: "",
+        path: fileContext?.path || "",
+        fileName: fileContext?.name || "",
+        isDir: fileContext?.isDir || false
+      }
     };
     return { nodes: [...state.nodes, newNode] };
   }),
 
   addTaskNode: (x, y) => set((state) => {
     const id = `task_${Date.now()}`;
+    
+    // Prevent overlapping nodes by shifting coordinates if another node is placed too close (within 60px)
+    let finalX = x;
+    let finalY = y;
+    let attempts = 0;
+    while (
+      state.nodes.some(
+        (n) => Math.abs(n.position.x - finalX) < 60 && Math.abs(n.position.y - finalY) < 60
+      ) &&
+      attempts < 100
+    ) {
+      finalX += 50;
+      finalY += 50;
+      attempts++;
+    }
+
     const newNode: Node = {
       id,
       type: "taskNode",
-      position: { x, y },
+      position: { x: finalX, y: finalY },
       data: {
         id,
+        name: "AI Executor Node",
         prompt: "",
         model: state.activeModel,
         status: "idle"

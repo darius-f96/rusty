@@ -34,8 +34,13 @@ const FileTreeNode: React.FC<{ node: any }> = ({ node }) => {
   const openTab = useWorkspaceStore((state) => state.openTab);
 
   const handleDragStart = (e: React.DragEvent) => {
-    e.dataTransfer.setData("application/reactflow-file-path", node.path);
-    e.dataTransfer.setData("application/reactflow-file-name", node.name);
+    console.log("FileTree: handleDragStart started for:", node.name, "path:", node.path);
+    const payload = {
+      path: node.path,
+      name: node.name,
+      isDir: !!node.is_dir
+    };
+    e.dataTransfer.setData("text/plain", JSON.stringify(payload));
     e.dataTransfer.effectAllowed = "move";
   };
 
@@ -52,8 +57,11 @@ const FileTreeNode: React.FC<{ node: any }> = ({ node }) => {
     return (
       <div className="w-full">
         <div
+          draggable={true}
+          onDragStart={handleDragStart}
           onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center py-0.5 px-1 hover:bg-[var(--accent-bg)] active:bg-[var(--border-color)]/60 cursor-pointer text-[var(--text-normal)] hover:text-[var(--text-light)] transition-colors font-sans text-xs w-full"
+          style={{ WebkitUserDrag: "element" } as React.CSSProperties}
+          className="flex items-center py-0.5 px-1 hover:bg-[var(--accent-bg)] active:bg-[var(--border-color)]/60 cursor-grab active:cursor-grabbing text-[var(--text-normal)] hover:text-[var(--text-light)] transition-colors font-sans text-xs w-full border border-transparent hover:border-[var(--border-color)]/20"
         >
           <span className="mr-0.5 text-[var(--text-muted)] flex-shrink-0">
             {isOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
@@ -76,9 +84,10 @@ const FileTreeNode: React.FC<{ node: any }> = ({ node }) => {
 
   return (
     <div
-      draggable
+      draggable={true}
       onDragStart={handleDragStart}
       onDoubleClick={handleDoubleClick}
+      style={{ WebkitUserDrag: "element" } as React.CSSProperties}
       className="flex items-center py-0.5 px-1 pl-[18px] hover:bg-[var(--accent-bg)] text-[var(--text-normal)] hover:text-[var(--text-light)] transition-colors cursor-grab active:cursor-grabbing font-sans text-xs w-full border border-transparent hover:border-[var(--border-color)]/20"
     >
       <FileIcon fileName={node.name} size={13} className="mr-1 flex-shrink-0" />
