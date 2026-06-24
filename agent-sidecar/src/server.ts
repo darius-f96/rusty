@@ -190,12 +190,12 @@ Remember:
             if (text.includes("Welcome to Tauri + React")) {
               updatedContent = text.replace(
                 "Welcome to Tauri + React",
-                "Spatial IDE Orchestrated Code"
+                "Axiom Refactored Code"
               );
             } else if (text.trim().length > 0) {
-              updatedContent = `// Edited by AI spatial orchestrator simulation at ${new Date().toLocaleTimeString()}\n${text}`;
+              updatedContent = `// Edited by Axiom AI simulation at ${new Date().toLocaleTimeString()}\n${text}`;
             } else {
-              updatedContent = `// Created by AI spatial orchestrator simulation at ${new Date().toLocaleTimeString()}\n`;
+              updatedContent = `// Created by Axiom AI simulation at ${new Date().toLocaleTimeString()}\n`;
             }
             
             await writeVfsTool.execute({ path: targetFile, content: updatedContent });

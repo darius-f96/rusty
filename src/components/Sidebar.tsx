@@ -1,8 +1,9 @@
 import React, { useState } from "react";
-import { Folder, Layers, Cpu, Settings, FolderOpen } from "lucide-react";
+import { Folder, Cpu, Settings, FolderOpen } from "lucide-react";
 import { useWorkspaceStore } from "../store";
 import { FileTree } from "./FileTree";
 import { invoke } from "@tauri-apps/api/core";
+import { AxiomIcon } from "./AxiomIcon";
 
 interface SidebarProps {
   sidebarWidth: number;
@@ -63,11 +64,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
-  const handleOrchestratorClick = () => {
+  const handleAxiomClick = () => {
     openTab({
       id: "canvas",
       type: "canvas",
-      title: "Orchestrator Canvas",
+      title: "Axiom",
       key: "canvas",
     });
   };
@@ -101,11 +102,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {/* Project Explorer Toggle */}
           <button
             onClick={toggleExplorer}
-            className={`p-2.5 rounded-lg transition-all cursor-pointer relative group ${
-              isExplorerOpen
-                ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
-                : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
-            }`}
+            className={`p-2.5 rounded-lg transition-all cursor-pointer relative group ${isExplorerOpen
+              ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
+              : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
+              }`}
             title="Toggle File Explorer"
           >
             <Folder size={20} />
@@ -114,30 +114,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </span>
           </button>
 
-          {/* Orchestrator Canvas */}
+          {/* Axiom Canvas */}
           <button
-            onClick={handleOrchestratorClick}
-            className={`p-2.5 rounded-lg transition-all cursor-pointer relative group ${
-              activeTabId === "canvas"
-                ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
-                : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
-            }`}
-            title="Open Orchestration Canvas"
+            onClick={handleAxiomClick}
+            className={`p-2.5 rounded-lg transition-all cursor-pointer relative group ${activeTabId === "canvas"
+              ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
+              : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
+              }`}
+            title="Open Axiom"
           >
-            <Layers size={20} />
+            <AxiomIcon size={20} />
             <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-zinc-950 text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-zinc-800 whitespace-nowrap">
-              Orchestration Canvas
+              Axiom
             </span>
           </button>
 
           {/* LLM Integrations Setup */}
           <button
             onClick={handleLlmSetupClick}
-            className={`p-2.5 rounded-lg transition-all cursor-pointer relative group ${
-              activeTabId === "llm_setup"
-                ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
-                : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
-            }`}
+            className={`p-2.5 rounded-lg transition-all cursor-pointer relative group ${activeTabId === "llm_setup"
+              ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
+              : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
+              }`}
             title="LLM Integrations"
           >
             <Cpu size={20} />
@@ -150,11 +148,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Bottom General Settings Icon */}
         <button
           onClick={handleSettingsClick}
-          className={`p-2.5 rounded-lg transition-all cursor-pointer relative group ${
-            activeTabId === "settings"
-              ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
-              : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
-          }`}
+          className={`p-2.5 rounded-lg transition-all cursor-pointer relative group ${activeTabId === "settings"
+            ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
+            : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
+            }`}
           title="General Settings"
         >
           <Settings size={20} />
@@ -194,7 +191,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
             {fileTree.length === 0 ? (
               <div className="text-center py-8 text-[10px] text-[var(--text-muted)] font-mono leading-relaxed">
-                No workspace loaded.<br />Select a folder above.
+                No workspace loaded.
               </div>
             ) : (
               <FileTree entries={fileTree} />

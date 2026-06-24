@@ -6,7 +6,6 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import {
-  Layers,
   CheckSquare,
   Plus,
   X,
@@ -23,6 +22,7 @@ import { ContextNode } from "./ContextNode";
 import { TaskNode } from "./TaskNode";
 import { FileIcon } from "../services/fileTypeService";
 import { invoke } from "@tauri-apps/api/core";
+import { AxiomIcon } from "./AxiomIcon";
 
 // Register custom nodes for React Flow
 const nodeTypes = {
@@ -335,7 +335,7 @@ export const Workspace: React.FC = () => {
                     : "bg-[var(--bg-header)] text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]"
                 }`}
               >
-                {tab.type === "canvas" && <Layers size={11} className={isActive ? "text-[var(--accent-color)]" : "text-[var(--text-muted)]"} />}
+                {tab.type === "canvas" && <AxiomIcon size={11} className={isActive ? "text-[var(--accent-color)]" : "text-[var(--text-muted)]"} />}
                 {tab.type === "file" && <FileIcon fileName={tab.title} size={11} className="flex-shrink-0" />}
                 {tab.type === "task" && <Cpu size={11} className={isActive ? "text-[var(--accent-color)]" : "text-[var(--text-muted)]"} />}
                 {tab.type === "llm-setup" && <Cpu size={11} className={isActive ? "text-[var(--accent-color)]" : "text-[var(--text-muted)]"} />}

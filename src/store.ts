@@ -116,7 +116,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   devLogs: [],
   showDevConsole: false,
   openTabs: [
-    { id: "canvas", type: "canvas", title: "Orchestrator Canvas", key: "canvas" }
+    { id: "canvas", type: "canvas", title: "Axiom", key: "canvas" }
   ],
   activeTabId: "canvas",
 

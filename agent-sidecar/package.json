@@ -1,7 +1,7 @@
 {
   "name": "agent-sidecar",
   "version": "1.0.0",
-  "description": "Headless Node.js agent runner using Pi SDK for AI Spatial Orchestrator",
+  "description": "Headless Node.js agent runner using Pi SDK for Axiom",
   "main": "dist/server.js",
   "scripts": {
     "dev": "ts-node src/server.ts",
