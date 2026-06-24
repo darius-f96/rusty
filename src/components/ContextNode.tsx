@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Handle, Position } from "@xyflow/react";
-import { Folder, Pencil, Check, X, Info } from "lucide-react";
+import { Folder, Pencil, Check, X, Info, Trash2 } from "lucide-react";
 import { FileIcon } from "../services/fileTypeService";
 import { useWorkspaceStore } from "../store";
 
 export const ContextNode: React.FC<{ id: string; data: any }> = ({ id, data }) => {
   const updateNode = useWorkspaceStore((state) => state.updateTaskNode); // Uses the store's update action
   const openTab = useWorkspaceStore((state) => state.openTab);
+  const deleteNode = useWorkspaceStore((state) => state.deleteNode);
   const [isEditing, setIsEditing] = useState(false);
 
   const handleFileClick = (e: React.MouseEvent) => {
@@ -145,17 +146,32 @@ export const ContextNode: React.FC<{ id: string; data: any }> = ({ id, data }) =
               <Check size={13} />
             </button>
           ) : (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsEditing(true);
-              }}
-              onPointerDown={(e) => e.stopPropagation()}
-              onMouseDown={(e) => e.stopPropagation()}
-              className="nodrag text-zinc-500 hover:text-zinc-300 p-0.5 rounded transition-colors"
-            >
-              <Pencil size={12} />
-            </button>
+            <>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsEditing(true);
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+                className="nodrag text-zinc-500 hover:text-zinc-300 p-0.5 rounded transition-colors"
+                title="Rename node"
+              >
+                <Pencil size={12} />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  deleteNode(id);
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+                className="nodrag text-zinc-500 hover:text-rose-400 p-0.5 rounded transition-colors"
+                title="Delete node"
+              >
+                <Trash2 size={12} />
+              </button>
+            </>
           )}
         </div>
       </div>

@@ -57,6 +57,7 @@ export interface WorkspaceState {
   addContextNode: (x: number, y: number, fileContext?: { path: string; name: string; isDir: boolean }) => void;
   addTaskNode: (x: number, y: number) => void;
   updateTaskNode: (id: string, data: any) => void;
+  deleteNode: (id: string) => void;
   addLog: (nodeId: string, message: string) => void;
   clearLogs: (nodeId: string) => void;
   setNodeStatus: (nodeId: string, status: "idle" | "running" | "success" | "error") => void;
@@ -213,6 +214,22 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       return node;
     })
   })),
+
+  deleteNode: (id) => set((state) => {
+    const newNodes = state.nodes.filter((node) => node.id !== id);
+    const newEdges = state.edges.filter((edge) => edge.source !== id && edge.target !== id);
+    const newNodeLogs = { ...state.nodeLogs };
+    delete newNodeLogs[id];
+    const newNodeStatus = { ...state.nodeStatus };
+    delete newNodeStatus[id];
+    return {
+      nodes: newNodes,
+      edges: newEdges,
+      nodeLogs: newNodeLogs,
+      nodeStatus: newNodeStatus,
+      selectedNodeId: state.selectedNodeId === id ? null : state.selectedNodeId
+    };
+  }),
 
   addLog: (nodeId, message) => set((state) => {
     const currentLogs = state.nodeLogs[nodeId] || [];

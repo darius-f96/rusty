@@ -14,7 +14,7 @@ import { SidePane } from "./components/SidePane";
 import { FileIcon } from "./services/fileTypeService";
 import { useWorkspaceStore, CustomProvider } from "./store";
 import { invoke } from "@tauri-apps/api/core";
-import { Folder, CheckSquare, Layers, Settings, Plus, X, Cpu, Maximize } from "lucide-react";
+import { Folder, CheckSquare, Layers, Settings, Plus, X, Cpu, Maximize, ChevronDown } from "lucide-react";
 
 // Register custom nodes for React Flow
 const nodeTypes = {
@@ -62,6 +62,25 @@ function App() {
 
   const [showSettings, setShowSettings] = useState(false);
   const [rfInstance, setRfInstance] = useState<any>(null);
+  const [nodeMenuOpen, setNodeMenuOpen] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    screenX: number;
+    screenY: number;
+  } | null>(null);
+
+  const getCanvasCenter = useCallback(() => {
+    if (rfInstance) {
+      const reactFlowBounds = document.getElementById("rf-canvas")?.getBoundingClientRect();
+      if (reactFlowBounds) {
+        const x = reactFlowBounds.left + reactFlowBounds.width / 2;
+        const y = reactFlowBounds.top + reactFlowBounds.height / 2;
+        return rfInstance.screenToFlowPosition({ x, y });
+      }
+    }
+    return { x: 300, y: 200 };
+  }, [rfInstance]);
   const socketRef = useRef<WebSocket | null>(null);
   const consoleScrollRef = useRef<HTMLDivElement>(null);
 
@@ -170,6 +189,16 @@ function App() {
     };
   }, []);
 
+  // Close context menu & dropdown on outside click
+  useEffect(() => {
+    const handleGlobalClick = () => {
+      setContextMenu(null);
+      setNodeMenuOpen(false);
+    };
+    window.addEventListener("click", handleGlobalClick);
+    return () => window.removeEventListener("click", handleGlobalClick);
+  }, []);
+
   // Settings state for new custom providers
   const [provId, setProvId] = useState("");
   const [provName, setProvName] = useState("");
@@ -274,7 +303,41 @@ function App() {
 
   const onPaneClick = () => {
     setSelectedNodeId(null);
+    setContextMenu(null);
   };
+
+  const onPaneContextMenu = useCallback(
+    (event: any) => {
+      event.preventDefault();
+      const bounds = document.getElementById("rf-canvas")?.getBoundingClientRect();
+      if (bounds && rfInstance) {
+        setContextMenu({
+          x: event.clientX - bounds.left,
+          y: event.clientY - bounds.top,
+          screenX: event.clientX,
+          screenY: event.clientY,
+        });
+      }
+    },
+    [rfInstance]
+  );
+
+  const handleAddNodeFromContextMenu = useCallback(
+    (type: "task" | "context") => {
+      if (!contextMenu || !rfInstance) return;
+      const flowPosition = rfInstance.screenToFlowPosition({
+        x: contextMenu.screenX,
+        y: contextMenu.screenY,
+      });
+      if (type === "task") {
+        addTaskNode(flowPosition.x - 75, flowPosition.y - 30);
+      } else {
+        addContextNode(flowPosition.x - 75, flowPosition.y - 30);
+      }
+      setContextMenu(null);
+    },
+    [contextMenu, rfInstance, addTaskNode, addContextNode]
+  );
 
   const onPaneDoubleClick = useCallback((event: React.MouseEvent) => {
     // Only spawn node if we double clicked the canvas pane itself
@@ -623,56 +686,93 @@ function App() {
           {activeTabId === "canvas" ? (
             <div className="w-full h-full flex relative">
               <div className="flex-1 flex flex-col h-full relative bg-[var(--bg-app)]" id="rf-canvas" onDragOver={onDragOver} onDrop={onDrop}>
-                {/* Workspace Toolbar Header */}
-                <div className="absolute top-4 left-4 right-4 h-14 glass-panel rounded-xl flex items-center justify-between px-4 z-10">
-                  <div className="flex items-center space-x-3">
-                    <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-[var(--accent-bg)] text-[var(--accent-color)] border border-[var(--accent-color)]/20">
-                      <Layers size={18} />
-                    </span>
-                    <div className="flex flex-col">
-                      <span className="font-bold text-sm tracking-wide">Orchestration Canvas</span>
-                      <span className="text-[10px] text-[var(--text-muted)] font-mono">Tauri VFS Sandbox Mode</span>
+                {/* Top Right Small Dropdown */}
+                <div className="absolute top-4 right-4 z-10 flex flex-col items-end">
+                  <button
+                    id="add-node-dropdown-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setNodeMenuOpen(!nodeMenuOpen);
+                    }}
+                    className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] hover:bg-[var(--bg-header)] text-[var(--text-light)] text-xs font-mono font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition-all shadow-md hover:border-[var(--border-active)] cursor-pointer nodrag"
+                  >
+                    <Plus size={14} className="text-[var(--accent-color)]" />
+                    <span>Add Node</span>
+                    <ChevronDown size={12} className="text-[var(--text-muted)]" />
+                  </button>
+                  {nodeMenuOpen && (
+                    <div className="mt-1 w-44 bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-lg shadow-xl py-1 z-20 font-mono text-xs border border-[var(--border-color)]">
+                      <button
+                        onClick={() => {
+                          const center = getCanvasCenter();
+                          addTaskNode(center.x - 75, center.y - 30);
+                          setNodeMenuOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
+                      >
+                        <CheckSquare size={13} className="text-[var(--accent-color)]" />
+                        <span>Create Task Node</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          const center = getCanvasCenter();
+                          addContextNode(center.x - 75, center.y - 30);
+                          setNodeMenuOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
+                      >
+                        <Folder size={13} className="text-emerald-400" />
+                        <span>Create Context Node</span>
+                      </button>
                     </div>
-                  </div>
+                  )}
+                </div>
 
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => rfInstance?.fitView()}
-                      className="bg-[var(--bg-sidebar)]/80 border border-[var(--border-color)] hover:bg-[var(--bg-header)] text-[var(--text-normal)] text-xs font-mono font-bold px-3.5 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer hover:border-[var(--border-active)]"
-                    >
-                      <Maximize size={13} className="text-[var(--accent-color)]" />
-                      <span>Center</span>
-                    </button>
+                {/* Bottom Left Canvas Controls */}
+                <div className="absolute bottom-4 left-4 z-10 flex items-center space-x-2">
+                  <button
+                    onClick={() => rfInstance?.fitView()}
+                    className="bg-[var(--bg-sidebar)]/80 border border-[var(--border-color)] hover:bg-[var(--bg-header)] text-[var(--text-normal)] text-xs font-mono font-bold px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer hover:border-[var(--border-active)]"
+                  >
+                    <Maximize size={13} className="text-[var(--accent-color)]" />
+                    <span>Center</span>
+                  </button>
 
+                  <button
+                    onClick={handleApplyChanges}
+                    className="bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/85 text-white text-xs font-mono font-bold px-3.5 py-1.5 rounded-lg flex items-center space-x-1.5 transition-all shadow-lg glow-btn cursor-pointer"
+                  >
+                    <CheckSquare size={13} />
+                    <span>Apply Pipeline</span>
+                  </button>
+                </div>
+
+                {/* Custom Floating Context Menu */}
+                {contextMenu && (
+                  <div
+                    style={{
+                      top: contextMenu.y,
+                      left: contextMenu.x,
+                    }}
+                    className="absolute bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-lg shadow-2xl py-1 z-30 font-mono text-xs w-48"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <button
-                      onClick={() => {
-                        addTaskNode(300, 200);
-                      }}
-                      className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] hover:bg-[var(--bg-header)] text-[var(--text-normal)] text-xs font-mono font-bold px-3 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer hover:border-[var(--border-active)]"
+                      onClick={() => handleAddNodeFromContextMenu("task")}
+                      className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
                     >
-                      <Plus size={14} className="text-[var(--accent-color)]" />
+                      <CheckSquare size={13} className="text-[var(--accent-color)]" />
                       <span>Add Task Node</span>
                     </button>
-
                     <button
-                      onClick={() => {
-                        addContextNode(300, 200);
-                      }}
-                      className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] hover:bg-[var(--bg-header)] text-[var(--text-normal)] text-xs font-mono font-bold px-3 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer hover:border-[var(--border-active)]"
+                      onClick={() => handleAddNodeFromContextMenu("context")}
+                      className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
                     >
-                      <Plus size={14} className="text-emerald-400" />
+                      <Folder size={13} className="text-emerald-400" />
                       <span>Add Context Node</span>
                     </button>
-                    
-                    <button
-                      onClick={handleApplyChanges}
-                      className="bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/85 text-white text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-lg glow-btn cursor-pointer"
-                    >
-                      <CheckSquare size={14} />
-                      <span>Apply Pipeline</span>
-                    </button>
                   </div>
-                </div>
+                )}
 
                 {/* React Flow Board */}
                 <div 
@@ -690,6 +790,7 @@ function App() {
                     nodeTypes={nodeTypes}
                     onNodeClick={onNodeClick}
                     onPaneClick={onPaneClick}
+                    onPaneContextMenu={onPaneContextMenu}
                     onInit={setRfInstance}
                     onDragOver={onDragOver}
                     onDrop={onDrop}
