@@ -38,34 +38,63 @@ export const LlmSetupTab: React.FC = () => {
 
   const handleFetchModels = async () => {
     if (!activeCustomProviderId) return;
-    if (!baseUrl) {
-      alert("Please provide a connection Base URL first.");
+    if (!apiKey) {
+      alert("Please provide an API Authorization Key first.");
       return;
     }
 
     setFetchingModels(true);
+    console.log(`[LlmSetup] Fetching models for ${selectedProvider?.name}...`);
+    console.log(`[LlmSetup] API Key provided: ${apiKey.substring(0, 10)}...`);
+    
     try {
-      console.log(`Fetching models for ${selectedProvider?.name} via proxy server...`);
-      const res = await fetch("http://localhost:4000/proxy/models", {
+      const proxyUrl = "http://localhost:4000/proxy/models";
+      console.log(`[LlmSetup] Sending request to proxy: ${proxyUrl}`);
+      
+      // Check if proxy server is reachable first
+      try {
+        const probeRes = await fetch("http://localhost:4000/proxy/models", {
+          method: "HEAD",
+          mode: "no-cors"
+        });
+        console.log(`[LlmSetup] Proxy server reachable (HEAD request sent)`);
+      } catch (probeErr) {
+        console.warn(`[LlmSetup] Proxy server not reachable on localhost:4000 - is the agent-sidecar running?`);
+      }
+      
+      const res = await fetch(proxyUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ baseUrl, apiKey })
+        body: JSON.stringify({
+          baseUrl: "https://opencode.ai/zen/v1",
+          apiKey: apiKey.trim()
+        })
       });
+      
+      console.log(`[LlmSetup] Proxy response status: ${res.status}`);
+      
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
+        console.error(`[LlmSetup] Proxy error response:`, errData);
         throw new Error(errData.error || `HTTP error ${res.status}: ${res.statusText}`);
       }
+      
       const data = await res.json();
+      console.log(`[LlmSetup] Proxy response data:`, JSON.stringify(data, null, 2));
+      
       if (data && Array.isArray(data.data)) {
         const mapped = data.data.map((m: any) => ({
           id: m.id,
-          name: m.name || m.id.split("/").pop() || m.id
+          name: m.id.split("/").pop() || m.id
         }));
+        console.log(`[LlmSetup] Mapped models:`, mapped);
+        
         if (mapped.length > 0) {
           updateProviderSettings(activeCustomProviderId, { models: mapped });
           setActiveModel(mapped[0].id);
+          console.log(`[LlmSetup] Updated store with ${mapped.length} models. Active model set to: ${mapped[0].id}`);
           alert(`Successfully fetched and loaded ${mapped.length} models for ${selectedProvider?.name}!`);
         } else {
           alert("No models found in the provider response.");
@@ -74,6 +103,7 @@ export const LlmSetupTab: React.FC = () => {
         throw new Error("Invalid response format: expected a JSON object with a 'data' array.");
       }
     } catch (err: any) {
+      console.error(`[LlmSetup] Fetch models error:`, err.message);
       alert(`Failed to fetch models: ${err.message}`);
     } finally {
       setFetchingModels(false);
