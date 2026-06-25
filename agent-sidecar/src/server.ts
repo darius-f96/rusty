@@ -8,9 +8,411 @@ import path from "path";
 
 dotenv.config();
 
+// ── Direct LLM API Call Helper ────────────────────────────────────
+
+const MAX_TOOL_RESULT_LENGTH = 8000; // Limit tool results to prevent context overflow
+
+function truncateToolResult(content: string, maxLength: number): string {
+  if (content.length <= maxLength) return content;
+  return content.slice(0, maxLength) + `\n\n[...truncated ${content.length - maxLength} characters...]`;
+}
+
+interface LlmConfig {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+}
+
+async function callLlmWithTools(
+  config: LlmConfig,
+  systemPrompt: string,
+  userMessage: string,
+  tools: Array<{ name: string; description: string; inputSchema?: any; execute: (args: any) => Promise<any> }>,
+  workspaceRoot: string,
+  sendLog: (msg: string) => void
+): Promise<string> {
+  const { baseUrl, apiKey, model } = config;
+  
+  // Build OpenAI-compatible messages
+  const messages: Array<{role: string, content: string | Array<any>}> = [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: userMessage }
+  ];
+
+  // Build tools in OpenAI format
+  const openaiTools = tools.map(tool => ({
+    type: "function" as const,
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.inputSchema || {
+        type: "object",
+        properties: {},
+        required: []
+      }
+    }
+  }));
+
+  sendLog(`Calling LLM: ${model} at ${baseUrl}`);
+
+  // Make the API call
+  const response = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: model,
+      messages: messages,
+      tools: openaiTools,
+      tool_choice: "auto"
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`LLM API error: ${response.status} - ${errorText}`);
+  }
+
+  const data = await response.json();
+  const assistantMessage = data.choices?.[0]?.message;
+
+  if (!assistantMessage) {
+    throw new Error("No response from LLM");
+  }
+
+  // Handle tool calls
+  if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
+    sendLog(`LLM requested ${assistantMessage.tool_calls.length} tool call(s)`);
+    
+    // Execute each tool call
+    const toolResults: Array<{role: string, tool_call_id: string, name: string, content: string}> = [];
+    
+    for (const toolCall of assistantMessage.tool_calls) {
+      const toolName = toolCall.function.name;
+      const toolArgs = JSON.parse(toolCall.function.arguments || "{}");
+      
+      sendLog(`Executing tool: ${toolName} with args: ${JSON.stringify(toolArgs)}`);
+      
+      const tool = tools.find(t => t.name === toolName);
+      if (tool) {
+        try {
+          const result = await tool.execute(toolArgs);
+          const truncatedResult = truncateToolResult(String(result), MAX_TOOL_RESULT_LENGTH);
+          toolResults.push({
+            role: "tool",
+            tool_call_id: toolCall.id,
+            name: toolName,
+            content: truncatedResult
+          });
+        } catch (err: any) {
+          toolResults.push({
+            role: "tool",
+            tool_call_id: toolCall.id,
+            name: toolName,
+            content: `Error: ${err.message}`
+          });
+        }
+      } else {
+        toolResults.push({
+          role: "tool",
+          tool_call_id: toolCall.id,
+          name: toolName,
+          content: `Tool ${toolName} not found`
+        });
+      }
+    }
+
+    // Send tool results back to LLM
+    messages.push(assistantMessage);
+    messages.push(...toolResults);
+
+    // Get final response
+    const followUpResponse = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: messages
+      })
+    });
+
+    if (!followUpResponse.ok) {
+      const errorText = await followUpResponse.text();
+      throw new Error(`LLM follow-up error: ${followUpResponse.status} - ${errorText}`);
+    }
+
+    const followUpData = await followUpResponse.json();
+    return followUpData.choices?.[0]?.message?.content || "No response";
+  }
+
+  return assistantMessage.content || "No content";
+}
+
+/** Parse tool calls from XML-like content */
+function parseToolCallsFromContent(content: string): Array<{name: string, arguments: string}> | null {
+  const toolCallRegex = /<function=(\w+)>\s*<parameter=(\w+)>\s*([^<]+)\s*<\/parameter>\s*<\/function>/g;
+  const matches = [...content.matchAll(toolCallRegex)];
+  if (matches.length === 0) return null;
+  
+  const toolCalls: Array<{name: string, arguments: string}> = [];
+  for (const match of matches) {
+    const [, name, paramName, paramValue] = match;
+    // Parse as JSON object with the parameter
+    try {
+      const args = JSON.parse(`{"${paramName}": "${paramValue.trim()}"}`);
+      toolCalls.push({ name, arguments: JSON.stringify(args) });
+    } catch {
+      // Skip malformed tool calls
+    }
+  }
+  return toolCalls.length > 0 ? toolCalls : null;
+}
+
+/** Make LLM calls with tools, handling multiple rounds of tool execution */
+async function callLlmWithToolsMultiRound(
+  config: LlmConfig,
+  systemPrompt: string,
+  userMessage: string,
+  tools: Array<{ name: string; description: string; inputSchema?: any; execute: (args: any) => Promise<any> }>,
+  workspaceRoot: string,
+  sendLog: (msg: string) => void,
+  maxRounds = 5
+): Promise<string> {
+  const { baseUrl, apiKey, model } = config;
+  
+  const messages: Array<any> = [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: userMessage }
+  ];
+
+  const openaiTools = tools.map(tool => ({
+    type: "function" as const,
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.inputSchema || {
+        type: "object",
+        properties: {},
+        required: []
+      }
+    }
+  }));
+
+  sendLog(`Calling LLM: ${model} at ${baseUrl}`);
+
+  let round = 0;
+  while (round < maxRounds) {
+    round++;
+    sendLog(`LLM round ${round}`);
+
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: messages,
+        tools: openaiTools,
+        tool_choice: "auto"
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`LLM API error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    const assistantMessage = data.choices?.[0]?.message;
+
+    if (!assistantMessage) {
+      throw new Error("No response from LLM");
+    }
+
+    // Check for proper tool_calls
+    let toolCalls = assistantMessage.tool_calls || [];
+    
+    // Also check content for XML-style tool calls
+    if (toolCalls.length === 0 && assistantMessage.content) {
+      const parsed = parseToolCallsFromContent(assistantMessage.content);
+      if (parsed) {
+        sendLog(`Found ${parsed.length} XML-style tool call(s) in content`);
+        // Convert to tool_calls format
+        toolCalls = parsed.map((tc, idx) => ({
+          id: `call_xml_${round}_${idx}`,
+          function: { name: tc.name, arguments: tc.arguments },
+          type: "function" as const
+        }));
+        // Update assistantMessage with parsed tool calls
+        assistantMessage.tool_calls = toolCalls;
+      }
+    }
+
+    // Add assistant message to history (preserving tool_calls)
+    messages.push(assistantMessage);
+
+    if (toolCalls.length === 0) {
+      // No tool calls - this is the final response
+      sendLog(`LLM finished (no more tool calls)`);
+      return assistantMessage.content || "No content";
+    }
+
+    sendLog(`LLM requested ${toolCalls.length} tool call(s)`);
+
+    // Execute each tool call
+    for (const toolCall of toolCalls) {
+      const toolName = toolCall.function.name;
+      let toolArgs = {};
+      try {
+        toolArgs = JSON.parse(toolCall.function.arguments || "{}");
+      } catch {
+        toolArgs = {};
+      }
+      
+      sendLog(`Executing tool: ${toolName} with args: ${JSON.stringify(toolArgs)}`);
+      
+      const tool = tools.find(t => t.name === toolName);
+      if (tool) {
+        try {
+          const result = await tool.execute(toolArgs);
+          const truncatedResult = truncateToolResult(String(result), MAX_TOOL_RESULT_LENGTH);
+          messages.push({
+            role: "tool",
+            tool_call_id: toolCall.id,
+            name: toolName,
+            content: truncatedResult
+          });
+        } catch (err: any) {
+          messages.push({
+            role: "tool",
+            tool_call_id: toolCall.id,
+            name: toolName,
+            content: `Error: ${err.message}`
+          });
+        }
+      } else {
+        messages.push({
+          role: "tool",
+          tool_call_id: toolCall.id,
+          name: toolName,
+          content: `Tool ${toolName} not found`
+        });
+      }
+    }
+    
+    // Continue to next round
+    sendLog(`Tool execution complete, continuing to round ${round + 1}...`);
+  }
+
+  // Max rounds reached - fetch the final model summary based on the gathered message history
+  sendLog(`Max tool rounds (${maxRounds}) reached. Summarizing gathered exploration findings...`);
+  try {
+    const finalResponse = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: messages,
+        tools: openaiTools,
+        tool_choice: "none"
+      })
+    });
+
+    if (finalResponse.ok) {
+      const finalData = await finalResponse.json();
+      const summaryContent = finalData.choices?.[0]?.message?.content;
+      if (summaryContent) {
+        return summaryContent;
+      }
+    } else {
+      const errorText = await finalResponse.text();
+      console.error(`WebSocket [Server] Final summary call API error: ${finalResponse.status} - ${errorText}`);
+      sendLog(`Final summary call error: ${finalResponse.status}`);
+    }
+  } catch (finalCallError: any) {
+    console.error("WebSocket [Server] Error generating final summary call:", finalCallError);
+    sendLog(`Final summary call exception: ${finalCallError.message}`);
+  }
+
+  const lastMsg = messages[messages.length - 1];
+  return lastMsg.content || "Max rounds reached, conversation ended.";
+}
+
 // ── Codebase Exploration Tool Factories ──────────────────────────
 
-const IGNORED_DIRS = new Set(["node_modules", "dist", ".git", "target", ".vscode", ".gemini", ".next", "__pycache__"]);
+const IGNORED_DIRS = new Set(["node_modules", "dist", ".git", "target", ".vscode", ".gemini", ".next", "__pycache__", ".env", "env", ".venv", "venv"]);
+
+/** Get a summary of the workspace structure without listing all files. */
+function getWorkspaceSummary(root: string, maxFiles = 100): string {
+  const results: string[] = [];
+  const dirCounts: Record<string, number> = {};
+  const extCounts: Record<string, number> = {};
+  let totalFiles = 0;
+  let totalDirs = 0;
+
+  function traverse(dir: string, depth: number, maxDepth: number) {
+    if (depth > maxDepth) return;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (IGNORED_DIRS.has(entry.name)) continue;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        totalDirs++;
+        const relDir = path.relative(root, full);
+        dirCounts[relDir] = (dirCounts[relDir] || 0) + 1;
+        traverse(full, depth + 1, maxDepth);
+      } else {
+        totalFiles++;
+        const ext = path.extname(entry.name).toLowerCase() || "no_extension";
+        extCounts[ext] = (extCounts[ext] || 0) + 1;
+        if (results.length < maxFiles) {
+          results.push(path.relative(root, full));
+        }
+      }
+    }
+  }
+
+  traverse(root, 0, 3);
+
+  const topDirs = Object.entries(dirCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([dir, count]) => `${dir}/ (${count} items)`)
+    .join("\n");
+
+  const topExts = Object.entries(extCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([ext, count]) => `${ext}: ${count} files`)
+    .join("\n");
+
+  const sampleFiles = results.length > 0 ? `\n\nSample files (first ${results.length}):\n${results.join("\n")}` : "";
+
+  return `Workspace Summary:
+- Total: ${totalFiles} files, ${totalDirs} directories
+
+Top-level directories:
+${topDirs || "(none found)"}
+
+File types:
+${topExts || "(none detected)"}
+${sampleFiles}`;
+}
 
 /** Recursively list all file paths under `root`, ignoring common noise dirs. */
 function listFilesRecursive(root: string, prefix = ""): string[] {
@@ -67,10 +469,14 @@ function searchCodebase(root: string, pattern: string, maxResults = 50): { file:
 function createListFilesTool(workspaceRoot: string) {
   return {
     name: "list_files",
-    description: "Get a list of all file paths in the workspace recursively. Returns relative paths.",
+    description: "Get a summary of the workspace structure including directories, file types, and a sample of files.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: []
+    },
     execute: async () => {
-      const files = listFilesRecursive(workspaceRoot);
-      return files.join("\n");
+      return getWorkspaceSummary(workspaceRoot);
     }
   };
 }
@@ -78,9 +484,16 @@ function createListFilesTool(workspaceRoot: string) {
 function createSearchCodebaseTool(workspaceRoot: string) {
   return {
     name: "search_codebase",
-    description: "Find files containing a search term or regex pattern. Returns matching file paths and line snippets.",
+    description: "Find files containing a search term or regex pattern. Returns matching file paths and line snippets (limited to 30 results).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pattern: { type: "string", description: "The search pattern or regex to match" }
+      },
+      required: ["pattern"]
+    },
     execute: async ({ pattern }: { pattern: string }) => {
-      const results = searchCodebase(workspaceRoot, pattern);
+      const results = searchCodebase(workspaceRoot, pattern, 30);
       if (results.length === 0) return "No matches found.";
       return results.map(r => `${r.file}:${r.line} | ${r.text}`).join("\n");
     }
@@ -271,16 +684,33 @@ Remember:
         // Simulate Pi SDK run loop or construct actual session runtime
         let runResult;
         try {
-          const { createAgentSessionRuntime } = require("@earendil-works/pi-agent-core");
-          console.log("WebSocket [Server] Instantiating Pi Agent Core Runtime...");
-          const runtime = await createAgentSessionRuntime({
-            tools: [readVfsTool, writeVfsTool, createListFilesTool(workspaceRoot), createSearchCodebaseTool(workspaceRoot)],
-            modelName: model || "anthropic/claude-3-5-sonnet",
-            systemPrompt: systemPrompt
+          const { createAgentSession } = await import("@earendil-works/pi-coding-agent");
+          const { getModel } = await import("@earendil-works/pi-ai");
+
+          let selectedModel;
+          if (model && model.includes("/")) {
+            const [provider, modelName] = model.split("/");
+            selectedModel = getModel(provider, modelName);
+          } else {
+            selectedModel = getModel("anthropic", "claude-3-5-sonnet-20241022");
+          }
+
+          console.log("WebSocket [Server] Creating task session with model:", selectedModel ? (selectedModel as any).modelId || (selectedModel as any).name || "default" : "default");
+
+          const allTools = [readVfsTool, writeVfsTool, createListFilesTool(workspaceRoot), createSearchCodebaseTool(workspaceRoot)];
+
+          const { session } = await createAgentSession({
+            cwd: workspaceRoot,
+            model: selectedModel,
+            tools: ["read", "write", "list_files", "search_codebase"],
+            customTools: allTools as any
           });
+
           sendLog("Executing agent reasoning loop...");
           console.log("WebSocket [Server] Running agent core loop...");
-          runResult = await runtime.run();
+
+          const result = await session.prompt(instructions);
+          runResult = { status: "success", modified: Array.from(modifiedFiles), response: (result as any).output || (result as any).message?.content || "Task completed." };
         } catch (sdkError: any) {
           console.warn("WebSocket [Server] Pi SDK load warning (using simulation fallback):", sdkError.message);
           sendLog(`Pi SDK load warning (using simulation fallback): ${sdkError.message}`);
@@ -347,39 +777,54 @@ Remember:
     // ── Global Explore Handler ──────────────────────────────────
     if (data.type === "global_explore") {
       const { nodeId, prompt, workspaceRoot, model, chatHistory, customProvider } = data;
-      console.log(`WebSocket [Server] global_explore starting`, { nodeId, workspaceRoot });
+      console.log(`WebSocket [Server] global_explore starting`, { nodeId, workspaceRoot, model });
 
       const sendLog = (message: string) => {
         ws.send(JSON.stringify({ type: "log", nodeId, message }));
       };
 
       try {
-        if (customProvider) {
-          try {
-            const { registerProvider } = require("@earendil-works/pi-agent-core");
-            registerProvider(customProvider.id, {
-              name: customProvider.name,
-              baseUrl: customProvider.baseUrl,
-              apiKey: customProvider.apiKey || "not-needed",
-              api: customProvider.apiType || "openai-completions",
-              models: customProvider.models
-            });
-          } catch (err: any) {
-            sendLog(`Provider warning: ${err.message}`);
-          }
-        }
-
         // Create VFS read tool bridging back to frontend
         const readVfsTool = {
-          name: "read_file",
+          name: "read",
           description: "Read a file from the workspace.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              path: { type: "string", description: "The file path to read" }
+            },
+            required: ["path"]
+          },
           execute: async ({ path: filePath }: { path: string }) => {
+            console.log(`WebSocket [Server] global_explore read_file tool: ${filePath}`);
+            
+            // Handle directory paths gracefully to guide the LLM
+            const resolvedPath = path.isAbsolute(filePath) ? filePath : path.join(workspaceRoot, filePath);
+            try {
+              if (fs.existsSync(resolvedPath)) {
+                const stats = fs.statSync(resolvedPath);
+                if (stats.isDirectory()) {
+                  const errorMsg = `Error: '${filePath}' is a directory, not a file. To list directory contents, use list_files.`;
+                  console.log(`WebSocket [Server] read_file directory guard: ${errorMsg}`);
+                  sendLog(`Directory read attempt: ${filePath}`);
+                  return errorMsg;
+                }
+              }
+            } catch (statErr: any) {
+              console.warn(`WebSocket [Server] read_file stat error for ${filePath}:`, statErr);
+            }
+
             sendLog(`Reading file: ${filePath}`);
             return new Promise((resolve, reject) => {
               const requestId = getNextId();
               pendingRequests.set(requestId, (res) => {
-                if (res.error) reject(new Error(res.error));
-                else resolve(res.content);
+                if (res.error) {
+                  console.error(`WebSocket [Server] read_file error: ${res.error}`);
+                  reject(new Error(res.error));
+                } else {
+                  console.log(`WebSocket [Server] read_file success: ${filePath} (${res.content?.length || 0} chars)`);
+                  resolve(res.content);
+                }
               });
               ws.send(JSON.stringify({ type: "read_file", requestId, path: filePath }));
             });
@@ -398,9 +843,11 @@ Your job is to analyze the workspace and provide architectural summaries, patter
 Workspace root: ${workspaceRoot || "unknown"}
 
 You have access to tools:
-- 'read_file': Read any file in the workspace.
-- 'list_files': List all files in the workspace recursively.
-- 'search_codebase': Search for text patterns across the codebase.
+- 'read': Read any file in the workspace (input: {{"path": "file/path"}}).
+- 'list_files': List all files in the workspace recursively (no input needed).
+- 'search_codebase': Search for text patterns across the codebase (input: {{"pattern": "search text"}}).
+
+IMPORTANT: Always use tools to explore the codebase before answering. Start by listing files, then read relevant ones.
 
 After exploring, provide:
 1. A clear architectural summary of the codebase structure.
@@ -414,17 +861,75 @@ IMPORTANT: End your response with a section marked "--- SUMMARY ---" that contai
 
         let runResult;
         try {
-          const { createAgentSessionRuntime } = require("@earendil-works/pi-agent-core");
-          const runtime = await createAgentSessionRuntime({
-            tools,
-            modelName: model || "anthropic/claude-3-5-sonnet",
+          // Determine LLM configuration
+          let llmConfig: LlmConfig;
+          let modelId = model || "claude-3-5-sonnet";
+
+          if (customProvider && customProvider.baseUrl && customProvider.apiKey) {
+            // Use custom provider's API - prefer the model from message, fallback to provider's first model
+            let selectedModel = modelId;
+            // If modelId has a provider prefix, strip it
+            if (selectedModel.includes("/")) {
+              selectedModel = selectedModel.split("/")[1];
+            }
+            // If still no valid model, use provider's first model (also strip prefix)
+            if (!selectedModel || selectedModel === "claude-3-5-sonnet") {
+              const firstModel = customProvider.models?.[0]?.id || "";
+              selectedModel = firstModel.includes("/") ? firstModel.split("/")[1] : firstModel;
+            }
+            llmConfig = {
+              baseUrl: customProvider.baseUrl.replace(/\/$/, ""),
+              apiKey: customProvider.apiKey,
+              model: selectedModel
+            };
+            sendLog(`Using custom provider: ${customProvider.name}`);
+          } else if (customProvider && customProvider.id === "anthropic" && !customProvider.apiKey) {
+            // Fall back to simulation for anthropic without API key
+            throw new Error("Anthropic API key not configured. Use simulation fallback.");
+          } else if (model && model.includes("/")) {
+            // Try to determine config from model string (e.g., "anthropic/claude-3-5-sonnet")
+            const [provider] = model.split("/");
+            if (provider === "anthropic") {
+              llmConfig = {
+                baseUrl: "https://api.anthropic.com/v1",
+                apiKey: process.env.ANTHROPIC_API_KEY || "",
+                model: model.split("/")[1]
+              };
+            } else if (provider === "openai") {
+              llmConfig = {
+                baseUrl: "https://api.openai.com/v1",
+                apiKey: process.env.OPENAI_API_KEY || "",
+                model: model.split("/")[1]
+              };
+            } else {
+              throw new Error(`Unknown provider: ${provider}. Use simulation fallback.`);
+            }
+          } else {
+            throw new Error("No LLM configuration available. Use simulation fallback.");
+          }
+
+          if (!llmConfig.apiKey) {
+            throw new Error("No API key available. Use simulation fallback.");
+          }
+
+          console.log(`WebSocket [Server] Calling LLM: ${llmConfig.model} at ${llmConfig.baseUrl}`);
+
+          const responseText = await callLlmWithToolsMultiRound(
+            llmConfig,
             systemPrompt,
-            messages: chatHistory || []
-          });
-          sendLog("Running exploration loop...");
-          runResult = await runtime.run();
+            prompt,
+            tools as Array<{ name: string; description: string; inputSchema?: any; execute: (args: any) => Promise<any> }>,
+            workspaceRoot,
+            sendLog,
+            5 // max 5 rounds of tool calls
+          );
+
+          runResult = { response: responseText };
+          sendLog("Exploration complete.");
         } catch (sdkError: any) {
-          sendLog(`SDK warning (simulation): ${sdkError.message}`);
+          console.error("WebSocket [Server] LLM error:", sdkError);
+          sendLog(`LLM error: ${sdkError.message}. Using simulation fallback.`);
+
           // Simulation fallback
           const files = listFilesRecursive(workspaceRoot);
           const fileCount = files.length;
@@ -438,13 +943,13 @@ IMPORTANT: End your response with a section marked "--- SUMMARY ---" that contai
         }
 
         // Extract summary from response
-        const responseText = runResult?.response || runResult?.output || "Exploration completed.";
+        const responseText = (runResult as any)?.response || (runResult as any)?.output || "Exploration completed.";
         let summary = "";
         const summaryMatch = responseText.match(/---\s*SUMMARY\s*---([\s\S]*?)$/i);
         if (summaryMatch) {
           summary = summaryMatch[1].trim();
-        } else if (runResult?.summary) {
-          summary = runResult.summary;
+        } else if ((runResult as any)?.summary) {
+          summary = (runResult as any).summary;
         }
 
         ws.send(JSON.stringify({

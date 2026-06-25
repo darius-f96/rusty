@@ -163,16 +163,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     {
       id: "opencode",
       name: "Opencode",
-      baseUrl: "https://opencode.ai/zen/go/v1",
+      baseUrl: "https://opencode.ai/zen/v1",
       apiKey: "",
       apiType: "openai-completions",
-      models: [
-        { id: "opencode/qwen2.5-coder:7b", name: "Qwen 2.5 Coder 7B" },
-        { id: "opencode/qwen2.5-coder:14b", name: "Qwen 2.5 Coder 14B" },
-        { id: "opencode/qwen2.5-coder:32b", name: "Qwen 2.5 Coder 32B" },
-        { id: "opencode/llama-3.1-8b", name: "Llama 3.1 8B" },
-        { id: "opencode/llama-3.3-70b", name: "Llama 3.3 70B" }
-      ]
+      models: []
     }
   ],
   activeCustomProviderId: "anthropic",

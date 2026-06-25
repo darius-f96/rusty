@@ -53,7 +53,7 @@ export const LlmSetupTab: React.FC = () => {
       
       // Check if proxy server is reachable first
       try {
-        const probeRes = await fetch("http://localhost:4000/proxy/models", {
+        await fetch("http://localhost:4000/proxy/models", {
           method: "HEAD",
           mode: "no-cors"
         });
