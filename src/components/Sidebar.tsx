@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Folder, Cpu, Settings, FolderOpen, GitBranch, ChevronLeft, Plus, FolderPlus, FoldHorizontal, RefreshCw } from "lucide-react";
+import { Folder, Cpu, Settings, GitBranch, ChevronLeft, Plus, FolderPlus, FoldHorizontal, RefreshCw } from "lucide-react";
 import { useWorkspaceStore } from "../store";
 import { FileTree } from "./FileTree";
 import { invoke } from "@tauri-apps/api/core";
@@ -17,7 +17,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setSidebarWidth,
   onSidebarMouseDown,
 }) => {
-  const setRootPath = useWorkspaceStore((state) => state.setRootPath);
   const fileTree = useWorkspaceStore((state) => state.fileTree);
   const setFileTree = useWorkspaceStore((state) => state.setFileTree);
   const openTab = useWorkspaceStore((state) => state.openTab);
@@ -28,35 +27,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [isExplorerOpen, setIsExplorerOpen] = useState(true);
   const [sidebarView, setSidebarView] = useState<"explorer" | "git">("explorer");
   const [lastWidth, setLastWidth] = useState(320);
-
-  const loadDirectory = async (path: string) => {
-    try {
-      const tree: any[] = await invoke("get_directory_structure", { rootDir: path });
-      setFileTree(tree);
-      setRootPath(path);
-    } catch (e) {
-      console.error("Failed to load project directory structure:", e);
-    }
-  };
-
-  const handleOpenWorkspace = async () => {
-    try {
-      const { open } = await import("@tauri-apps/plugin-dialog");
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: "Select Workspace Folder",
-      });
-      if (selected && typeof selected === "string") {
-        console.log("Selected workspace directory:", selected);
-        loadDirectory(selected);
-        setIsExplorerOpen(true);
-        setSidebarView("explorer");
-      }
-    } catch (err: any) {
-      console.error("Failed to open directory dialog:", err);
-    }
-  };
 
   const handleExplorerTabClick = () => {
     if (!isExplorerOpen) {
@@ -169,7 +139,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <div
-      className="flex h-full z-10 relative bg-[var(--bg-sidebar)] border-r border-[var(--border-color)] flex-shrink-0"
+      className="flex h-full z-10 relative bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-[20px] overflow-hidden shadow-lg flex-shrink-0"
       style={{ width: `${isExplorerOpen ? sidebarWidth : 56}px` }}
     >
       {/* 1. Left Icon Dock (Activity Bar) */}
@@ -264,27 +234,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex-1 flex flex-col h-full min-w-0">
           {sidebarView === "explorer" ? (
             <>
-              {/* Workspace selector */}
-              <div className="p-4 border-b border-[var(--border-color)] space-y-3">
-                <div className="flex items-center justify-between text-zinc-400">
-                  <div className="flex items-center space-x-2">
-                    <FolderOpen size={15} className="text-[var(--accent-color)] animate-pulse" />
-                    <span className="text-[10px] uppercase tracking-wider font-mono font-bold">Workspace</span>
-                  </div>
-                </div>
-                <div className="flex flex-col space-y-2">
-                  <button
-                    onClick={handleOpenWorkspace}
-                    className="w-full bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 text-white font-mono font-bold text-[10px] py-1.5 rounded-lg transition-colors shadow-lg cursor-pointer flex items-center justify-center space-x-1.5"
-                  >
-                    <FolderOpen size={12} />
-                    <span>Open Folder</span>
-                  </button>
-                </div>
-              </div>
-
               {/* Dynamic Explorer Sidebar Tree */}
-              <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-3 min-w-0">
+              <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 min-w-0">
                 <div className="flex items-center justify-between mb-3 text-zinc-400 border-b border-[var(--border-color)]/30 pb-2">
                   <span className="text-[10px] uppercase tracking-wider font-mono font-bold">Project Explorer</span>
                   <div className="flex items-center space-x-2">

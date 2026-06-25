@@ -148,7 +148,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   activeTabId: "canvas",
 
   setRootPath: (path) => {
-    set({ rootPath: path });
+    set({
+      rootPath: path,
+      openTabs: [{ id: "canvas", type: "canvas", title: "Axiom", key: "canvas" }],
+      activeTabId: "canvas",
+      expandedPaths: {},
+      nodes: [],
+      edges: [],
+      selectedNodeId: null,
+      nodeLogs: {},
+      nodeStatus: {}
+    });
     useWorkspaceStore.getState().loadGitStatus();
   },
   setGitStatus: (status) => set({ gitStatus: status }),

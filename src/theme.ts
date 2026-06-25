@@ -1,28 +1,30 @@
 export const theme = {
   // Application Layout Colors
-  bgApp: "#2e3440",         // Primary app layout background (Nord Polar Night nord0)
-  bgSidebar: "#242933",     // Sidebar background (Nord Darker nord1/nord2 variant)
-  bgHeader: "#242933",      // Top tab bar background
-  bgEditor: "#2e3440",      // Monaco editor background (Nord Editor Bg)
-  border: "#3b4252",        // Borders & separators (Nord nord1)
-  borderActive: "#88c0d0",  // Active state outline/borders (Nord Frost nord8)
-  accent: "#88c0d0",        // Brand colors (Nord Frost nord8)
-  accentBg: "rgba(136, 192, 208, 0.15)", // Hover selection background
+  bgApp: "#0A0B0D",         // Primary app layout background (Very dark slate-black)
+  bgSidebar: "#121316",     // Sidebar background (Dark charcoal card)
+  bgHeader: "#0F1012",      // Top tab bar background (Darker slate-gray)
+  bgEditor: "#17181C",      // Monaco editor background (Medium charcoal card)
+  bgCanvas: "#1F2026",      // Flow canvas background (Slightly lighter slate-gray)
+  border: "#202126",        // Borders & separators
+  borderActive: "#00E5FF",  // Active state outline/borders (Glowing cyan/teal)
+  accent: "#00E5FF",        // Brand colors (Glowing cyan/teal)
+  accentBg: "rgba(0, 229, 255, 0.10)", // Hover selection background
   
   // Font Colors
-  textNormal: "#d8dee9",    // Normal content text (Nord Snow Storm nord4)
-  textMuted: "#4c566a",     // Muted text (Nord polar night grey nord3)
-  textLight: "#eceff4",     // Bright header text (Nord Snow Storm nord6)
+  textNormal: "#A9ADC1",    // Normal content text (Slightly warmer gray)
+  textMuted: "#6E7382",     // Muted text (Slate gray)
+  textLight: "#F4F5F6",     // Bright header text
 
-  // Monaco Editor Code Syntax Highlighting Tokens
+  // Monaco Editor Code Syntax Highlighting Tokens (matching picture)
   syntax: {
-    comments: "#4c566a",    // Nord polar night grey (nord3)
-    keywords: "#81a1c1",    // Nord frost blue (nord9)
-    strings: "#a3be8c",     // Nord aurora green (nord14)
-    numbers: "#b48ead",     // Nord aurora purple (nord15)
-    functions: "#88c0d0",   // Nord frost cyan (nord8)
-    variables: "#d8dee9",   // Nord snow storm (nord4)
-    types: "#8fbcbb",       // Nord frost teal (nord7)
+    comments: "#5F646D",    // Muted slate gray
+    keywords: "#C678DD",    // Purple/pink for import, const, let, return, etc.
+    strings: "#E28C6E",     // Salmon/amber for strings
+    numbers: "#A573F6",     // Aurora purple for numbers
+    functions: "#3CD6A3",   // Mint green for functions/React components
+    variables: "#79C0FF",   // Light blue/cyan for variables (matching picture)
+    types: "#4FA5E2",       // Light blue for types
   }
 };
 export type AppTheme = typeof theme;
+

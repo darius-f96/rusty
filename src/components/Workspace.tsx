@@ -172,13 +172,14 @@ export const Workspace: React.FC = () => {
       <TabBar />
 
       {/* Tab Panel Render Targets */}
-      <div className="flex-1 min-h-0 relative bg-[var(--bg-app)]">
+      <div className="flex-1 min-h-0 relative bg-[var(--bg-editor)] overflow-hidden">
         {openTabs.map((tab) => {
           const isActive = tab.id === activeTabId;
+          const bgClass = tab.type === "canvas" ? "bg-[var(--bg-canvas)]" : "bg-[var(--bg-editor)]";
           return (
             <div
               key={tab.id}
-              className={`w-full h-full ${isActive ? "block" : "hidden"}`}
+              className={`${isActive ? "w-full h-full" : "absolute -left-[99999px] top-0 w-full h-full"} ${bgClass} overflow-hidden`}
             >
               {tab.type === "canvas" && (
                 <CanvasTab onExecuteNode={executeNode} />

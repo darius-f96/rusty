@@ -187,7 +187,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ onExecuteNode }) => {
   return (
     <div className="w-full h-full flex relative">
       <div
-        className="flex-1 flex flex-col h-full relative bg-[var(--bg-app)]"
+        className="flex-1 flex flex-col h-full relative bg-[var(--bg-canvas)]"
         id="rf-canvas"
         onDragOver={onDragOver}
         onDrop={onDrop}

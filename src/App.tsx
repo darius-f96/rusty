@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Sidebar } from "./components/Sidebar";
+import { Header } from "./components/Header";
 import { Workspace } from "./components/Workspace";
 import { useWorkspaceStore } from "./store";
 
@@ -117,79 +118,85 @@ function App() {
   }, []);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[var(--bg-app)] text-[var(--text-light)] font-sans">
-      {/* Sidebar with explorer and icon dock */}
-      <Sidebar
-        sidebarWidth={sidebarWidth}
-        setSidebarWidth={setSidebarWidth}
-        onSidebarMouseDown={handleSidebarMouseDown}
-      />
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[var(--bg-app)] text-[var(--text-light)] font-sans">
+      {/* 1. Header Bar */}
+      <Header />
 
-      {/* Main Workspace */}
-      <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative bg-[var(--bg-app)]">
-        {/* Workspace dynamic tabs and contents */}
-        <Workspace />
+      {/* 2. Workspace Cards Content Area */}
+      <div className="flex-1 flex min-h-0 w-full p-4 pt-2 gap-4 overflow-hidden">
+        {/* Sidebar with explorer and icon dock */}
+        <Sidebar
+          sidebarWidth={sidebarWidth}
+          setSidebarWidth={setSidebarWidth}
+          onSidebarMouseDown={handleSidebarMouseDown}
+        />
 
-        {/* Collapsible Bottom Developer Console (Pinned Globally) */}
-        <div className={`border-t border-[var(--border-color)] bg-[var(--bg-header)] flex flex-col transition-all duration-300 ${
-          showDevConsole ? "h-60" : "h-9"
-        } z-10 overflow-hidden font-sans`}>
-          {/* Header Bar */}
-          <div
-            onClick={() => setShowDevConsole(!showDevConsole)}
-            className="h-9 px-4 flex items-center justify-between border-b border-[var(--border-color)]/60 bg-[var(--bg-app)]/60 hover:bg-[var(--bg-sidebar)]/20 cursor-pointer select-none text-[11px] font-mono text-[var(--text-muted)] flex-shrink-0"
-          >
-            <div className="flex items-center space-x-3">
-              <span className={`w-2 h-2 rounded-full ${
-                devLogs.some(l => l.type === "error") ? "bg-rose-500 animate-pulse" : "bg-emerald-500"
-              }`} />
-              <span className="font-bold text-[var(--text-light)] uppercase tracking-wider">Dev Logs Terminal</span>
-              <span>
-                ({devLogs.filter(l => l.type === "error").length} Errors, {devLogs.filter(l => l.type === "warn").length} Warnings)
-              </span>
-            </div>
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  clearDevLogs();
-                }}
-                className="hover:bg-[var(--bg-app)] text-[var(--text-normal)] hover:text-[var(--text-light)] px-2 py-0.5 rounded text-[10px] uppercase font-bold transition-all border border-[var(--border-color)] hover:border-[var(--border-active)] cursor-pointer"
-              >
-                Clear
-              </button>
-              <span className="text-[10px] text-[var(--text-muted)] font-bold uppercase">
-                {showDevConsole ? "[ Collapse ]" : "[ Expand ]"}
-              </span>
-            </div>
-          </div>
+        {/* Main Workspace Card Panel */}
+        <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative bg-[var(--bg-editor)] border border-[var(--border-color)] rounded-[20px] shadow-2xl">
+          {/* Workspace dynamic tabs and contents */}
+          <Workspace />
 
-          {/* Outputs Scroll Container */}
-          {showDevConsole && (
-            <div 
-              ref={consoleScrollRef}
-              className="flex-1 p-4 font-mono text-[11px] overflow-y-auto space-y-1 bg-black text-zinc-400 select-text selection:bg-indigo-900 selection:text-white"
+          {/* Collapsible Bottom Developer Console (Pinned Globally) */}
+          <div className={`border-t border-[var(--border-color)] bg-[var(--bg-header)] flex flex-col transition-all duration-300 ${
+            showDevConsole ? "h-60" : "h-9"
+          } z-10 overflow-hidden font-sans`}>
+            {/* Header Bar */}
+            <div
+              onClick={() => setShowDevConsole(!showDevConsole)}
+              className="h-9 px-4 flex items-center justify-between border-b border-[var(--border-color)]/60 bg-[var(--bg-app)]/60 hover:bg-[var(--bg-sidebar)]/20 cursor-pointer select-none text-[11px] font-mono text-[var(--text-muted)] flex-shrink-0"
             >
-              {devLogs.length === 0 ? (
-                <span className="text-[var(--text-muted)] select-none">// No dev console logs captured yet.</span>
-              ) : (
-                devLogs.map((log) => {
-                  const colors = {
-                    log: "text-zinc-400",
-                    warn: "text-amber-400 font-semibold",
-                    error: "text-rose-400 font-bold",
-                    system: "text-indigo-400 font-bold"
-                  };
-                  return (
-                    <div key={log.id} className="flex items-start space-x-2 leading-relaxed border-b border-zinc-950 pb-0.5 hover:bg-zinc-900/10">
-                      <span className="text-[var(--text-muted)] select-none">[{log.timestamp}]</span>
-                      <span className={colors[log.type]}>{log.text}</span>
-                    </div>
-                  );
-                })
-              )}
+              <div className="flex items-center space-x-3">
+                <span className={`w-2 h-2 rounded-full ${
+                  devLogs.some(l => l.type === "error") ? "bg-rose-500 animate-pulse" : "bg-emerald-500"
+                }`} />
+                <span className="font-bold text-[var(--text-light)] uppercase tracking-wider">Dev Logs Terminal</span>
+                <span>
+                  ({devLogs.filter(l => l.type === "error").length} Errors, {devLogs.filter(l => l.type === "warn").length} Warnings)
+                </span>
+              </div>
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    clearDevLogs();
+                  }}
+                  className="hover:bg-[var(--bg-app)] text-[var(--text-normal)] hover:text-[var(--text-light)] px-2 py-0.5 rounded text-[10px] uppercase font-bold transition-all border border-[var(--border-color)] hover:border-[var(--border-active)] cursor-pointer"
+                >
+                  Clear
+                </button>
+                <span className="text-[10px] text-[var(--text-muted)] font-bold uppercase">
+                  {showDevConsole ? "[ Collapse ]" : "[ Expand ]"}
+                </span>
+              </div>
             </div>
-          )}
+
+            {/* Outputs Scroll Container */}
+            {showDevConsole && (
+              <div 
+                ref={consoleScrollRef}
+                className="flex-1 p-4 font-mono text-[11px] overflow-y-auto space-y-1 bg-black text-zinc-400 select-text selection:bg-indigo-900 selection:text-white"
+              >
+                {devLogs.length === 0 ? (
+                  <span className="text-[var(--text-muted)] select-none">// No dev console logs captured yet.</span>
+                ) : (
+                  devLogs.map((log) => {
+                    const colors = {
+                      log: "text-zinc-400",
+                      warn: "text-amber-400 font-semibold",
+                      error: "text-rose-400 font-bold",
+                      system: "text-indigo-400 font-bold"
+                    };
+                    return (
+                      <div key={log.id} className="flex items-start space-x-2 leading-relaxed border-b border-zinc-950 pb-0.5 hover:bg-zinc-900/10">
+                        <span className="text-[var(--text-muted)] select-none">[{log.timestamp}]</span>
+                        <span className={colors[log.type]}>{log.text}</span>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

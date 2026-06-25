@@ -38,15 +38,19 @@ export const TabBar: React.FC = () => {
       >
         {openTabs.map((tab) => {
           const isActive = tab.id === activeTabId;
+          const activeTabStyles = tab.type === "canvas"
+            ? "bg-[var(--bg-canvas)] border-b-[var(--bg-canvas)] text-[var(--text-light)] font-semibold"
+            : "bg-[var(--bg-editor)] border-b-[var(--bg-editor)] text-[var(--text-light)] font-semibold";
+
           return (
             <div
               key={tab.id}
               data-tab-id={tab.id}
               onClick={() => setActiveTabId(tab.id)}
-              className={`group flex items-center space-x-2 px-4 h-full border-r border-[var(--border-color)] text-[11px] font-mono cursor-pointer select-none transition-all flex-shrink-0 ${
+              className={`group flex items-center space-x-2 px-4.5 h-[calc(100%+1px)] -mb-[1px] border-r border-[var(--border-color)] text-[11px] font-mono cursor-pointer select-none transition-all flex-shrink-0 rounded-t-xl relative z-10 ${
                 isActive
-                  ? "bg-[var(--bg-app)] text-[var(--text-light)] font-semibold border-t-2 border-t-[var(--accent-color)]"
-                  : "bg-[var(--bg-header)] text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]"
+                  ? `${activeTabStyles} border-b`
+                  : "bg-[var(--bg-header)] text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/20 border-b border-b-transparent"
               }`}
             >
               {tab.type === "canvas" && (

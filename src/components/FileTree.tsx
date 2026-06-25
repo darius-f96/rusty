@@ -160,9 +160,11 @@ const FileTreeNode: React.FC<{ node: any }> = ({ node }) => {
   const setPathExpanded = useWorkspaceStore((state) => state.setPathExpanded);
   const openTab = useWorkspaceStore((state) => state.openTab);
   const gitStatus = useWorkspaceStore((state) => state.gitStatus);
+  const activeTabId = useWorkspaceStore((state) => state.activeTabId);
 
   const isOpen = !!expandedPaths[node.path];
   const gitState = getGitState(node, gitStatus);
+  const isActiveFile = activeTabId === `file_${node.path.replace(/[^a-zA-Z0-9]/g, "_")}`;
 
   const handleDragStart = (e: React.DragEvent) => {
     console.log("FileTree: handleDragStart started for:", node.name, "path:", node.path);
@@ -353,10 +355,14 @@ const FileTreeNode: React.FC<{ node: any }> = ({ node }) => {
       onDragStart={handleDragStart}
       onDoubleClick={handleDoubleClick}
       style={{ WebkitUserDrag: "element" } as React.CSSProperties}
-      className={`group relative flex items-center justify-between py-0.5 px-1 pl-[18px] hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] transition-colors cursor-grab active:cursor-grabbing font-sans text-xs w-full border border-transparent hover:border-[var(--border-color)]/20 ${gitState ? gitState.colorClass : "text-[var(--text-normal)]"}`}
+      className={`group relative flex items-center justify-between py-1 px-1.5 pl-[18px] transition-all cursor-grab active:cursor-grabbing font-sans text-xs w-full border rounded-md ${
+        isActiveFile 
+          ? "bg-zinc-800/40 border-zinc-700/30 text-[var(--text-light)] font-medium shadow-sm"
+          : "hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] border-transparent hover:border-[var(--border-color)]/20 " + (gitState ? gitState.colorClass : "text-[var(--text-normal)]")
+      }`}
     >
       <div className="flex items-center min-w-0 flex-1 mr-6">
-        <FileIcon fileName={node.name} size={13} className="mr-1 flex-shrink-0" />
+        <FileIcon fileName={node.name} size={13} className="mr-1.5 flex-shrink-0" />
         <span className="truncate pr-2">{node.name}</span>
       </div>
 
@@ -369,7 +375,7 @@ const FileTreeNode: React.FC<{ node: any }> = ({ node }) => {
       </div>
 
       {/* File Actions (Delete) */}
-      <div className="absolute right-1 top-0 bottom-0 opacity-0 group-hover:opacity-100 flex items-center bg-[var(--accent-bg)] pl-2 transition-opacity">
+      <div className="absolute right-1 top-0 bottom-0 opacity-0 group-hover:opacity-100 flex items-center bg-[var(--accent-bg)] pl-2 rounded-r-md transition-opacity">
         <button
           type="button"
           onClick={handleDeleteNode}
