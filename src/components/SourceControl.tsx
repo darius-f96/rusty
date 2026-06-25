@@ -207,6 +207,9 @@ export const SourceControl: React.FC = () => {
       await invoke("git_discard_changes", { rootDir: rootPath, filePath });
       await loadGitStatus();
       await fetchHistory();
+      // Reload workspace directory tree structure
+      const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
+      useWorkspaceStore.getState().setFileTree(tree);
     } catch (err) {
       console.error(`Failed to discard changes for ${filePath}:`, err);
     }

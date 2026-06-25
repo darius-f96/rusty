@@ -1,12 +1,16 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   Folder, 
   FolderOpen, 
   ChevronDown, 
-  ChevronRight
+  ChevronRight,
+  Plus,
+  FolderPlus,
+  Trash2
 } from "lucide-react";
 import { useWorkspaceStore } from "../store";
 import { FileIcon } from "../services/fileTypeService";
+import { invoke } from "@tauri-apps/api/core";
 
 interface FileEntry {
   name: string;
@@ -106,8 +110,43 @@ const getGitState = (node: any, gitStatus: any): GitState | null => {
 };
 
 export const FileTree: React.FC<FileTreeProps> = ({ entries }) => {
+  const handleDropOnRoot = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const rootPath = useWorkspaceStore.getState().rootPath;
+    if (!rootPath) return;
+
+    try {
+      const dataStr = e.dataTransfer.getData("text/plain");
+      if (!dataStr) return;
+      const dragData = JSON.parse(dataStr);
+      if (!dragData.path) return;
+
+      const srcPath = dragData.path;
+      const fileName = srcPath.split("/").pop() || "";
+      const destPath = `${rootPath}/${fileName}`;
+      if (srcPath === destPath) return;
+
+      console.log(`FileTree: Moving ${srcPath} to root path ${destPath}`);
+      await invoke("move_file_or_dir", { src: srcPath, dest: destPath });
+
+      // Reload tree
+      const state = useWorkspaceStore.getState();
+      const tree: any[] = await invoke("get_directory_structure", { rootDir: state.rootPath });
+      state.setFileTree(tree);
+      state.loadGitStatus();
+    } catch (err: any) {
+      console.error("Failed to move file to root:", err);
+      alert(`Move failed: ${err}`);
+    }
+  };
+
   return (
-    <div className="space-y-[1px] select-none font-sans text-xs text-[var(--text-normal)] w-full min-w-max">
+    <div 
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={handleDropOnRoot}
+      className="space-y-[1px] select-none font-sans text-xs text-[var(--text-normal)] w-full min-h-[300px] overflow-hidden"
+    >
       {entries.map((entry) => (
         <FileTreeNode key={entry.path} node={entry} />
       ))}
@@ -119,8 +158,16 @@ const FileTreeNode: React.FC<{ node: any }> = ({ node }) => {
   const [isOpen, setIsOpen] = useState(false);
   const openTab = useWorkspaceStore((state) => state.openTab);
   const gitStatus = useWorkspaceStore((state) => state.gitStatus);
+  const collapseAllTrigger = useWorkspaceStore((state) => state.collapseAllTrigger || 0);
 
   const gitState = getGitState(node, gitStatus);
+
+  // Collapse folder when trigger increments
+  useEffect(() => {
+    if (collapseAllTrigger > 0) {
+      setIsOpen(false);
+    }
+  }, [collapseAllTrigger]);
 
   const handleDragStart = (e: React.DragEvent) => {
     console.log("FileTree: handleDragStart started for:", node.name, "path:", node.path);
@@ -142,17 +189,113 @@ const FileTreeNode: React.FC<{ node: any }> = ({ node }) => {
     });
   };
 
+  const handleDeleteNode = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const confirmDelete = window.confirm(`Are you sure you want to permanently delete "${node.name}"? This will delete it from your disk.`);
+    if (!confirmDelete) return;
+
+    try {
+      await invoke("delete_file_or_dir", { path: node.path });
+      // Reload directory tree
+      const state = useWorkspaceStore.getState();
+      const tree: any[] = await invoke("get_directory_structure", { rootDir: state.rootPath });
+      state.setFileTree(tree);
+      state.loadGitStatus();
+      
+      // Close tab if open
+      state.closeTab(`file_${node.path.replace(/[^a-zA-Z0-9]/g, "_")}`);
+    } catch (err: any) {
+      console.error("Failed to delete path:", err);
+      alert(`Delete failed: ${err}`);
+    }
+  };
+
+  const handleCreateFile = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const fileName = window.prompt(`Create new file inside "${node.name}":`);
+    if (!fileName || !fileName.trim()) return;
+
+    const newFilePath = `${node.path}/${fileName.trim()}`;
+    try {
+      await invoke("create_file", { path: newFilePath });
+      // Reload directory tree
+      const state = useWorkspaceStore.getState();
+      const tree: any[] = await invoke("get_directory_structure", { rootDir: state.rootPath });
+      state.setFileTree(tree);
+      state.loadGitStatus();
+      setIsOpen(true); // Auto-expand folder
+    } catch (err: any) {
+      console.error("Failed to create file:", err);
+      alert(`Create file failed: ${err}`);
+    }
+  };
+
+  const handleCreateDirectory = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const dirName = window.prompt(`Create new folder inside "${node.name}":`);
+    if (!dirName || !dirName.trim()) return;
+
+    const newDirPath = `${node.path}/${dirName.trim()}`;
+    try {
+      await invoke("create_directory", { path: newDirPath });
+      // Reload directory tree
+      const state = useWorkspaceStore.getState();
+      const tree: any[] = await invoke("get_directory_structure", { rootDir: state.rootPath });
+      state.setFileTree(tree);
+      state.loadGitStatus();
+      setIsOpen(true); // Auto-expand folder
+    } catch (err: any) {
+      console.error("Failed to create directory:", err);
+      alert(`Create folder failed: ${err}`);
+    }
+  };
+
+  const handleDropOnNode = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!node.is_dir) return;
+
+    try {
+      const dataStr = e.dataTransfer.getData("text/plain");
+      if (!dataStr) return;
+      const dragData = JSON.parse(dataStr);
+      if (!dragData.path) return;
+
+      const srcPath = dragData.path;
+      if (srcPath === node.path) return; // Can't drop onto itself
+
+      const fileName = srcPath.split("/").pop() || "";
+      const destPath = `${node.path}/${fileName}`;
+      if (srcPath === destPath) return;
+
+      console.log(`FileTree: Moving ${srcPath} to ${destPath}`);
+      await invoke("move_file_or_dir", { src: srcPath, dest: destPath });
+
+      // Reload tree
+      const state = useWorkspaceStore.getState();
+      const tree: any[] = await invoke("get_directory_structure", { rootDir: state.rootPath });
+      state.setFileTree(tree);
+      state.loadGitStatus();
+      setIsOpen(true); // Auto-expand target directory
+    } catch (err: any) {
+      console.error("Failed to move file to nested node:", err);
+      alert(`Move failed: ${err}`);
+    }
+  };
+
   if (node.is_dir) {
     return (
       <div className="w-full">
         <div
           draggable={true}
           onDragStart={handleDragStart}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={handleDropOnNode}
           onClick={() => setIsOpen(!isOpen)}
           style={{ WebkitUserDrag: "element" } as React.CSSProperties}
-          className={`flex items-center justify-between py-0.5 px-1 hover:bg-[var(--accent-bg)] active:bg-[var(--border-color)]/60 cursor-grab active:cursor-grabbing hover:text-[var(--text-light)] transition-colors font-sans text-xs w-full border border-transparent hover:border-[var(--border-color)]/20 ${gitState ? gitState.colorClass : "text-[var(--text-normal)]"}`}
+          className={`group relative flex items-center justify-between py-0.5 px-1 hover:bg-[var(--accent-bg)] active:bg-[var(--border-color)]/60 cursor-grab active:cursor-grabbing hover:text-[var(--text-light)] transition-colors font-sans text-xs w-full border border-transparent hover:border-[var(--border-color)]/20 ${gitState ? gitState.colorClass : "text-[var(--text-normal)]"}`}
         >
-          <div className="flex items-center min-w-0 flex-1 mr-2">
+          <div className="flex items-center min-w-0 flex-1 mr-14">
             <span className="mr-0.5 text-[var(--text-muted)] flex-shrink-0">
               {isOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
             </span>
@@ -161,11 +304,42 @@ const FileTreeNode: React.FC<{ node: any }> = ({ node }) => {
             </span>
             <span className="truncate pr-2">{node.name}</span>
           </div>
-          {gitState && (
-            <span className="text-[12px] font-mono font-bold mr-1 opacity-85 select-none" title={gitState.label}>
-              {gitState.char}
-            </span>
-          )}
+
+          <div className="flex items-center space-x-1 mr-1">
+            {gitState && (
+              <span className="text-[12px] font-mono font-bold opacity-85 select-none" title={gitState.label}>
+                {gitState.char}
+              </span>
+            )}
+          </div>
+
+          {/* Folder Actions (New File, New Folder, Delete) */}
+          <div className="absolute right-1 top-0 bottom-0 opacity-0 group-hover:opacity-100 flex items-center space-x-1.5 bg-[var(--accent-bg)] pl-2 transition-opacity">
+            <button
+              type="button"
+              onClick={handleCreateFile}
+              className="p-0.5 rounded hover:bg-[var(--accent-color)]/20 text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer"
+              title="New File Inside"
+            >
+              <Plus size={11} />
+            </button>
+            <button
+              type="button"
+              onClick={handleCreateDirectory}
+              className="p-0.5 rounded hover:bg-[var(--accent-color)]/20 text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer"
+              title="New Folder Inside"
+            >
+              <FolderPlus size={11} />
+            </button>
+            <button
+              type="button"
+              onClick={handleDeleteNode}
+              className="p-0.5 rounded hover:bg-rose-500/20 text-[var(--text-muted)] hover:text-rose-400 transition-colors cursor-pointer"
+              title="Delete Folder"
+            >
+              <Trash2 size={11} />
+            </button>
+          </div>
         </div>
         {isOpen && node.children && (
           <div className="pl-2 border-l border-[var(--border-color)]/60 ml-1.5 mt-[1px] space-y-[1px]">
@@ -184,17 +358,32 @@ const FileTreeNode: React.FC<{ node: any }> = ({ node }) => {
       onDragStart={handleDragStart}
       onDoubleClick={handleDoubleClick}
       style={{ WebkitUserDrag: "element" } as React.CSSProperties}
-      className={`flex items-center justify-between py-0.5 px-1 pl-[18px] hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] transition-colors cursor-grab active:cursor-grabbing font-sans text-xs w-full border border-transparent hover:border-[var(--border-color)]/20 ${gitState ? gitState.colorClass : "text-[var(--text-normal)]"}`}
+      className={`group relative flex items-center justify-between py-0.5 px-1 pl-[18px] hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] transition-colors cursor-grab active:cursor-grabbing font-sans text-xs w-full border border-transparent hover:border-[var(--border-color)]/20 ${gitState ? gitState.colorClass : "text-[var(--text-normal)]"}`}
     >
-      <div className="flex items-center min-w-0 flex-1 mr-2">
+      <div className="flex items-center min-w-0 flex-1 mr-6">
         <FileIcon fileName={node.name} size={13} className="mr-1 flex-shrink-0" />
         <span className="truncate pr-2">{node.name}</span>
       </div>
-      {gitState && (
-        <span className="text-[10px] font-mono font-bold mr-1 opacity-90 select-none" title={gitState.label}>
-          {gitState.char}
-        </span>
-      )}
+
+      <div className="flex items-center space-x-1 mr-1">
+        {gitState && (
+          <span className="text-[10px] font-mono font-bold opacity-90 select-none" title={gitState.label}>
+            {gitState.char}
+          </span>
+        )}
+      </div>
+
+      {/* File Actions (Delete) */}
+      <div className="absolute right-1 top-0 bottom-0 opacity-0 group-hover:opacity-100 flex items-center bg-[var(--accent-bg)] pl-2 transition-opacity">
+        <button
+          type="button"
+          onClick={handleDeleteNode}
+          className="p-0.5 rounded hover:bg-rose-500/20 text-[var(--text-muted)] hover:text-rose-400 transition-colors cursor-pointer"
+          title="Delete File"
+        >
+          <Trash2 size={11} />
+        </button>
+      </div>
     </div>
   );
 };

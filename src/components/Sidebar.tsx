@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Folder, Cpu, Settings, FolderOpen, GitBranch } from "lucide-react";
+import { Folder, Cpu, Settings, FolderOpen, GitBranch, ChevronLeft, Plus, FolderPlus, FoldHorizontal, RefreshCw } from "lucide-react";
 import { useWorkspaceStore } from "../store";
 import { FileTree } from "./FileTree";
 import { invoke } from "@tauri-apps/api/core";
@@ -111,6 +111,58 @@ export const Sidebar: React.FC<SidebarProps> = ({
       title: "Settings",
       key: "settings",
     });
+  };
+
+  const handleCreateRootFile = async () => {
+    const rootPath = useWorkspaceStore.getState().rootPath;
+    if (!rootPath) return;
+    const fileName = window.prompt("Enter name for new file at root:");
+    if (!fileName || !fileName.trim()) return;
+    try {
+      await invoke("create_file", { path: `${rootPath}/${fileName.trim()}` });
+      const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
+      setFileTree(tree);
+      useWorkspaceStore.getState().loadGitStatus();
+    } catch (err) {
+      alert(`Create file failed: ${err}`);
+    }
+  };
+
+  const handleCreateRootFolder = async () => {
+    const rootPath = useWorkspaceStore.getState().rootPath;
+    if (!rootPath) return;
+    const folderName = window.prompt("Enter name for new folder at root:");
+    if (!folderName || !folderName.trim()) return;
+    try {
+      await invoke("create_directory", { path: `${rootPath}/${folderName.trim()}` });
+      const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
+      setFileTree(tree);
+      useWorkspaceStore.getState().loadGitStatus();
+    } catch (err) {
+      alert(`Create folder failed: ${err}`);
+    }
+  };
+
+  const handleCollapseAllFolders = () => {
+    useWorkspaceStore.setState({ collapseAllTrigger: Date.now() });
+  };
+
+  const handleRefreshExplorer = async () => {
+    const rootPath = useWorkspaceStore.getState().rootPath;
+    if (!rootPath) return;
+    try {
+      const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
+      setFileTree(tree);
+      await useWorkspaceStore.getState().loadGitStatus();
+    } catch (err) {
+      console.error("Failed to refresh explorer:", err);
+    }
+  };
+
+  const handleCollapseSidebar = () => {
+    setLastWidth(sidebarWidth);
+    setSidebarWidth(56);
+    setIsExplorerOpen(false);
   };
 
   const totalChanges = gitStatus ? gitStatus.staged.length + gitStatus.unstaged.length : 0;
@@ -232,10 +284,46 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
 
               {/* Dynamic Explorer Sidebar Tree */}
-              <div className="flex-1 overflow-auto px-4 py-3 min-w-0">
-                <div className="flex items-center justify-between mb-3 text-zinc-400">
+              <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-3 min-w-0">
+                <div className="flex items-center justify-between mb-3 text-zinc-400 border-b border-[var(--border-color)]/30 pb-2">
                   <span className="text-[10px] uppercase tracking-wider font-mono font-bold">Project Explorer</span>
-                  <span className="text-[9px] text-[var(--text-muted)] font-mono">// Drag to canvas</span>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={handleCreateRootFile}
+                      className="p-1 rounded hover:bg-[var(--accent-bg)]/25 text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer"
+                      title="New File"
+                    >
+                      <Plus size={12} />
+                    </button>
+                    <button
+                      onClick={handleCreateRootFolder}
+                      className="p-1 rounded hover:bg-[var(--accent-bg)]/25 text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer"
+                      title="New Folder"
+                    >
+                      <FolderPlus size={12} />
+                    </button>
+                    <button
+                      onClick={handleRefreshExplorer}
+                      className="p-1 rounded hover:bg-[var(--accent-bg)]/25 text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer"
+                      title="Refresh Explorer"
+                    >
+                      <RefreshCw size={12} />
+                    </button>
+                    <button
+                      onClick={handleCollapseAllFolders}
+                      className="p-1 rounded hover:bg-[var(--accent-bg)]/25 text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer"
+                      title="Collapse All Folders"
+                    >
+                      <FoldHorizontal size={12} />
+                    </button>
+                    <button
+                      onClick={handleCollapseSidebar}
+                      className="p-1 rounded hover:bg-[var(--accent-bg)]/25 text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer"
+                      title="Collapse Sidebar"
+                    >
+                      <ChevronLeft size={12} />
+                    </button>
+                  </div>
                 </div>
                 {fileTree.length === 0 ? (
                   <div className="text-center py-8 text-[10px] text-[var(--text-muted)] font-mono leading-relaxed">

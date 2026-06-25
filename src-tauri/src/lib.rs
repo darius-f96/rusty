@@ -163,6 +163,60 @@ fn read_dir_recursive(path: &Path) -> Result<Vec<FileEntry>, String> {
     Ok(entries)
 }
 
+#[tauri::command]
+fn create_file(path: String) -> Result<(), String> {
+    let path_buf = PathBuf::from(&path);
+    if path_buf.exists() {
+        return Err("File already exists".into());
+    }
+    if let Some(parent) = path_buf.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&path_buf, "").map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn create_directory(path: String) -> Result<(), String> {
+    let path_buf = PathBuf::from(&path);
+    if path_buf.exists() {
+        return Err("Directory already exists".into());
+    }
+    std::fs::create_dir_all(&path_buf).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn delete_file_or_dir(path: String) -> Result<(), String> {
+    let path_buf = PathBuf::from(&path);
+    if !path_buf.exists() {
+        return Err("Path does not exist".into());
+    }
+    if path_buf.is_dir() {
+        std::fs::remove_dir_all(&path_buf).map_err(|e| e.to_string())?;
+    } else {
+        std::fs::remove_file(&path_buf).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn move_file_or_dir(src: String, dest: String) -> Result<(), String> {
+    let src_path = PathBuf::from(&src);
+    let dest_path = PathBuf::from(&dest);
+    if !src_path.exists() {
+        return Err("Source path does not exist".into());
+    }
+    if dest_path.exists() {
+        return Err("Destination path already exists".into());
+    }
+    if let Some(parent) = dest_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::rename(&src_path, &dest_path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -176,6 +230,10 @@ pub fn run() {
             get_directory_structure,
             read_file_disk,
             write_file_disk,
+            create_file,
+            create_directory,
+            delete_file_or_dir,
+            move_file_or_dir,
             git::git_status,
             git::git_init,
             git::git_stage_file,

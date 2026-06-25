@@ -61,6 +61,7 @@ export interface WorkspaceState {
   activeCustomProviderId: string | null;
   activeModel: string;
   gitStatus: GitStatusResult | null;
+  collapseAllTrigger?: number;
   
   setRootPath: (path: string) => void;
   setGitStatus: (status: GitStatusResult | null) => void;
