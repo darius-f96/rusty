@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { 
   Folder, 
   FolderOpen, 
@@ -155,19 +155,14 @@ export const FileTree: React.FC<FileTreeProps> = ({ entries }) => {
 };
 
 const FileTreeNode: React.FC<{ node: any }> = ({ node }) => {
-  const [isOpen, setIsOpen] = useState(false);
+  const expandedPaths = useWorkspaceStore((state) => state.expandedPaths);
+  const togglePathExpanded = useWorkspaceStore((state) => state.togglePathExpanded);
+  const setPathExpanded = useWorkspaceStore((state) => state.setPathExpanded);
   const openTab = useWorkspaceStore((state) => state.openTab);
   const gitStatus = useWorkspaceStore((state) => state.gitStatus);
-  const collapseAllTrigger = useWorkspaceStore((state) => state.collapseAllTrigger || 0);
 
+  const isOpen = !!expandedPaths[node.path];
   const gitState = getGitState(node, gitStatus);
-
-  // Collapse folder when trigger increments
-  useEffect(() => {
-    if (collapseAllTrigger > 0) {
-      setIsOpen(false);
-    }
-  }, [collapseAllTrigger]);
 
   const handleDragStart = (e: React.DragEvent) => {
     console.log("FileTree: handleDragStart started for:", node.name, "path:", node.path);
@@ -223,7 +218,7 @@ const FileTreeNode: React.FC<{ node: any }> = ({ node }) => {
       const tree: any[] = await invoke("get_directory_structure", { rootDir: state.rootPath });
       state.setFileTree(tree);
       state.loadGitStatus();
-      setIsOpen(true); // Auto-expand folder
+      setPathExpanded(node.path, true); // Auto-expand folder
     } catch (err: any) {
       console.error("Failed to create file:", err);
       alert(`Create file failed: ${err}`);
@@ -243,7 +238,7 @@ const FileTreeNode: React.FC<{ node: any }> = ({ node }) => {
       const tree: any[] = await invoke("get_directory_structure", { rootDir: state.rootPath });
       state.setFileTree(tree);
       state.loadGitStatus();
-      setIsOpen(true); // Auto-expand folder
+      setPathExpanded(node.path, true); // Auto-expand folder
     } catch (err: any) {
       console.error("Failed to create directory:", err);
       alert(`Create folder failed: ${err}`);
@@ -276,7 +271,7 @@ const FileTreeNode: React.FC<{ node: any }> = ({ node }) => {
       const tree: any[] = await invoke("get_directory_structure", { rootDir: state.rootPath });
       state.setFileTree(tree);
       state.loadGitStatus();
-      setIsOpen(true); // Auto-expand target directory
+      setPathExpanded(node.path, true); // Auto-expand target directory
     } catch (err: any) {
       console.error("Failed to move file to nested node:", err);
       alert(`Move failed: ${err}`);
@@ -291,7 +286,7 @@ const FileTreeNode: React.FC<{ node: any }> = ({ node }) => {
           onDragStart={handleDragStart}
           onDragOver={(e) => e.preventDefault()}
           onDrop={handleDropOnNode}
-          onClick={() => setIsOpen(!isOpen)}
+          onClick={() => togglePathExpanded(node.path)}
           style={{ WebkitUserDrag: "element" } as React.CSSProperties}
           className={`group relative flex items-center justify-between py-0.5 px-1 hover:bg-[var(--accent-bg)] active:bg-[var(--border-color)]/60 cursor-grab active:cursor-grabbing hover:text-[var(--text-light)] transition-colors font-sans text-xs w-full border border-transparent hover:border-[var(--border-color)]/20 ${gitState ? gitState.colorClass : "text-[var(--text-normal)]"}`}
         >

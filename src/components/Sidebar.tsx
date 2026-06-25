@@ -144,7 +144,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const handleCollapseAllFolders = () => {
-    useWorkspaceStore.setState({ collapseAllTrigger: Date.now() });
+    useWorkspaceStore.getState().collapseAllFolders();
   };
 
   const handleRefreshExplorer = async () => {

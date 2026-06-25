@@ -62,6 +62,7 @@ export interface WorkspaceState {
   activeModel: string;
   gitStatus: GitStatusResult | null;
   collapseAllTrigger?: number;
+  expandedPaths: Record<string, boolean>;
   
   setRootPath: (path: string) => void;
   setGitStatus: (status: GitStatusResult | null) => void;
@@ -97,6 +98,10 @@ export interface WorkspaceState {
   openTab: (tab: Tab) => void;
   closeTab: (id: string) => void;
   setActiveTabId: (id: string | null) => void;
+  
+  setPathExpanded: (path: string, expanded: boolean) => void;
+  togglePathExpanded: (path: string) => void;
+  collapseAllFolders: () => void;
 }
 
 export const useWorkspaceStore = create<WorkspaceState>((set) => ({
@@ -107,6 +112,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   fileTree: [],
   nodeLogs: {},
   nodeStatus: {},
+  expandedPaths: {},
   customProviders: [
     {
       id: "anthropic",
@@ -335,5 +341,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     }
     return { openTabs: remainingTabs, activeTabId: nextActiveTabId };
   }),
-  setActiveTabId: (id) => set({ activeTabId: id })
+  setActiveTabId: (id) => set({ activeTabId: id }),
+  setPathExpanded: (path, expanded) => set((state) => ({
+    expandedPaths: { ...state.expandedPaths, [path]: expanded }
+  })),
+  togglePathExpanded: (path) => set((state) => ({
+    expandedPaths: { ...state.expandedPaths, [path]: !state.expandedPaths[path] }
+  })),
+  collapseAllFolders: () => set({
+    expandedPaths: {},
+    collapseAllTrigger: Date.now()
+  })
 }));
