@@ -71,7 +71,10 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = ({ id, data }
         model: useWorkspaceStore.getState().activeModel,
         chatHistory: chatHistory.map((m) => ({ role: m.role, content: m.content })),
         customProvider:
-          provider && provider.id !== "anthropic" && provider.id !== "openai" ? provider : null,
+          provider &&
+          (provider.id !== "anthropic" && provider.id !== "openai" || !!provider.apiKey)
+            ? provider
+            : null,
       }));
     };
 

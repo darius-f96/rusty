@@ -98,6 +98,7 @@ export interface WorkspaceState {
   clearGlobalChatHistory: (nodeId: string) => void;
   
   addCustomProvider: (provider: CustomProvider) => void;
+  updateProviderSettings: (providerId: string, settings: { apiKey?: string; baseUrl?: string; name?: string; models?: { id: string; name: string }[] }) => void;
   setActiveCustomProviderId: (id: string | null) => void;
   setActiveModel: (model: string) => void;
   
@@ -157,6 +158,20 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       models: [
         { id: "openai/gpt-4o", name: "GPT-4o" },
         { id: "openai/gpt-4o-mini", name: "GPT-4o Mini" }
+      ]
+    },
+    {
+      id: "opencode",
+      name: "Opencode",
+      baseUrl: "https://opencode.ai/zen/go/v1",
+      apiKey: "",
+      apiType: "openai-completions",
+      models: [
+        { id: "opencode/qwen2.5-coder:7b", name: "Qwen 2.5 Coder 7B" },
+        { id: "opencode/qwen2.5-coder:14b", name: "Qwen 2.5 Coder 14B" },
+        { id: "opencode/qwen2.5-coder:32b", name: "Qwen 2.5 Coder 32B" },
+        { id: "opencode/llama-3.1-8b", name: "Llama 3.1 8B" },
+        { id: "opencode/llama-3.3-70b", name: "Llama 3.3 70B" }
       ]
     }
   ],
@@ -398,6 +413,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
 
   addCustomProvider: (provider) => set((state) => ({
     customProviders: [...state.customProviders.filter(p => p.id !== provider.id), provider]
+  })),
+
+  updateProviderSettings: (providerId, settings) => set((state) => ({
+    customProviders: state.customProviders.map((p) => {
+      if (p.id === providerId) {
+        return { ...p, ...settings };
+      }
+      return p;
+    })
   })),
 
   setActiveCustomProviderId: (id) => set({ activeCustomProviderId: id }),

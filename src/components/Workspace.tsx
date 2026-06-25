@@ -87,7 +87,10 @@ export const Workspace: React.FC = () => {
           globalContext: globalContextSummary || "",
           contextDescriptions,
           customProvider:
-            provider && provider.id !== "anthropic" && provider.id !== "openai" ? provider : null,
+            provider &&
+            (provider.id !== "anthropic" && provider.id !== "openai" || !!provider.apiKey)
+              ? provider
+              : null,
         })
       );
     };

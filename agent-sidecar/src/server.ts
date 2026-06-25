@@ -91,6 +91,35 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Proxy endpoint to bypass WebView CORS restrictions for listing models
+app.post("/proxy/models", async (req, res) => {
+  const { baseUrl, apiKey } = req.body;
+  if (!baseUrl) {
+    return res.status(400).json({ error: "Missing baseUrl" });
+  }
+  try {
+    const url = baseUrl.endsWith("/") ? `${baseUrl}models` : `${baseUrl}/models`;
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json"
+    };
+    if (apiKey) {
+      headers["Authorization"] = `Bearer ${apiKey}`;
+    }
+    console.log(`Proxy [Server] fetching models from: ${url}`);
+    
+    const response = await fetch(url, { method: "GET", headers });
+    if (!response.ok) {
+      const text = await response.text();
+      return res.status(response.status).json({ error: `Remote server error: ${text || response.statusText}` });
+    }
+    const data = await response.json();
+    res.json(data);
+  } catch (err: any) {
+    console.error("Proxy [Server] fetch models error:", err);
+    res.status(500).json({ error: err.message || "Failed to fetch models" });
+  }
+});
+
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 

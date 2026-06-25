@@ -114,7 +114,8 @@ export const EdgeInspectorPane: React.FC<EdgeInspectorPaneProps> = ({ onClose })
           sourcePrompt: (sourceNode?.data as any)?.prompt || "",
           targetPrompt: (targetNode?.data as any)?.prompt || "",
           customProvider:
-            provider && provider.id !== "anthropic" && provider.id !== "openai"
+            provider &&
+            (provider.id !== "anthropic" && provider.id !== "openai" || !!provider.apiKey)
               ? provider
               : null,
         })
