@@ -4,6 +4,7 @@ import { Terminal, MessageSquare, Code, Play, Sparkles } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
 import { invoke } from "@tauri-apps/api/core";
 import { getFileTypeDetails } from "../../services/fileTypeService";
+import { formatMessageText } from "../SidePane";
 
 const EMPTY_ARRAY: any[] = [];
 
@@ -222,16 +223,16 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode }) => {
           {taskSubTab === "chat" && (
             <div className="flex flex-col h-full bg-[var(--bg-app)]">
               <div className="flex-1 p-4 space-y-4 overflow-y-auto text-xs">
-                <div className="flex flex-col bg-[var(--bg-sidebar)]/60 border border-[var(--border-color)]/80 rounded-xl p-3 max-w-[85%] self-start space-y-1">
-                  <span className="font-mono text-[9px] uppercase font-bold text-[var(--text-muted)]">System Agent</span>
-                  <span className="leading-relaxed">
-                    I will check the attached file inputs and execute your modifications. You can type instructions below to refine my work.
-                  </span>
+                <div className="flex flex-col bg-[var(--bg-sidebar)]/60 border border-[var(--border-color)]/80 rounded-xl p-3 w-full space-y-1 text-left">
+                  <span className="font-mono text-[9px] uppercase font-bold text-violet-400">System Agent</span>
+                  <div className="leading-relaxed text-[var(--text-normal)]">
+                    {formatMessageText("I will check the attached file inputs and execute your modifications. You can type instructions below to refine my work.")}
+                  </div>
                 </div>
                 {chatMessage && nodeStatus === "success" && (
-                  <div className="flex flex-col bg-[var(--accent-bg)]/20 border border-[var(--accent-color)]/50 rounded-xl p-3 max-w-[85%] ml-auto space-y-1 text-right text-[var(--text-light)]">
+                  <div className="flex flex-col bg-[var(--accent-bg)]/20 border border-[var(--accent-color)]/30 rounded-xl p-3 w-full space-y-1 text-left text-[var(--text-light)]">
                     <span className="font-mono text-[9px] uppercase font-bold text-[var(--accent-color)]">User</span>
-                    <span className="leading-relaxed">{chatMessage}</span>
+                    <div className="leading-relaxed">{formatMessageText(chatMessage)}</div>
                   </div>
                 )}
               </div>

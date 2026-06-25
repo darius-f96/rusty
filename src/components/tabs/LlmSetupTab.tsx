@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useWorkspaceStore, CustomProvider } from "../../store";
 import { Cpu, Key, Globe, Plus, ShieldCheck, Save, Layers, Lock, Unlock, HelpCircle as HelpIcon, RefreshCw } from "lucide-react";
+import { CustomSelect } from "../CustomSelect";
 
 export const LlmSetupTab: React.FC = () => {
   const customProviders = useWorkspaceStore((state) => state.customProviders);
@@ -26,14 +27,67 @@ export const LlmSetupTab: React.FC = () => {
     }
   }, [activeCustomProviderId, selectedProvider]);
 
+  // Automatically select the first model as default if activeModel is empty
+  useEffect(() => {
+    if (!activeModel && selectedProvider && selectedProvider.models.length > 0) {
+      setActiveModel(selectedProvider.models[0].id);
+    }
+  }, [activeModel, selectedProvider, setActiveModel]);
+
   // Save Settings
-  const handleSaveSettings = () => {
+  const handleSaveSettings = async () => {
     if (!activeCustomProviderId) return;
     updateProviderSettings(activeCustomProviderId, {
       apiKey: apiKey.trim(),
       baseUrl: baseUrl.trim(),
     });
-    alert(`Connection settings updated for ${selectedProvider?.name}!`);
+    
+    // Automatically fetch models on save if key is present
+    if (apiKey.trim()) {
+      setFetchingModels(true);
+      console.log(`[LlmSetup] Auto-fetching models for ${selectedProvider?.name} on save...`);
+      try {
+        const proxyUrl = "http://localhost:4000/proxy/models";
+        const targetUrl = activeCustomProviderId === "opencode" 
+          ? "https://opencode.ai/zen/v1" 
+          : baseUrl.trim() || selectedProvider?.baseUrl || "";
+
+        const res = await fetch(proxyUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            baseUrl: targetUrl,
+            apiKey: apiKey.trim()
+          })
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          if (data && Array.isArray(data.data)) {
+            const mapped = data.data.map((m: any) => ({
+              id: m.id,
+              name: m.id.split("/").pop() || m.id
+            }));
+            if (mapped.length > 0) {
+              updateProviderSettings(activeCustomProviderId, { models: mapped });
+              setActiveModel(mapped[0].id);
+              alert(`Configuration saved successfully! Auto-loaded ${mapped.length} models for ${selectedProvider?.name}.`);
+              return;
+            }
+          }
+        }
+        alert(`Configuration saved for ${selectedProvider?.name}! (Model fetching failed, please double check connection details)`);
+      } catch (err) {
+        console.error("Auto-fetch error:", err);
+        alert(`Configuration saved for ${selectedProvider?.name}, but model auto-fetch encountered an error.`);
+      } finally {
+        setFetchingModels(false);
+      }
+    } else {
+      alert(`Connection settings updated for ${selectedProvider?.name}!`);
+    }
   };
 
   const handleFetchModels = async () => {
@@ -49,18 +103,9 @@ export const LlmSetupTab: React.FC = () => {
     
     try {
       const proxyUrl = "http://localhost:4000/proxy/models";
-      console.log(`[LlmSetup] Sending request to proxy: ${proxyUrl}`);
-      
-      // Check if proxy server is reachable first
-      try {
-        await fetch("http://localhost:4000/proxy/models", {
-          method: "HEAD",
-          mode: "no-cors"
-        });
-        console.log(`[LlmSetup] Proxy server reachable (HEAD request sent)`);
-      } catch (probeErr) {
-        console.warn(`[LlmSetup] Proxy server not reachable on localhost:4000 - is the agent-sidecar running?`);
-      }
+      const targetUrl = activeCustomProviderId === "opencode" 
+        ? "https://opencode.ai/zen/v1" 
+        : baseUrl.trim() || selectedProvider?.baseUrl || "";
       
       const res = await fetch(proxyUrl, {
         method: "POST",
@@ -68,39 +113,33 @@ export const LlmSetupTab: React.FC = () => {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          baseUrl: "https://opencode.ai/zen/v1",
+          baseUrl: targetUrl,
           apiKey: apiKey.trim()
         })
       });
       
-      console.log(`[LlmSetup] Proxy response status: ${res.status}`);
-      
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        console.error(`[LlmSetup] Proxy error response:`, errData);
-        throw new Error(errData.error || `HTTP error ${res.status}: ${res.statusText}`);
+        throw new Error(errData.error || `HTTP error ${res.status}`);
       }
       
       const data = await res.json();
-      console.log(`[LlmSetup] Proxy response data:`, JSON.stringify(data, null, 2));
       
       if (data && Array.isArray(data.data)) {
         const mapped = data.data.map((m: any) => ({
           id: m.id,
           name: m.id.split("/").pop() || m.id
         }));
-        console.log(`[LlmSetup] Mapped models:`, mapped);
         
         if (mapped.length > 0) {
           updateProviderSettings(activeCustomProviderId, { models: mapped });
           setActiveModel(mapped[0].id);
-          console.log(`[LlmSetup] Updated store with ${mapped.length} models. Active model set to: ${mapped[0].id}`);
           alert(`Successfully fetched and loaded ${mapped.length} models for ${selectedProvider?.name}!`);
         } else {
           alert("No models found in the provider response.");
         }
       } else {
-        throw new Error("Invalid response format: expected a JSON object with a 'data' array.");
+        throw new Error("Invalid response format.");
       }
     } catch (err: any) {
       console.error(`[LlmSetup] Fetch models error:`, err.message);
@@ -408,45 +447,22 @@ export const LlmSetupTab: React.FC = () => {
                   )}
                 </div>
 
-                {/* 3. Model Selector Grid */}
+                {/* 3. Default Target Model Dropdown */}
                 <div className="space-y-2 pt-2">
                   <label className="block text-xs font-bold text-[var(--text-normal)] uppercase font-mono tracking-wide flex items-center space-x-1.5">
                     <Layers size={13} className="text-violet-400" />
-                    <span>Choose Active Model</span>
+                    <span>Default Target Model</span>
                   </label>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
-                    {selectedProvider.models.map((m) => {
-                      const isSelected = m.id === activeModel;
-                      return (
-                        <div
-                          key={m.id}
-                          onClick={() => setActiveModel(m.id)}
-                          className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center space-x-2.5 ${
-                            isSelected
-                              ? "border-[var(--accent-color)] bg-[var(--accent-bg)]/25 shadow-inner"
-                              : "border-[var(--border-color)] bg-[var(--bg-app)] hover:bg-[var(--bg-app)]/80 hover:border-[var(--border-active)]"
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            name="model"
-                            checked={isSelected}
-                            onChange={() => setActiveModel(m.id)}
-                            className="text-[var(--accent-color)] focus:ring-[var(--accent-color)]"
-                          />
-                          <div className="flex flex-col min-w-0">
-                            <span className="text-xs font-semibold text-[var(--text-light)] truncate">
-                              {m.name}
-                            </span>
-                            <span className="text-[9px] text-[var(--text-muted)] font-mono truncate">
-                              {m.id}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <CustomSelect
+                    value={activeModel}
+                    onChange={(val) => setActiveModel(val)}
+                    options={
+                      selectedProvider.models.length > 0
+                        ? selectedProvider.models.map((m) => ({ id: m.id, name: `${m.name} (${m.id})` }))
+                        : []
+                    }
+                    placeholder="No models available - Save configuration to fetch models"
+                  />
                 </div>
 
                 {/* Save and Fetch buttons */}

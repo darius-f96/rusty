@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { DiffEditor } from "@monaco-editor/react";
-import { X, Terminal, MessageSquare, Code, Play, Sparkles, Globe, Send, FileCode } from "lucide-react";
+import { DiffEditor, Editor } from "@monaco-editor/react";
+import { X, Terminal, MessageSquare, Code, Play, Sparkles, Globe, Send, FileCode, Settings } from "lucide-react";
 import { useWorkspaceStore } from "../store";
 import { invoke } from "@tauri-apps/api/core";
+import { CustomSelect } from "./CustomSelect";
 
 // File mentions parsing function
-export function formatMessageText(text: string) {
-  if (!text) return "";
+function formatInlineMentions(text: string): React.ReactNode[] {
+  if (!text) return [];
   
   const markdownFileLinkRegex = /\[([^\]]+)\]\((file:\/\/\/[^\)]+)\)/g;
   const pathRegex = /(?:\B@)?(?:\b(?:\/|\.\/|\.\.\/)[a-zA-Z0-9_\-\.\/]+(?:\.[a-zA-Z0-9]+)?\b|\b[a-zA-Z0-9_\-\.]+\.(?:ts|tsx|js|jsx|json|py|md|css|rs|html|yml|yaml|txt|gitignore|sh|toml)\b)/g;
@@ -60,6 +61,70 @@ export function formatMessageText(text: string) {
     }
     return <span key={i}>{token.content}</span>;
   });
+}
+
+export function formatMessageText(text: string): React.ReactNode[] {
+  if (!text) return [];
+  
+  const codeBlockRegex = /```(\w*)\n([\s\S]*?)```/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match;
+  
+  while ((match = codeBlockRegex.exec(text)) !== null) {
+    const matchIndex = match.index;
+    const lang = match[1] || "plaintext";
+    const code = match[2].trim();
+    
+    // Add text before the code block
+    if (matchIndex > lastIndex) {
+      const beforeText = text.substring(lastIndex, matchIndex);
+      parts.push(...formatInlineMentions(beforeText));
+    }
+    
+    // Calculate dynamic height based on line count
+    const lineCount = code.split("\n").length;
+    const calculatedHeight = Math.min(400, Math.max(80, lineCount * 18 + 40));
+
+    // Add Monaco Editor for the code block
+    parts.push(
+      <div 
+        key={`code-${matchIndex}`} 
+        className="my-3 border border-[var(--border-color)] rounded-lg overflow-hidden bg-black/40 w-full flex flex-col font-sans"
+        style={{ height: `${calculatedHeight}px` }}
+      >
+        <div className="flex items-center justify-between px-3 py-1.5 bg-[var(--bg-sidebar)]/80 border-b border-[var(--border-color)] select-none flex-shrink-0">
+          <span className="text-[10px] uppercase font-mono font-bold text-violet-400">{lang}</span>
+        </div>
+        <div className="flex-1 min-h-0 relative">
+          <Editor
+            height="100%"
+            language={lang}
+            value={code}
+            theme="axiom-custom-theme"
+            options={{
+              readOnly: true,
+              minimap: { enabled: false },
+              scrollBeyondLastLine: false,
+              lineNumbers: "on",
+              fontSize: 10,
+              scrollbar: { vertical: "visible", horizontal: "visible" },
+              renderLineHighlight: "none"
+            }}
+          />
+        </div>
+      </div>
+    );
+    
+    lastIndex = codeBlockRegex.lastIndex;
+  }
+  
+  // Add remaining text after the last code block
+  if (lastIndex < text.length) {
+    parts.push(...formatInlineMentions(text.substring(lastIndex)));
+  }
+  
+  return parts;
 }
 
 const EMPTY_ARRAY: any[] = [];
@@ -120,6 +185,7 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
   // Explorer Chat State
   const [explorerInput, setExplorerInput] = useState("");
   const [isSummarizing, setIsSummarizing] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const explorerSocketRef = useRef<WebSocket | null>(null);
 
   const addGlobalChatMessage = useWorkspaceStore((state) => state.addGlobalChatMessage);
@@ -128,6 +194,15 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
   const addLog = useWorkspaceStore((state) => state.addLog);
   const setNodeStatus = useWorkspaceStore((state) => state.setNodeStatus);
   const globalChatHistory = useWorkspaceStore((state) => state.globalChatHistory[selectedNodeId || ""] || EMPTY_ARRAY);
+  
+  const activeModel = useWorkspaceStore((state) => state.activeModel);
+  const providers = useWorkspaceStore((state) => state.customProviders);
+  const activeCustomProviderId = useWorkspaceStore((state) => state.activeCustomProviderId);
+  const activeProvider = providers.find((p) => p.id === activeCustomProviderId);
+  const availableModels = activeProvider ? activeProvider.models : EMPTY_ARRAY;
+
+  const exploreModel = (selectedNode?.data?.exploreModel as string) || activeModel;
+  const summarizeModel = (selectedNode?.data?.summarizeModel as string) || activeModel;
 
   // Set default active tab based on selected node type
   useEffect(() => {
@@ -176,6 +251,7 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
       const activeProviderId = useWorkspaceStore.getState().activeCustomProviderId;
       const provider = providers.find((p) => p.id === activeProviderId);
       const activeModel = useWorkspaceStore.getState().activeModel;
+      const exploreModel = selectedNode.data.exploreModel || activeModel;
       const chatHistory = useWorkspaceStore.getState().globalChatHistory[id] || [];
 
       socket.send(JSON.stringify({
@@ -183,7 +259,7 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
         nodeId: id,
         prompt: userMessage.content,
         workspaceRoot: rootPath,
-        model: activeModel,
+        model: exploreModel,
         chatHistory: chatHistory.map((m) => ({ role: m.role, content: m.content })),
         customProvider:
           provider &&
@@ -299,13 +375,15 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
       const providers = useWorkspaceStore.getState().customProviders;
       const activeProviderId = useWorkspaceStore.getState().activeCustomProviderId;
       const provider = providers.find((p) => p.id === activeProviderId);
+      const activeModel = useWorkspaceStore.getState().activeModel;
+      const summarizeModel = selectedNode.data.summarizeModel || activeModel;
 
       socket.send(JSON.stringify({
         type: "global_explore",
         nodeId: id,
         prompt: `Please summarize the following conversation concisely, highlighting the key insights, findings, and any important decisions or next steps mentioned:\n\n${conversationText}`,
         workspaceRoot: rootPath,
-        model: useWorkspaceStore.getState().activeModel,
+        model: summarizeModel,
         chatHistory: [],
         customProvider:
           provider &&
@@ -487,12 +565,23 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
               : (selectedNode.data as any).name || `Task Node (${selectedNode.id})`}
           </span>
         </div>
-        <button
-          onClick={onClose}
-          className="text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors p-1 rounded-lg hover:bg-[var(--bg-sidebar)] cursor-pointer"
-        >
-          <X size={16} />
-        </button>
+        <div className="flex items-center space-x-1">
+          {selectedNode.type === "globalChatNode" && (
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className="text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors p-1.5 rounded-lg hover:bg-[var(--bg-sidebar)] cursor-pointer"
+              title="Explorer settings"
+            >
+              <Settings size={15} />
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors p-1 rounded-lg hover:bg-[var(--bg-sidebar)] cursor-pointer"
+          >
+            <X size={16} />
+          </button>
+        </div>
       </div>
 
       {/* Tabs Row */}
@@ -605,6 +694,73 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
         {activeTab === "chat" && (
           selectedNode.type === "globalChatNode" ? (
             <div className="flex flex-col h-full bg-[var(--bg-app)]">
+              {/* Chat sub-header with model status and settings toggle */}
+              <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/20 select-none flex-shrink-0">
+                <div className="flex items-center space-x-2 text-[10px] font-mono text-[var(--text-muted)]">
+                  <span>Chat: <strong className="text-violet-400">{exploreModel.split("/").pop()}</strong></span>
+                  <span>•</span>
+                  <span>Summ: <strong className="text-amber-400">{summarizeModel.split("/").pop()}</strong></span>
+                </div>
+                <button
+                  onClick={() => setShowSettings(!showSettings)}
+                  className="flex items-center space-x-1 text-[11px] font-medium text-violet-400 hover:text-violet-300 transition-colors cursor-pointer"
+                >
+                  <Settings size={12} />
+                  <span>Configure Models</span>
+                </button>
+              </div>
+
+              {/* Explorer settings configuration drawer inside chat */}
+              {showSettings && (
+                <div className="bg-[var(--bg-sidebar)]/80 border-b border-[var(--border-color)] p-3.5 space-y-3 text-xs font-sans select-none animate-fadeIn flex-shrink-0">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-[var(--text-light)] flex items-center space-x-1.5">
+                      <Settings size={12} className="text-violet-400" />
+                      <span>Explorer Settings</span>
+                    </span>
+                    <button onClick={() => setShowSettings(false)} className="text-[var(--text-muted)] hover:text-[var(--text-light)] cursor-pointer">
+                      <X size={14} />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3.5 font-mono text-[11px]">
+                    <div className="flex flex-col space-y-1 col-span-2 border-b border-[var(--border-color)] pb-2 mb-1">
+                      <span className="text-[var(--text-muted)] font-sans">Active LLM Provider:</span>
+                      <CustomSelect
+                        value={activeCustomProviderId || ""}
+                        onChange={(newProviderId) => {
+                          useWorkspaceStore.getState().setActiveCustomProviderId(newProviderId);
+                          const prov = providers.find((p) => p.id === newProviderId);
+                          if (prov && prov.models && prov.models.length > 0) {
+                            useWorkspaceStore.getState().setActiveModel(prov.models[0].id);
+                            updateNode(selectedNode.id, { 
+                              exploreModel: prov.models[0].id,
+                              summarizeModel: prov.models[0].id
+                            });
+                          }
+                        }}
+                        options={providers.map((p: any) => ({ id: p.id, name: p.name }))}
+                      />
+                    </div>
+                    <div className="flex flex-col space-y-1">
+                      <span className="text-[var(--text-muted)] font-sans">Exploration Model:</span>
+                      <CustomSelect
+                        value={exploreModel}
+                        onChange={(val) => updateNode(selectedNode.id, { exploreModel: val })}
+                        options={availableModels.length > 0 ? availableModels : [{ id: exploreModel, name: exploreModel.split("/").pop() || exploreModel }]}
+                      />
+                    </div>
+                    <div className="flex flex-col space-y-1">
+                      <span className="text-[var(--text-muted)] font-sans">Summarization Model:</span>
+                      <CustomSelect
+                        value={summarizeModel}
+                        onChange={(val) => updateNode(selectedNode.id, { summarizeModel: val })}
+                        options={availableModels.length > 0 ? availableModels : [{ id: summarizeModel, name: summarizeModel.split("/").pop() || summarizeModel }]}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Explorer Chat History */}
               <div className="flex-1 p-4 space-y-4 overflow-y-auto text-xs">
                 {globalChatHistory.length === 0 ? (
@@ -619,10 +775,10 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
                   globalChatHistory.map((msg: any, idx: number) => (
                     <div
                       key={idx}
-                      className={`flex flex-col rounded-xl p-3 max-w-[85%] space-y-1 ${
+                      className={`flex flex-col rounded-xl p-3 border space-y-1 w-full ${
                         msg.role === "user"
-                          ? "bg-[var(--accent-bg)] border border-[var(--accent-color)]/30 ml-auto text-right"
-                          : "bg-[var(--bg-sidebar)]/60 border border-[var(--border-color)]/80 self-start"
+                          ? "bg-[var(--accent-bg)]/20 border-[var(--accent-color)]/30"
+                          : "bg-[var(--bg-sidebar)]/60 border border-[var(--border-color)]/80"
                       }`}
                     >
                       <span className={`font-mono text-[9px] uppercase font-bold ${
@@ -682,14 +838,14 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
             <div className="flex flex-col h-full bg-[var(--bg-app)]">
               {/* Mocked conversation preview */}
               <div className="flex-1 p-4 space-y-4 overflow-y-auto text-xs">
-                <div className="flex flex-col bg-[var(--bg-sidebar)]/60 border border-[var(--border-color)]/80 rounded-xl p-3 max-w-[85%] self-start space-y-1">
-                  <span className="font-mono text-[9px] uppercase font-bold text-[var(--text-muted)]">System Agent</span>
+                <div className="flex flex-col bg-[var(--bg-sidebar)]/60 border border-[var(--border-color)]/80 rounded-xl p-3 w-full space-y-1 text-left">
+                  <span className="font-mono text-[9px] uppercase font-bold text-violet-400">System Agent</span>
                   <span className="leading-relaxed">
                     I will check the attached file inputs and execute your modifications. You can type instructions below to refine my work.
                   </span>
                 </div>
                 {chatMessage && nodeStatus === "success" && (
-                  <div className="flex flex-col bg-[var(--accent-bg)] border border-[var(--accent-color)]/50 rounded-xl p-3 max-w-[85%] ml-auto space-y-1 text-right">
+                  <div className="flex flex-col bg-[var(--accent-bg)]/20 border border-[var(--accent-color)]/30 rounded-xl p-3 w-full space-y-1 text-left">
                     <span className="font-mono text-[9px] uppercase font-bold text-[var(--accent-color)]">User</span>
                     <span className="leading-relaxed text-[var(--text-light)]">{chatMessage}</span>
                   </div>

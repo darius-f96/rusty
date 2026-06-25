@@ -139,6 +139,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   edgeReconciliationStatus: {},
   customProviders: [
     {
+      id: "opencode",
+      name: "Opencode",
+      baseUrl: "https://opencode.ai/zen/v1",
+      apiKey: "",
+      apiType: "openai-completions",
+      models: []
+    },
+    {
       id: "anthropic",
       name: "Anthropic",
       baseUrl: "",
@@ -159,18 +167,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         { id: "openai/gpt-4o", name: "GPT-4o" },
         { id: "openai/gpt-4o-mini", name: "GPT-4o Mini" }
       ]
-    },
-    {
-      id: "opencode",
-      name: "Opencode",
-      baseUrl: "https://opencode.ai/zen/v1",
-      apiKey: "",
-      apiType: "openai-completions",
-      models: []
     }
   ],
-  activeCustomProviderId: "anthropic",
-  activeModel: "anthropic/claude-3-5-sonnet",
+  activeCustomProviderId: "opencode",
+  activeModel: "",
   gitStatus: null,
   devLogs: [],
   showDevConsole: false,
@@ -340,7 +340,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         id,
         name: "Global Explorer",
         status: "idle",
-        summary: ""
+        summary: "",
+        width: 384,
+        height: 220
       }
     };
     return { nodes: [...state.nodes, newNode] };

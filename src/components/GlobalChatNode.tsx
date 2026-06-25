@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Globe, Pencil, Check, Trash2, Sparkles, X, Loader2 } from "lucide-react";
 import { useWorkspaceStore } from "../store";
 import { formatMessageText } from "./SidePane";
@@ -12,10 +12,54 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = ({ id, data }
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(data.name || "Global Explorer");
 
+  // Resize state
+  const [width, setWidth] = useState(data.width || 384);
+  const [height, setHeight] = useState(data.height || 220);
+  const isResizing = useRef(false);
+  const startDimensions = useRef({ width: 0, height: 0, x: 0, y: 0 });
+
   const handleNameSave = () => {
     updateNode(id, { name: tempName });
     setIsEditing(false);
   };
+
+  const startResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    isResizing.current = true;
+    startDimensions.current = {
+      width,
+      height,
+      x: e.clientX,
+      y: e.clientY
+    };
+    document.addEventListener("mousemove", handleResize);
+    document.addEventListener("mouseup", stopResize);
+  };
+
+  const handleResize = (e: MouseEvent) => {
+    if (!isResizing.current) return;
+    const deltaX = e.clientX - startDimensions.current.x;
+    const deltaY = e.clientY - startDimensions.current.y;
+    const newWidth = Math.max(300, startDimensions.current.width + deltaX);
+    const newHeight = Math.max(150, startDimensions.current.height + deltaY);
+    setWidth(newWidth);
+    setHeight(newHeight);
+    updateNode(id, { width: newWidth, height: newHeight });
+  };
+
+  const stopResize = () => {
+    isResizing.current = false;
+    document.removeEventListener("mousemove", handleResize);
+    document.removeEventListener("mouseup", stopResize);
+  };
+
+  useEffect(() => {
+    return () => {
+      document.removeEventListener("mousemove", handleResize);
+      document.removeEventListener("mouseup", stopResize);
+    };
+  }, []);
 
   const statusBorder = {
     idle: "border-[var(--border-color)] hover:border-violet-500/50",
@@ -24,10 +68,15 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = ({ id, data }
     error: "border-rose-500/60 shadow-[0_0_10px_rgba(244,63,94,0.1)]"
   };
 
+  const summaryText = data.summary || globalContextSummary;
+
   return (
-    <div className={`w-96 rounded-xl border bg-[var(--bg-sidebar)] text-[var(--text-normal)] overflow-hidden transition-all duration-300 shadow-xl ${statusBorder[nodeStatus]}`}>
+    <div 
+      style={{ width: `${width}px`, height: `${height}px` }}
+      className={`rounded-xl border bg-[var(--bg-sidebar)] text-[var(--text-normal)] overflow-hidden flex flex-col transition-[border-color,box-shadow] duration-300 shadow-xl relative ${statusBorder[nodeStatus]}`}
+    >
       {/* Node Header */}
-      <div className="flex items-center justify-between border-b border-[var(--border-color)] bg-gradient-to-r from-violet-600/15 to-transparent px-3 py-2 select-none cursor-move">
+      <div className="flex items-center justify-between border-b border-[var(--border-color)] bg-gradient-to-r from-violet-600/15 to-transparent px-3 py-2 select-none cursor-move flex-shrink-0">
         <div className="flex items-center space-x-2 flex-1 mr-2 min-w-0">
           <Globe size={14} className={`text-violet-400 flex-shrink-0 ${nodeStatus === "running" ? "animate-spin" : ""}`} />
           {isEditing ? (
@@ -93,26 +142,44 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = ({ id, data }
       </div>
 
       {/* Node Content */}
-      <div className="p-3">
-        {globalContextSummary ? (
-          <div className="flex flex-col space-y-1.5">
-            <div className="text-[9px] uppercase font-bold text-violet-400 font-sans tracking-wide">
+      <div className="p-3 flex-1 flex flex-col min-h-0 overflow-hidden">
+        {summaryText ? (
+          <div className="flex flex-col flex-1 min-h-0 space-y-1.5">
+            <div className="text-[9px] uppercase font-bold text-violet-400 font-sans tracking-wide flex-shrink-0">
               Global Context Summary
             </div>
             <div 
-              className="nodrag text-[11px] font-sans text-[var(--text-normal)] leading-relaxed max-h-60 overflow-y-auto whitespace-pre-wrap bg-[var(--bg-app)]/50 rounded-lg p-2.5 border border-[var(--border-color)]"
+              className="nodrag text-xs font-sans font-medium text-[var(--text-light)] leading-relaxed flex-1 overflow-y-auto whitespace-pre-wrap bg-[var(--bg-app)]/50 rounded-lg p-2.5 border border-[var(--border-color)] w-full antialiased subpixel-antialiased select-text"
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
             >
-              {formatMessageText(globalContextSummary)}
+              {formatMessageText(summaryText)}
             </div>
           </div>
         ) : (
-          <div className="text-center text-[11px] font-sans text-[var(--text-muted)] py-4 select-none">
+          <div className="flex-1 flex flex-col items-center justify-center text-center text-xs font-sans text-[var(--text-muted)] p-4 select-none">
             <Globe size={24} className="mx-auto text-violet-500/40 mb-2" />
             <span>Select this node to start codebase exploration in the inspector pane on the left.</span>
           </div>
         )}
+      </div>
+
+      {/* Resize Handle */}
+      <div
+        onMouseDown={startResize}
+        onPointerDown={(e) => e.stopPropagation()}
+        className="nodrag absolute right-0 bottom-0 w-4 h-4 cursor-se-resize flex items-end justify-end p-0.5 z-50 select-none group"
+      >
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 10 10"
+          className="text-[var(--text-muted)] opacity-40 group-hover:opacity-100 transition-opacity"
+        >
+          <line x1="2" y1="10" x2="10" y2="2" stroke="currentColor" strokeWidth="1.5" />
+          <line x1="5" y1="10" x2="10" y2="5" stroke="currentColor" strokeWidth="1.5" />
+          <line x1="8" y1="10" x2="10" y2="8" stroke="currentColor" strokeWidth="1.5" />
+        </svg>
       </div>
     </div>
   );

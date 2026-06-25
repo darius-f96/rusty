@@ -3,6 +3,7 @@ import { X, AlertTriangle, CheckCircle2, MessageSquare, Send, Loader2, Code } fr
 import { useWorkspaceStore } from "../store";
 import { invoke } from "@tauri-apps/api/core";
 import { DiffEditor } from "@monaco-editor/react";
+import { formatMessageText } from "./SidePane";
 
 interface EdgeInspectorPaneProps {
   onClose: () => void;
@@ -361,16 +362,20 @@ export const EdgeInspectorPane: React.FC<EdgeInspectorPaneProps> = ({ onClose })
               {chatMessages.map((msg, idx) => (
                 <div
                   key={idx}
-                  className={`flex flex-col rounded-xl p-3 max-w-[90%] space-y-1 ${
+                  className={`flex flex-col rounded-xl p-3 w-full space-y-1 text-left ${
                     msg.role === "user"
-                      ? "bg-rose-500/10 border border-rose-500/20 ml-auto text-right"
-                      : "bg-[var(--bg-sidebar)]/60 border border-[var(--border-color)]/80 self-start"
+                      ? "bg-rose-500/10 border border-rose-500/20"
+                      : "bg-[var(--bg-sidebar)]/60 border border-[var(--border-color)]/80"
                   }`}
                 >
-                  <span className="font-mono text-[9px] uppercase font-bold text-[var(--text-muted)]">
+                  <span className={`font-mono text-[9px] uppercase font-bold ${
+                    msg.role === "user" ? "text-rose-400" : "text-violet-400"
+                  }`}>
                     {msg.role === "user" ? "You" : msg.role === "system" ? "System" : "Resolver"}
                   </span>
-                  <span className="leading-relaxed whitespace-pre-wrap">{msg.content}</span>
+                  <div className="leading-relaxed whitespace-pre-wrap text-[var(--text-normal)]">
+                    {formatMessageText(msg.content)}
+                  </div>
                 </div>
               ))}
               <div ref={chatEndRef} />
