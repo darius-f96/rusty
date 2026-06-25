@@ -1,131 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { DiffEditor, Editor } from "@monaco-editor/react";
-import { X, Terminal, MessageSquare, Code, Play, Sparkles, Globe, Send, FileCode, Settings } from "lucide-react";
+import { DiffEditor } from "@monaco-editor/react";
+import { X, Terminal, MessageSquare, Code, Play, Sparkles, Globe, Send, Settings } from "lucide-react";
 import { useWorkspaceStore } from "../store";
 import { invoke } from "@tauri-apps/api/core";
 import { CustomSelect } from "./CustomSelect";
-
-// File mentions parsing function
-function formatInlineMentions(text: string): React.ReactNode[] {
-  if (!text) return [];
-  
-  const markdownFileLinkRegex = /\[([^\]]+)\]\((file:\/\/\/[^\)]+)\)/g;
-  const pathRegex = /(?:\B@)?(?:\b(?:\/|\.\/|\.\.\/)[a-zA-Z0-9_\-\.\/]+(?:\.[a-zA-Z0-9]+)?\b|\b[a-zA-Z0-9_\-\.]+\.(?:ts|tsx|js|jsx|json|py|md|css|rs|html|yml|yaml|txt|gitignore|sh|toml)\b)/g;
-
-  const tokens: Array<{type: "text" | "file"; content: string; path?: string}> = [];
-  let lastIndex = 0;
-  
-  const combinedRegex = new RegExp(
-    `${markdownFileLinkRegex.source}|${pathRegex.source}`,
-    "g"
-  );
-  
-  let match;
-  while ((match = combinedRegex.exec(text)) !== null) {
-    const matchIndex = match.index;
-    const matchText = match[0];
-    
-    if (matchIndex > lastIndex) {
-      tokens.push({ type: "text", content: text.substring(lastIndex, matchIndex) });
-    }
-    
-    if (match[1] && match[2]) {
-      tokens.push({ type: "file", content: match[1], path: match[2] });
-    } else {
-      let cleanPath = matchText.trim();
-      if (cleanPath.startsWith("@")) {
-        cleanPath = cleanPath.slice(1);
-      }
-      tokens.push({ type: "file", content: cleanPath, path: cleanPath });
-    }
-    
-    lastIndex = combinedRegex.lastIndex;
-  }
-  
-  if (lastIndex < text.length) {
-    tokens.push({ type: "text", content: text.substring(lastIndex) });
-  }
-  
-  return tokens.map((token, i) => {
-    if (token.type === "file") {
-      return (
-        <span
-          key={i}
-          className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-violet-500/10 border border-violet-500/20 text-violet-400 font-mono text-[11px] hover:bg-violet-500/20 transition-all cursor-pointer select-all"
-          title={`Mentioned path: ${token.path}`}
-        >
-          <FileCode size={10} className="text-violet-400 flex-shrink-0" />
-          <span>{token.content}</span>
-        </span>
-      );
-    }
-    return <span key={i}>{token.content}</span>;
-  });
-}
-
-export function formatMessageText(text: string): React.ReactNode[] {
-  if (!text) return [];
-  
-  const codeBlockRegex = /```(\w*)\n([\s\S]*?)```/g;
-  const parts: React.ReactNode[] = [];
-  let lastIndex = 0;
-  let match;
-  
-  while ((match = codeBlockRegex.exec(text)) !== null) {
-    const matchIndex = match.index;
-    const lang = match[1] || "plaintext";
-    const code = match[2].trim();
-    
-    // Add text before the code block
-    if (matchIndex > lastIndex) {
-      const beforeText = text.substring(lastIndex, matchIndex);
-      parts.push(...formatInlineMentions(beforeText));
-    }
-    
-    // Calculate dynamic height based on line count
-    const lineCount = code.split("\n").length;
-    const calculatedHeight = Math.min(400, Math.max(80, lineCount * 18 + 40));
-
-    // Add Monaco Editor for the code block
-    parts.push(
-      <div 
-        key={`code-${matchIndex}`} 
-        className="my-3 border border-[var(--border-color)] rounded-lg overflow-hidden bg-black/40 w-full flex flex-col font-sans"
-        style={{ height: `${calculatedHeight}px` }}
-      >
-        <div className="flex items-center justify-between px-3 py-1.5 bg-[var(--bg-sidebar)]/80 border-b border-[var(--border-color)] select-none flex-shrink-0">
-          <span className="text-[10px] uppercase font-mono font-bold text-violet-400">{lang}</span>
-        </div>
-        <div className="flex-1 min-h-0 relative">
-          <Editor
-            height="100%"
-            language={lang}
-            value={code}
-            theme="axiom-custom-theme"
-            options={{
-              readOnly: true,
-              minimap: { enabled: false },
-              scrollBeyondLastLine: false,
-              lineNumbers: "on",
-              fontSize: 10,
-              scrollbar: { vertical: "visible", horizontal: "visible" },
-              renderLineHighlight: "none"
-            }}
-          />
-        </div>
-      </div>
-    );
-    
-    lastIndex = codeBlockRegex.lastIndex;
-  }
-  
-  // Add remaining text after the last code block
-  if (lastIndex < text.length) {
-    parts.push(...formatInlineMentions(text.substring(lastIndex)));
-  }
-  
-  return parts;
-}
+import { processResponse } from "../services/responseProcessingService";
 
 const EMPTY_ARRAY: any[] = [];
 
@@ -281,17 +160,25 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
         if (msg.type === "read_file") {
           console.log(`[SidePane] Tool request: read_file ${msg.path}`);
           invoke("read_file_vfs", { path: msg.path }).then((content: unknown) => {
-            socket.send(JSON.stringify({
-              type: "read_file_response",
-              requestId: msg.requestId,
-              content: content as string
-            }));
+            if (socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({
+                type: "read_file_response",
+                requestId: msg.requestId,
+                content: content as string
+              }));
+            } else {
+              console.warn(`[SidePane] Socket closed before read_file_response could be sent for ${msg.path}`);
+            }
           }).catch((err: any) => {
-            socket.send(JSON.stringify({
-              type: "read_file_response",
-              requestId: msg.requestId,
-              error: err.message || String(err)
-            }));
+            if (socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({
+                type: "read_file_response",
+                requestId: msg.requestId,
+                error: err.message || String(err)
+              }));
+            } else {
+              console.warn(`[SidePane] Socket closed before read_file error could be sent for ${msg.path}`);
+            }
           });
           return;
         }
@@ -335,7 +222,7 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
     };
 
     socket.onerror = (error) => {
-      console.error(`[SidePane] WebSocket error:`, error);
+      console.error(`[SidePane] Explorer WebSocket error:`, error);
       addLog(id, "Connection to sidecar failed. Ensure sidecar is running on port 4000.");
       setNodeStatus(id, "error");
       const errorMsg = {
@@ -346,7 +233,20 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
       addGlobalChatMessage(id, errorMsg);
     };
 
-    socket.onclose = () => {
+    socket.onclose = (event) => {
+      console.log(`[SidePane] Explorer WebSocket closed (code: ${event.code}, reason: "${event.reason}", clean: ${event.wasClean})`);
+      addLog(id, `Explorer WebSocket closed (code: ${event.code}, reason: "${event.reason || "none"}", clean: ${event.wasClean})`);
+      
+      const currentStatus = useWorkspaceStore.getState().nodeStatus[id];
+      if (currentStatus === "running") {
+        setNodeStatus(id, "error");
+        const errorMsg = {
+          role: "assistant" as const,
+          content: `Connection lost unexpectedly (WebSocket close code: ${event.code}).`,
+          timestamp: new Date().toLocaleTimeString()
+        };
+        addGlobalChatMessage(id, errorMsg);
+      }
       explorerSocketRef.current = null;
     };
   };
@@ -403,17 +303,25 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
 
         if (msg.type === "read_file") {
           invoke("read_file_vfs", { path: msg.path }).then((content: unknown) => {
-            socket.send(JSON.stringify({
-              type: "read_file_response",
-              requestId: msg.requestId,
-              content: content as string
-            }));
+            if (socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({
+                type: "read_file_response",
+                requestId: msg.requestId,
+                content: content as string
+              }));
+            } else {
+              console.warn(`[SidePane] Summarize socket closed before read_file_response could be sent`);
+            }
           }).catch((err: any) => {
-            socket.send(JSON.stringify({
-              type: "read_file_response",
-              requestId: msg.requestId,
-              error: err.message || String(err)
-            }));
+            if (socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({
+                type: "read_file_response",
+                requestId: msg.requestId,
+                error: err.message || String(err)
+              }));
+            } else {
+              console.warn(`[SidePane] Summarize socket closed before read_file error could be sent`);
+            }
           });
           return;
         }
@@ -440,13 +348,22 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
       }
     };
 
-    socket.onerror = () => {
-      addLog(id, "Connection to sidecar failed.");
+    socket.onerror = (error) => {
+      console.error(`[SidePane] Summarize WebSocket error:`, error);
+      addLog(id, "Connection to sidecar failed during summarization.");
       setNodeStatus(id, "error");
       setIsSummarizing(false);
     };
 
-    socket.onclose = () => {
+    socket.onclose = (event) => {
+      console.log(`[SidePane] Summarize WebSocket closed (code: ${event.code}, reason: "${event.reason}", clean: ${event.wasClean})`);
+      addLog(id, `Summarize WebSocket closed (code: ${event.code}, reason: "${event.reason || "none"}", clean: ${event.wasClean})`);
+      
+      const currentStatus = useWorkspaceStore.getState().nodeStatus[id];
+      if (currentStatus === "running") {
+        setNodeStatus(id, "error");
+      }
+      setIsSummarizing(false);
       explorerSocketRef.current = null;
     };
   };
@@ -697,9 +614,9 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
               {/* Chat sub-header with model status and settings toggle */}
               <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/20 select-none flex-shrink-0">
                 <div className="flex items-center space-x-2 text-[10px] font-mono text-[var(--text-muted)]">
-                  <span>Chat: <strong className="text-violet-400">{exploreModel.split("/").pop()}</strong></span>
+                  <span>Chat: <strong className="text-violet-400">{(exploreModel || "").split("/").pop() || "None"}</strong></span>
                   <span>•</span>
-                  <span>Summ: <strong className="text-amber-400">{summarizeModel.split("/").pop()}</strong></span>
+                  <span>Summ: <strong className="text-amber-400">{(summarizeModel || "").split("/").pop() || "None"}</strong></span>
                 </div>
                 <button
                   onClick={() => setShowSettings(!showSettings)}
@@ -746,7 +663,7 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
                       <CustomSelect
                         value={exploreModel}
                         onChange={(val) => updateNode(selectedNode.id, { exploreModel: val })}
-                        options={availableModels.length > 0 ? availableModels : [{ id: exploreModel, name: exploreModel.split("/").pop() || exploreModel }]}
+                        options={availableModels.length > 0 ? availableModels : [{ id: exploreModel, name: (exploreModel || "").split("/").pop() || exploreModel || "None" }]}
                       />
                     </div>
                     <div className="flex flex-col space-y-1">
@@ -754,7 +671,7 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
                       <CustomSelect
                         value={summarizeModel}
                         onChange={(val) => updateNode(selectedNode.id, { summarizeModel: val })}
-                        options={availableModels.length > 0 ? availableModels : [{ id: summarizeModel, name: summarizeModel.split("/").pop() || summarizeModel }]}
+                        options={availableModels.length > 0 ? availableModels : [{ id: summarizeModel, name: (summarizeModel || "").split("/").pop() || summarizeModel || "None" }]}
                       />
                     </div>
                   </div>
@@ -787,7 +704,7 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
                         {msg.role === "user" ? "You" : "Explorer"} · {msg.timestamp}
                       </span>
                       <span className="leading-relaxed whitespace-pre-wrap text-[var(--text-normal)] text-left">
-                        {msg.role === "user" ? msg.content : formatMessageText(msg.content)}
+                        {msg.role === "user" ? msg.content : processResponse(msg.content)}
                       </span>
                     </div>
                   ))

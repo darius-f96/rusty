@@ -8,6 +8,32 @@ import path from "path";
 
 dotenv.config();
 
+// ── Global Process Crash Prevention & Logging ──────────────────────
+process.on("uncaughtException", (error) => {
+  console.error("CRITICAL [Uncaught Exception]:", error);
+  try {
+    fs.appendFileSync(
+      path.join(process.cwd(), "sidecar_error.log"),
+      `[${new Date().toISOString()}] Uncaught Exception: ${error?.stack || error}\n\n`
+    );
+  } catch (logErr) {
+    console.error("Failed to write to sidecar_error.log:", logErr);
+  }
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("CRITICAL [Unhandled Rejection]: Promise:", promise, "Reason:", reason);
+  try {
+    const reasonStr = reason instanceof Error ? reason.stack : String(reason);
+    fs.appendFileSync(
+      path.join(process.cwd(), "sidecar_error.log"),
+      `[${new Date().toISOString()}] Unhandled Rejection at Promise: ${reasonStr}\n\n`
+    );
+  } catch (logErr) {
+    console.error("Failed to write to sidecar_error.log:", logErr);
+  }
+});
+
 // ── Direct LLM API Call Helper ────────────────────────────────────
 
 const MAX_TOOL_RESULT_LENGTH = 8000; // Limit tool results to prevent context overflow
@@ -181,12 +207,14 @@ async function callLlmWithToolsMultiRound(
   tools: Array<{ name: string; description: string; inputSchema?: any; execute: (args: any) => Promise<any> }>,
   workspaceRoot: string,
   sendLog: (msg: string) => void,
-  maxRounds = 5
+  maxRounds = 5,
+  chatHistory: Array<any> = []
 ): Promise<string> {
   const { baseUrl, apiKey, model } = config;
   
   const messages: Array<any> = [
     { role: "system", content: systemPrompt },
+    ...chatHistory,
     { role: "user", content: userMessage }
   ];
 
@@ -204,11 +232,16 @@ async function callLlmWithToolsMultiRound(
   }));
 
   sendLog(`Calling LLM: ${model} at ${baseUrl}`);
+  console.log(`WebSocket [Server] LLM Start: ${model} @ ${baseUrl}`);
 
   let round = 0;
   while (round < maxRounds) {
     round++;
-    sendLog(`LLM round ${round}`);
+    sendLog(`LLM round ${round} starting...`);
+    console.log(`\n--- WebSocket [Server] LLM Round ${round} ---`);
+    console.log(`WebSocket [Server] Messages count: ${messages.length}`);
+    // Log compact summary instead of full payload to avoid event loop freezing
+    console.log(`WebSocket [Server] Message roles: ${messages.map((m: any) => `${m.role}(${typeof m.content === 'string' ? m.content.length : 0}ch)`).join(', ')}`);
 
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
@@ -226,13 +259,20 @@ async function callLlmWithToolsMultiRound(
 
     if (!response.ok) {
       const errorText = await response.text();
+      console.error(`WebSocket [Server] Round ${round} API error: ${response.status} - ${errorText}`);
       throw new Error(`LLM API error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
+    const finishReason = data.choices?.[0]?.finish_reason || 'unknown';
+    const contentLen = data.choices?.[0]?.message?.content?.length || 0;
+    const toolCallCount = data.choices?.[0]?.message?.tool_calls?.length || 0;
+    console.log(`WebSocket [Server] Round ${round} Response: finish_reason=${finishReason}, content=${contentLen}ch, tool_calls=${toolCallCount}`);
+    
     const assistantMessage = data.choices?.[0]?.message;
 
     if (!assistantMessage) {
+      console.error(`WebSocket [Server] Round ${round} choice message is missing.`);
       throw new Error("No response from LLM");
     }
 
@@ -244,6 +284,7 @@ async function callLlmWithToolsMultiRound(
       const parsed = parseToolCallsFromContent(assistantMessage.content);
       if (parsed) {
         sendLog(`Found ${parsed.length} XML-style tool call(s) in content`);
+        console.log(`WebSocket [Server] Parsed XML-style tool calls:`, parsed);
         // Convert to tool_calls format
         toolCalls = parsed.map((tc, idx) => ({
           id: `call_xml_${round}_${idx}`,
@@ -259,12 +300,13 @@ async function callLlmWithToolsMultiRound(
     messages.push(assistantMessage);
 
     if (toolCalls.length === 0) {
-      // No tool calls - this is the final response
-      sendLog(`LLM finished (no more tool calls)`);
+      sendLog(`LLM finished gathering information in round ${round}.`);
+      console.log(`WebSocket [Server] LLM finished tool calls in round ${round}. Content:`, assistantMessage.content);
       return assistantMessage.content || "No content";
     }
 
     sendLog(`LLM requested ${toolCalls.length} tool call(s)`);
+    console.log(`WebSocket [Server] LLM requested ${toolCalls.length} tool calls in round ${round}`);
 
     // Execute each tool call
     for (const toolCall of toolCalls) {
@@ -277,12 +319,14 @@ async function callLlmWithToolsMultiRound(
       }
       
       sendLog(`Executing tool: ${toolName} with args: ${JSON.stringify(toolArgs)}`);
+      console.log(`WebSocket [Server] Executing tool: ${toolName}`, toolArgs);
       
       const tool = tools.find(t => t.name === toolName);
       if (tool) {
         try {
           const result = await tool.execute(toolArgs);
           const truncatedResult = truncateToolResult(String(result), MAX_TOOL_RESULT_LENGTH);
+          console.log(`WebSocket [Server] Tool ${toolName} success (result length: ${truncatedResult.length})`);
           messages.push({
             role: "tool",
             tool_call_id: toolCall.id,
@@ -290,6 +334,7 @@ async function callLlmWithToolsMultiRound(
             content: truncatedResult
           });
         } catch (err: any) {
+          console.error(`WebSocket [Server] Tool ${toolName} execution error:`, err);
           messages.push({
             role: "tool",
             tool_call_id: toolCall.id,
@@ -298,6 +343,7 @@ async function callLlmWithToolsMultiRound(
           });
         }
       } else {
+        console.error(`WebSocket [Server] Tool ${toolName} not found in registered tools.`);
         messages.push({
           role: "tool",
           tool_call_id: toolCall.id,
@@ -307,13 +353,27 @@ async function callLlmWithToolsMultiRound(
       }
     }
     
-    // Continue to next round
     sendLog(`Tool execution complete, continuing to round ${round + 1}...`);
   }
 
   // Max rounds reached - fetch the final model summary based on the gathered message history
-  sendLog(`Max tool rounds (${maxRounds}) reached. Summarizing gathered exploration findings...`);
+  sendLog(`Max tool rounds (${maxRounds}) reached. Summarizing gathered findings...`);
+  console.log(`WebSocket [Server] Max rounds reached (${maxRounds}). Running final clean summary call.`);
   try {
+    const toolExecutions = messages
+      .filter(m => m.role === "tool")
+      .map(m => `### Tool [${m.name}] output:\n${m.content}`)
+      .join("\n\n");
+
+    const finalMessages = [
+      { role: "system", content: "You are a codebase exploration assistant. Summarize the findings and answer the user's question clearly based on the provided tool outputs." },
+      ...chatHistory,
+      { role: "user", content: `${userMessage}\n\nHere are the results of the files read and codebase searches:\n${toolExecutions}` }
+    ];
+
+    console.log(`WebSocket [Server] Outgoing final summary messages count: ${finalMessages.length}`);
+    console.log(`WebSocket [Server] Final summary message roles: ${finalMessages.map((m: any) => `${m.role}(${typeof m.content === 'string' ? m.content.length : 0}ch)`).join(', ')}`);
+
     const finalResponse = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
@@ -322,16 +382,16 @@ async function callLlmWithToolsMultiRound(
       },
       body: JSON.stringify({
         model: model,
-        messages: messages,
-        tools: openaiTools,
-        tool_choice: "none"
+        messages: finalMessages
       })
     });
 
     if (finalResponse.ok) {
       const finalData = await finalResponse.json();
+      console.log(`WebSocket [Server] Final summary response: ${finalData.choices?.[0]?.message?.content?.length || 0} chars`);
       const summaryContent = finalData.choices?.[0]?.message?.content;
       if (summaryContent) {
+        sendLog(`Final summary generated successfully.`);
         return summaryContent;
       }
     } else {
@@ -344,8 +404,15 @@ async function callLlmWithToolsMultiRound(
     sendLog(`Final summary call exception: ${finalCallError.message}`);
   }
 
-  const lastMsg = messages[messages.length - 1];
-  return lastMsg.content || "Max rounds reached, conversation ended.";
+  console.warn("WebSocket [Server] Summary generation failed. Falling back to structured tools output.");
+  
+  // Format the raw tool executions nicely in markdown so the user gets actual info instead of grep lines
+  const toolExecutionsSummary = messages
+    .filter(m => m.role === "tool")
+    .map(m => `### Tool Output [${m.name}]\n${m.content}`)
+    .join("\n\n");
+
+  return `Exploration completed. I gathered the following codebase information:\n\n${toolExecutionsSummary}`;
 }
 
 // ── Codebase Exploration Tool Factories ──────────────────────────
@@ -539,14 +606,94 @@ const wss = new WebSocketServer({ server });
 // Map to track active websocket callbacks for tool requests
 const pendingRequests = new Map<string, (response: any) => void>();
 
+// Timeout for pending tool requests (30 seconds)
+const PENDING_REQUEST_TIMEOUT_MS = 30_000;
+
 // Helper to generate unique request IDs
 let nextRequestId = 1;
 function getNextId() {
   return `req_${nextRequestId++}`;
 }
 
+/** Register a pending request with an automatic timeout. Returns a cleanup function. */
+function registerPendingRequest(requestId: string, resolver: (response: any) => void): () => void {
+  const timer = setTimeout(() => {
+    if (pendingRequests.has(requestId)) {
+      console.warn(`WebSocket [Server] Pending request ${requestId} timed out after ${PENDING_REQUEST_TIMEOUT_MS}ms`);
+      pendingRequests.delete(requestId);
+      resolver({ error: `Request timed out after ${PENDING_REQUEST_TIMEOUT_MS / 1000}s — client may have disconnected.` });
+    }
+  }, PENDING_REQUEST_TIMEOUT_MS);
+
+  pendingRequests.set(requestId, (res) => {
+    clearTimeout(timer);
+    resolver(res);
+  });
+
+  return () => {
+    clearTimeout(timer);
+    pendingRequests.delete(requestId);
+  };
+}
+
+/** Clean up all pending requests (called when a WebSocket disconnects). */
+function cleanupPendingRequests() {
+  if (pendingRequests.size > 0) {
+    console.warn(`WebSocket [Server] Cleaning up ${pendingRequests.size} pending request(s) after client disconnect.`);
+    for (const [id, resolver] of pendingRequests) {
+      try {
+        resolver({ error: "WebSocket client disconnected before response was received." });
+      } catch (e) {
+        console.error(`WebSocket [Server] Error cleaning up request ${id}:`, e);
+      }
+    }
+    pendingRequests.clear();
+  }
+}
+
+/** Safely send a payload over a WebSocket connection, guarding against CLOSED/CLOSING states and unexpected write failures. */
+function safeSend(ws: WebSocket, payload: any) {
+  if (!ws) return;
+  if (ws.readyState === WebSocket.OPEN) {
+    try {
+      ws.send(JSON.stringify(payload));
+    } catch (err: any) {
+      console.error("WebSocket [Server] Error in ws.send:", err);
+      try {
+        fs.appendFileSync(
+          path.join(process.cwd(), "sidecar_error.log"),
+          `[${new Date().toISOString()}] WebSocket Send Error: ${err?.stack || err}\n\n`
+        );
+      } catch (logErr) {
+        console.error("Failed to write to sidecar_error.log:", logErr);
+      }
+    }
+  } else {
+    const readyStateLabels: Record<number, string> = {
+      0: "CONNECTING",
+      1: "OPEN",
+      2: "CLOSING",
+      3: "CLOSED"
+    };
+    const stateStr = readyStateLabels[ws.readyState] || String(ws.readyState);
+    console.warn(`WebSocket [Server] Cannot send message, socket not open (readyState: ${stateStr}). Payload type: ${payload?.type}`);
+  }
+}
+
 wss.on("connection", (ws: WebSocket) => {
   console.log("WebSocket [Server] Client connected to Pi Sidecar");
+
+  ws.on("error", (error) => {
+    console.error("WebSocket [Server] Client connection error:", error);
+    try {
+      fs.appendFileSync(
+        path.join(process.cwd(), "sidecar_error.log"),
+        `[${new Date().toISOString()}] WebSocket Connection Error: ${error?.stack || error}\n\n`
+      );
+    } catch (logErr) {
+      console.error("Failed to write to sidecar_error.log:", logErr);
+    }
+  });
 
   ws.on("message", async (messageStr: string) => {
     let data;
@@ -585,7 +732,7 @@ wss.on("connection", (ws: WebSocket) => {
 
       // Helper to log status back to React node UI
       const sendLog = (message: string) => {
-        ws.send(JSON.stringify({ type: "log", nodeId, message }));
+        safeSend(ws, { type: "log", nodeId, message });
       };
 
       try {
@@ -613,21 +760,22 @@ wss.on("connection", (ws: WebSocket) => {
         const readVfsTool = {
           name: "read_file",
           description: "Read a file's content from the virtual workspace.",
-          execute: async ({ path }: { path: string }) => {
-            console.log(`WebSocket [Server] tool read_file requested: ${path}`);
-            sendLog(`AI reading file context: ${path}`);
+          execute: async ({ path: filePath }: { path: string }) => {
+            console.log(`WebSocket [Server] tool read_file requested: ${filePath}`);
+            sendLog(`AI reading file context: ${filePath}`);
+            const resolvedPath = path.isAbsolute(filePath) ? filePath : path.join(workspaceRoot, filePath);
             return new Promise((resolve, reject) => {
               const requestId = getNextId();
-              pendingRequests.set(requestId, (res) => {
+              registerPendingRequest(requestId, (res) => {
                 if (res.error) {
-                  console.error(`WebSocket [Server] read_file failed for: ${path}`, res.error);
+                  console.error(`WebSocket [Server] read_file failed for: ${resolvedPath}`, res.error);
                   reject(new Error(res.error));
                 } else {
-                  console.log(`WebSocket [Server] read_file success for: ${path} (${res.content?.length || 0} chars)`);
+                  console.log(`WebSocket [Server] read_file success for: ${resolvedPath} (${res.content?.length || 0} chars)`);
                   resolve(res.content);
                 }
               });
-              ws.send(JSON.stringify({ type: "read_file", requestId, path }));
+              safeSend(ws, { type: "read_file", requestId, path: resolvedPath });
             });
           }
         };
@@ -635,24 +783,25 @@ wss.on("connection", (ws: WebSocket) => {
         const writeVfsTool = {
           name: "write_file",
           description: "Write or edit a file's content in the virtual workspace.",
-          execute: async ({ path, content }: { path: string; content: string }) => {
-            console.log(`WebSocket [Server] tool write_file requested: ${path} (${content.length} chars)`);
-            sendLog(`AI modifying file: ${path}`);
+          execute: async ({ path: filePath, content }: { path: string; content: string }) => {
+            console.log(`WebSocket [Server] tool write_file requested: ${filePath} (${content.length} chars)`);
+            sendLog(`AI modifying file: ${filePath}`);
+            const resolvedPath = path.isAbsolute(filePath) ? filePath : path.join(workspaceRoot, filePath);
             // Track modification
-            modifiedFiles.add(path);
+            modifiedFiles.add(resolvedPath);
             
             return new Promise((resolve, reject) => {
               const requestId = getNextId();
-              pendingRequests.set(requestId, (res) => {
+              registerPendingRequest(requestId, (res) => {
                 if (res.error) {
-                  console.error(`WebSocket [Server] write_file failed for: ${path}`, res.error);
+                  console.error(`WebSocket [Server] write_file failed for: ${resolvedPath}`, res.error);
                   reject(new Error(res.error));
                 } else {
-                  console.log(`WebSocket [Server] write_file success for: ${path}`);
+                  console.log(`WebSocket [Server] write_file success for: ${resolvedPath}`);
                   resolve({ success: true });
                 }
               });
-              ws.send(JSON.stringify({ type: "write_file", requestId, path, content }));
+              safeSend(ws, { type: "write_file", requestId, path: resolvedPath, content });
             });
           }
         };
@@ -752,25 +901,21 @@ Remember:
         const finalModifiedList = Array.from(modifiedFiles);
         console.log(`WebSocket [Server] task execution complete! Modified files:`, finalModifiedList);
 
-        ws.send(
-          JSON.stringify({
-            type: "execution_complete",
-            nodeId,
-            result: {
-              ...runResult,
-              modified: finalModifiedList.length > 0 ? finalModifiedList : (runResult?.modified || [])
-            }
-          })
-        );
+        safeSend(ws, {
+          type: "execution_complete",
+          nodeId,
+          result: {
+            ...runResult,
+            modified: finalModifiedList.length > 0 ? finalModifiedList : (runResult?.modified || [])
+          }
+        });
       } catch (err: any) {
         console.error("WebSocket [Server] Execution failed:", err);
-        ws.send(
-          JSON.stringify({
-            type: "execution_error",
-            nodeId,
-            error: err.message
-          })
-        );
+        safeSend(ws, {
+          type: "execution_error",
+          nodeId,
+          error: err.message
+        });
       }
     }
 
@@ -780,7 +925,7 @@ Remember:
       console.log(`WebSocket [Server] global_explore starting`, { nodeId, workspaceRoot, model });
 
       const sendLog = (message: string) => {
-        ws.send(JSON.stringify({ type: "log", nodeId, message }));
+        safeSend(ws, { type: "log", nodeId, message });
       };
 
       try {
@@ -817,7 +962,7 @@ Remember:
             sendLog(`Reading file: ${filePath}`);
             return new Promise((resolve, reject) => {
               const requestId = getNextId();
-              pendingRequests.set(requestId, (res) => {
+              registerPendingRequest(requestId, (res) => {
                 if (res.error) {
                   console.error(`WebSocket [Server] read_file error: ${res.error}`);
                   reject(new Error(res.error));
@@ -826,7 +971,7 @@ Remember:
                   resolve(res.content);
                 }
               });
-              ws.send(JSON.stringify({ type: "read_file", requestId, path: filePath }));
+              safeSend(ws, { type: "read_file", requestId, path: resolvedPath });
             });
           }
         };
@@ -921,7 +1066,8 @@ IMPORTANT: End your response with a section marked "--- SUMMARY ---" that contai
             tools as Array<{ name: string; description: string; inputSchema?: any; execute: (args: any) => Promise<any> }>,
             workspaceRoot,
             sendLog,
-            5 // max 5 rounds of tool calls
+            5, // max 5 rounds of tool calls
+            chatHistory || []
           );
 
           runResult = { response: responseText };
@@ -952,19 +1098,21 @@ IMPORTANT: End your response with a section marked "--- SUMMARY ---" that contai
           summary = (runResult as any).summary;
         }
 
-        ws.send(JSON.stringify({
+        console.log(`WebSocket [Server] Global Explore completed. Response length: ${responseText.length} chars`);
+
+        safeSend(ws, {
           type: "global_explore_complete",
           nodeId,
           response: responseText,
           summary
-        }));
+        });
       } catch (err: any) {
         console.error("WebSocket [Server] global_explore error:", err);
-        ws.send(JSON.stringify({
+        safeSend(ws, {
           type: "global_explore_error",
           nodeId,
           error: err.message
-        }));
+        });
       }
     }
 
@@ -993,13 +1141,14 @@ IMPORTANT: End your response with a section marked "--- SUMMARY ---" that contai
           name: "read_file",
           description: "Read a file from the workspace.",
           execute: async ({ path: filePath }: { path: string }) => {
+            const resolvedPath = path.isAbsolute(filePath) ? filePath : path.join(workspaceRoot, filePath);
             return new Promise((resolve, reject) => {
               const requestId = getNextId();
-              pendingRequests.set(requestId, (res) => {
+              registerPendingRequest(requestId, (res) => {
                 if (res.error) reject(new Error(res.error));
                 else resolve(res.content);
               });
-              ws.send(JSON.stringify({ type: "read_file", requestId, path: filePath }));
+              safeSend(ws, { type: "read_file", requestId, path: resolvedPath });
             });
           }
         };
@@ -1008,13 +1157,14 @@ IMPORTANT: End your response with a section marked "--- SUMMARY ---" that contai
           name: "write_file",
           description: "Write file content to the virtual workspace.",
           execute: async ({ path: filePath, content }: { path: string; content: string }) => {
+            const resolvedPath = path.isAbsolute(filePath) ? filePath : path.join(workspaceRoot, filePath);
             return new Promise((resolve, reject) => {
               const requestId = getNextId();
-              pendingRequests.set(requestId, (res) => {
+              registerPendingRequest(requestId, (res) => {
                 if (res.error) reject(new Error(res.error));
                 else resolve({ success: true });
               });
-              ws.send(JSON.stringify({ type: "write_file", requestId, path: filePath, content }));
+              safeSend(ws, { type: "write_file", requestId, path: resolvedPath, content });
             });
           }
         };
@@ -1064,24 +1214,25 @@ Workspace root: ${workspaceRoot || "unknown"}
           }
         }
 
-        ws.send(JSON.stringify({
+        safeSend(ws, {
           type: "reconciliation_complete",
           edgeId,
           response
-        }));
+        });
       } catch (err: any) {
         console.error("WebSocket [Server] reconciliate_edge error:", err);
-        ws.send(JSON.stringify({
+        safeSend(ws, {
           type: "reconciliation_error",
           edgeId,
           error: err.message
-        }));
+        });
       }
     }
   });
 
-  ws.on("close", () => {
-    console.log("WebSocket [Server] Client disconnected");
+  ws.on("close", (code, reason) => {
+    console.log(`WebSocket [Server] Client disconnected (code: ${code}, reason: "${reason ? reason.toString() : ""}"`);
+    cleanupPendingRequests();
   });
 });
 

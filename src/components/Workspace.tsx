@@ -180,8 +180,13 @@ export const Workspace: React.FC = () => {
       setNodeStatus(nodeId, "error");
     };
 
-    socket.onclose = () => {
-      console.log("WebSocket connection closed");
+    socket.onclose = (event) => {
+      console.log(`[Workspace] WebSocket closed (code: ${event.code}, reason: "${event.reason}", clean: ${event.wasClean})`);
+      addLog(nodeId, `WebSocket connection closed (code: ${event.code}, reason: "${event.reason || "none"}", clean: ${event.wasClean})`);
+      const currentStatus = useWorkspaceStore.getState().nodeStatus[nodeId];
+      if (currentStatus === "running") {
+        setNodeStatus(nodeId, "error");
+      }
     };
   };
 

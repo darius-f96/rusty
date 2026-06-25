@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Globe, Pencil, Check, Trash2, Sparkles, X, Loader2 } from "lucide-react";
 import { useWorkspaceStore } from "../store";
-import { formatMessageText } from "./SidePane";
+import { processResponse } from "../services/responseProcessingService";
 
 export const GlobalChatNode: React.FC<{ id: string; data: any }> = ({ id, data }) => {
   const updateNode = useWorkspaceStore((state) => state.updateTaskNode);
@@ -153,7 +153,7 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = ({ id, data }
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
             >
-              {formatMessageText(summaryText)}
+              {processResponse(summaryText)}
             </div>
           </div>
         ) : (

@@ -1,4 +1,5 @@
 import { Component, ErrorInfo, ReactNode } from "react";
+import { invoke } from "@tauri-apps/api/core";
 
 interface Props {
   children?: ReactNode;
@@ -24,6 +25,10 @@ export class ErrorBoundary extends Component<Props, State> {
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("ErrorBoundary caught an error:", error, errorInfo);
     this.setState({ errorInfo });
+    invoke("log_to_terminal", {
+      level: "error",
+      message: `React Error Boundary caught crash: ${error?.stack || error}\nComponent Stack:\n${errorInfo?.componentStack}`
+    }).catch((err) => console.error("Failed to log crash to terminal:", err));
   }
 
   public render() {

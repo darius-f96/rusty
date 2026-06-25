@@ -42,7 +42,7 @@ fn check_is_git_repo(root_dir: &str) -> bool {
 /// Fetches the complete git status of the workspace, including current branch name,
 /// staged changes, and unstaged/untracked changes.
 #[tauri::command]
-pub fn git_status(root_dir: String) -> Result<GitStatusResult, String> {
+pub async fn git_status(root_dir: String) -> Result<GitStatusResult, String> {
     let root_path = Path::new(&root_dir);
     if !root_path.exists() {
         return Err("Directory does not exist".into());
@@ -168,7 +168,7 @@ pub fn git_status(root_dir: String) -> Result<GitStatusResult, String> {
 
 /// Initializes a new Git repository in the specified directory path.
 #[tauri::command]
-pub fn git_init(root_dir: String) -> Result<(), String> {
+pub async fn git_init(root_dir: String) -> Result<(), String> {
     let output = Command::new("git")
         .arg("init")
         .current_dir(&root_dir)
@@ -184,7 +184,7 @@ pub fn git_init(root_dir: String) -> Result<(), String> {
 
 /// Stages a file by executing `git add <file>`.
 #[tauri::command]
-pub fn git_stage_file(root_dir: String, file_path: String) -> Result<(), String> {
+pub async fn git_stage_file(root_dir: String, file_path: String) -> Result<(), String> {
     let root_path = Path::new(&root_dir);
     let full_path = Path::new(&file_path);
     let relative = full_path
@@ -209,7 +209,7 @@ pub fn git_stage_file(root_dir: String, file_path: String) -> Result<(), String>
 /// Unstages a file from the index.
 /// Uses `git reset HEAD <file>` if a HEAD ref exists, or `git rm --cached` in an empty repo.
 #[tauri::command]
-pub fn git_unstage_file(root_dir: String, file_path: String) -> Result<(), String> {
+pub async fn git_unstage_file(root_dir: String, file_path: String) -> Result<(), String> {
     let root_path = Path::new(&root_dir);
     let full_path = Path::new(&file_path);
     let relative = full_path
@@ -251,7 +251,7 @@ pub fn git_unstage_file(root_dir: String, file_path: String) -> Result<(), Strin
 /// Attempts `git checkout -- <file>`, falling back to `git restore <file>`,
 /// and deletes the physical file if it is fully untracked.
 #[tauri::command]
-pub fn git_discard_changes(root_dir: String, file_path: String) -> Result<(), String> {
+pub async fn git_discard_changes(root_dir: String, file_path: String) -> Result<(), String> {
     let root_path = Path::new(&root_dir);
     let full_path = Path::new(&file_path);
     let relative = full_path
@@ -305,7 +305,7 @@ pub fn git_discard_changes(root_dir: String, file_path: String) -> Result<(), St
 
 /// Commits all currently staged changes with the provided commit message.
 #[tauri::command]
-pub fn git_commit(root_dir: String, message: String) -> Result<(), String> {
+pub async fn git_commit(root_dir: String, message: String) -> Result<(), String> {
     let output = Command::new("git")
         .args(&["commit", "-m", &message])
         .current_dir(&root_dir)
@@ -323,7 +323,7 @@ pub fn git_commit(root_dir: String, message: String) -> Result<(), String> {
 /// Used to construct side-by-side diff editors against currently edited files.
 /// Returns an empty string if the file is untracked or the repository has no commits yet.
 #[tauri::command]
-pub fn git_get_head_content(root_dir: String, file_path: String) -> Result<String, String> {
+pub async fn git_get_head_content(root_dir: String, file_path: String) -> Result<String, String> {
     let root_path = Path::new(&root_dir);
     let full_path = Path::new(&file_path);
     let relative = full_path
@@ -353,7 +353,7 @@ pub fn git_get_head_content(root_dir: String, file_path: String) -> Result<Strin
 /// Retrieves a list of all local branches present in the Git repository.
 /// Returns their short names (e.g., "main", "feature-xyz").
 #[tauri::command]
-pub fn git_get_branches(root_dir: String) -> Result<Vec<String>, String> {
+pub async fn git_get_branches(root_dir: String) -> Result<Vec<String>, String> {
     let output = Command::new("git")
         .args(&["branch", "--format=%(refname:short)"])
         .current_dir(&root_dir)
@@ -376,7 +376,7 @@ pub fn git_get_branches(root_dir: String) -> Result<Vec<String>, String> {
 
 /// Performs a checkout to switch the repository's active branch.
 #[tauri::command]
-pub fn git_checkout_branch(root_dir: String, branch_name: String) -> Result<(), String> {
+pub async fn git_checkout_branch(root_dir: String, branch_name: String) -> Result<(), String> {
     let output = Command::new("git")
         .args(&["checkout", &branch_name])
         .current_dir(&root_dir)
@@ -394,7 +394,7 @@ pub fn git_checkout_branch(root_dir: String, branch_name: String) -> Result<(), 
 /// Used to diff against HEAD (for staged files) or current VFS (for unstaged files).
 /// Falls back to the HEAD version if not explicitly modified in the index.
 #[tauri::command]
-pub fn git_get_index_content(root_dir: String, file_path: String) -> Result<String, String> {
+pub async fn git_get_index_content(root_dir: String, file_path: String) -> Result<String, String> {
     let root_path = Path::new(&root_dir);
     let full_path = Path::new(&file_path);
     let relative = full_path
@@ -414,16 +414,16 @@ pub fn git_get_index_content(root_dir: String, file_path: String) -> Result<Stri
                 Ok(String::from_utf8_lossy(&out.stdout).into_owned())
             } else {
                 // Fall back to HEAD content if index fetch fails
-                git_get_head_content(root_dir, file_path)
+                git_get_head_content(root_dir, file_path).await
             }
         }
-        Err(_) => git_get_head_content(root_dir, file_path),
+        Err(_) => git_get_head_content(root_dir, file_path).await,
     }
 }
 
 /// Pulls remote commits from the upstream repository into the active branch.
 #[tauri::command]
-pub fn git_pull(root_dir: String) -> Result<(), String> {
+pub async fn git_pull(root_dir: String) -> Result<(), String> {
     let output = Command::new("git")
         .arg("pull")
         .current_dir(&root_dir)
@@ -440,7 +440,7 @@ pub fn git_pull(root_dir: String) -> Result<(), String> {
 /// Pushes local committed changes to the remote repository.
 /// Automatically sets the upstream origin tracking branch if not already configured.
 #[tauri::command]
-pub fn git_push(root_dir: String, branch_name: String) -> Result<(), String> {
+pub async fn git_push(root_dir: String, branch_name: String) -> Result<(), String> {
     // 1. Try a regular push first
     let output = Command::new("git")
         .arg("push")
@@ -495,7 +495,7 @@ pub struct GitCommitInfo {
 
 /// Retrieves the last 100 commits from all branches and flags commits that are unpushed.
 #[tauri::command]
-pub fn git_get_commit_history(root_dir: String) -> Result<Vec<GitCommitInfo>, String> {
+pub async fn git_get_commit_history(root_dir: String) -> Result<Vec<GitCommitInfo>, String> {
     if !Path::new(&root_dir).exists() {
         return Err("Directory does not exist".into());
     }
@@ -580,7 +580,7 @@ pub struct GitCommitFileStatus {
 
 /// Retrieves the list of files modified, added, or deleted in a specific commit.
 #[tauri::command]
-pub fn git_get_commit_files(root_dir: String, commit_hash: String) -> Result<Vec<GitCommitFileStatus>, String> {
+pub async fn git_get_commit_files(root_dir: String, commit_hash: String) -> Result<Vec<GitCommitFileStatus>, String> {
     if !Path::new(&root_dir).exists() {
         return Err("Directory does not exist".into());
     }
@@ -633,7 +633,7 @@ pub fn git_get_commit_files(root_dir: String, commit_hash: String) -> Result<Vec
 /// Returns the content of a file at a specific Git revision reference (e.g. "HEAD", a branch name, or a commit hash).
 /// Returns an empty string if the file was not tracked/did not exist at that revision, or if the revision is invalid.
 #[tauri::command]
-pub fn git_get_file_content_at_rev(root_dir: String, revision: String, file_path: String) -> Result<String, String> {
+pub async fn git_get_file_content_at_rev(root_dir: String, revision: String, file_path: String) -> Result<String, String> {
     let root_path = Path::new(&root_dir);
     let full_path = Path::new(&file_path);
     let relative = full_path
@@ -662,7 +662,7 @@ pub fn git_get_file_content_at_rev(root_dir: String, revision: String, file_path
 /// Discards all unstaged changes in the repository.
 /// Executes `git checkout -- .` and `git clean -df` to remove untracked files.
 #[tauri::command]
-pub fn git_discard_all_changes(root_dir: String) -> Result<(), String> {
+pub async fn git_discard_all_changes(root_dir: String) -> Result<(), String> {
     // Discard changes to tracked files
     Command::new("git")
         .args(&["checkout", "--", "."])
@@ -682,7 +682,7 @@ pub fn git_discard_all_changes(root_dir: String) -> Result<(), String> {
 
 /// Reverts a specific commit by executing `git revert --no-edit <commit_hash>`.
 #[tauri::command]
-pub fn git_revert_commit(root_dir: String, commit_hash: String) -> Result<(), String> {
+pub async fn git_revert_commit(root_dir: String, commit_hash: String) -> Result<(), String> {
     let output = Command::new("git")
         .args(&["revert", "--no-edit", &commit_hash])
         .current_dir(&root_dir)
@@ -698,7 +698,7 @@ pub fn git_revert_commit(root_dir: String, commit_hash: String) -> Result<(), St
 
 /// Resets the current branch to a specific commit by executing `git reset --hard <commit_hash>`.
 #[tauri::command]
-pub fn git_reset_to_commit(root_dir: String, commit_hash: String) -> Result<(), String> {
+pub async fn git_reset_to_commit(root_dir: String, commit_hash: String) -> Result<(), String> {
     let output = Command::new("git")
         .args(&["reset", "--hard", &commit_hash])
         .current_dir(&root_dir)

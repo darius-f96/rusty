@@ -3,7 +3,7 @@ import { X, AlertTriangle, CheckCircle2, MessageSquare, Send, Loader2, Code } fr
 import { useWorkspaceStore } from "../store";
 import { invoke } from "@tauri-apps/api/core";
 import { DiffEditor } from "@monaco-editor/react";
-import { formatMessageText } from "./SidePane";
+import { processResponse } from "../services/responseProcessingService";
 
 interface EdgeInspectorPaneProps {
   onClose: () => void;
@@ -193,12 +193,24 @@ export const EdgeInspectorPane: React.FC<EdgeInspectorPaneProps> = ({ onClose })
       }
     };
 
-    socket.onerror = () => {
+    socket.onerror = (error) => {
+      console.error(`[EdgeInspectorPane] WebSocket error:`, error);
       setChatMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "Failed to connect to sidecar." },
+        { role: "assistant", content: "Failed to connect to sidecar. Ensure the sidecar server is running." },
       ]);
       setIsResolving(false);
+    };
+
+    socket.onclose = (event) => {
+      console.log(`[EdgeInspectorPane] WebSocket closed (code: ${event.code}, reason: "${event.reason}", clean: ${event.wasClean})`);
+      if (isResolving) {
+        setChatMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: `Connection closed unexpectedly (WebSocket code: ${event.code}).` }
+        ]);
+        setIsResolving(false);
+      }
     };
   };
 
@@ -374,7 +386,7 @@ export const EdgeInspectorPane: React.FC<EdgeInspectorPaneProps> = ({ onClose })
                     {msg.role === "user" ? "You" : msg.role === "system" ? "System" : "Resolver"}
                   </span>
                   <div className="leading-relaxed whitespace-pre-wrap text-[var(--text-normal)]">
-                    {formatMessageText(msg.content)}
+                    {processResponse(msg.content)}
                   </div>
                 </div>
               ))}

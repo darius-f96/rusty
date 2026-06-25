@@ -17,7 +17,7 @@ pub struct FileEntry {
 pub struct VfsState(pub Arc<Mutex<HashMap<String, String>>>);
 
 #[tauri::command]
-fn read_file_vfs(state: tauri::State<'_, VfsState>, path: String) -> Result<String, String> {
+async fn read_file_vfs(state: tauri::State<'_, VfsState>, path: String) -> Result<String, String> {
     println!("Rust [read_file_vfs] called for path: {}", path);
     let vfs = state.0.lock().map_err(|e| e.to_string())?;
 
@@ -38,7 +38,7 @@ fn read_file_vfs(state: tauri::State<'_, VfsState>, path: String) -> Result<Stri
 }
 
 #[tauri::command]
-fn write_file_vfs(
+async fn write_file_vfs(
     state: tauri::State<'_, VfsState>,
     path: String,
     content: String,
@@ -54,7 +54,7 @@ fn write_file_vfs(
 }
 
 #[tauri::command]
-fn apply_vfs_to_disk(state: tauri::State<'_, VfsState>) -> Result<(), String> {
+async fn apply_vfs_to_disk(state: tauri::State<'_, VfsState>) -> Result<(), String> {
     println!("Rust [apply_vfs_to_disk] flushing in-memory VFS changes to local disk...");
     let mut vfs = state.0.lock().map_err(|e| e.to_string())?;
     for (path_str, content) in vfs.drain() {
@@ -70,7 +70,7 @@ fn apply_vfs_to_disk(state: tauri::State<'_, VfsState>) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn get_directory_structure(root_dir: String) -> Result<Vec<FileEntry>, String> {
+async fn get_directory_structure(root_dir: String) -> Result<Vec<FileEntry>, String> {
     println!(
         "Rust [get_directory_structure] reading structure for: {}",
         root_dir
@@ -84,7 +84,7 @@ fn get_directory_structure(root_dir: String) -> Result<Vec<FileEntry>, String> {
 }
 
 #[tauri::command]
-fn read_file_disk(path: String) -> Result<String, String> {
+async fn read_file_disk(path: String) -> Result<String, String> {
     println!(
         "Rust [read_file_disk] reading directly from physical disk: {}",
         path
@@ -98,7 +98,7 @@ fn read_file_disk(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn write_file_disk(
+async fn write_file_disk(
     state: tauri::State<'_, VfsState>,
     path: String,
     content: String,
@@ -164,7 +164,7 @@ fn read_dir_recursive(path: &Path) -> Result<Vec<FileEntry>, String> {
 }
 
 #[tauri::command]
-fn create_file(path: String) -> Result<(), String> {
+async fn create_file(path: String) -> Result<(), String> {
     let path_buf = PathBuf::from(&path);
     if path_buf.exists() {
         return Err("File already exists".into());
@@ -177,7 +177,7 @@ fn create_file(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn create_directory(path: String) -> Result<(), String> {
+async fn create_directory(path: String) -> Result<(), String> {
     let path_buf = PathBuf::from(&path);
     if path_buf.exists() {
         return Err("Directory already exists".into());
@@ -187,7 +187,7 @@ fn create_directory(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn delete_file_or_dir(path: String) -> Result<(), String> {
+async fn delete_file_or_dir(path: String) -> Result<(), String> {
     let path_buf = PathBuf::from(&path);
     if !path_buf.exists() {
         return Err("Path does not exist".into());
@@ -201,7 +201,12 @@ fn delete_file_or_dir(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn move_file_or_dir(src: String, dest: String) -> Result<(), String> {
+async fn log_to_terminal(level: String, message: String) {
+    println!("JS [{}] {}", level, message);
+}
+
+#[tauri::command]
+async fn move_file_or_dir(src: String, dest: String) -> Result<(), String> {
     let src_path = PathBuf::from(&src);
     let dest_path = PathBuf::from(&dest);
     if !src_path.exists() {
@@ -224,6 +229,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(VfsState(Arc::new(Mutex::new(HashMap::new()))))
         .invoke_handler(tauri::generate_handler![
+            log_to_terminal,
             read_file_vfs,
             write_file_vfs,
             apply_vfs_to_disk,
