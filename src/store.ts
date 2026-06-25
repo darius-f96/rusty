@@ -102,6 +102,7 @@ export interface WorkspaceState {
   setPathExpanded: (path: string, expanded: boolean) => void;
   togglePathExpanded: (path: string) => void;
   collapseAllFolders: () => void;
+  addAndConnectContextNode: (x: number, y: number, taskId: string, taskHandleId: string) => void;
 }
 
 export const useWorkspaceStore = create<WorkspaceState>((set) => ({
@@ -202,9 +203,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     edges: applyEdgeChanges(changes, state.edges),
   })),
   
-  onConnect: (connection) => set((state) => ({
-    edges: addEdge(connection, state.edges),
-  })),
+  onConnect: (connection) => set((state) => {
+    const isContext = connection.source?.startsWith("context");
+    const edgeStyle = isContext ? { stroke: "#10b981", strokeWidth: 2 } : undefined;
+    const newEdge = {
+      ...connection,
+      style: edgeStyle
+    };
+    return {
+      edges: addEdge(newEdge, state.edges),
+    };
+  }),
 
   addContextNode: (x, y, fileContext) => set((state) => {
     const id = `context_${Date.now()}`;
@@ -361,5 +370,35 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   collapseAllFolders: () => set({
     expandedPaths: {},
     collapseAllTrigger: Date.now()
+  }),
+  addAndConnectContextNode: (x, y, taskId, taskHandleId) => set((state) => {
+    const ctxId = `context_${Date.now()}`;
+    const newContextNode = {
+      id: ctxId,
+      type: "contextNode",
+      position: { x: x - 100, y: y - 50 },
+      data: {
+        id: ctxId,
+        name: "",
+        description: "",
+        path: "",
+        fileName: "",
+        isDir: false
+      }
+    };
+
+    const newEdge = {
+      id: `edge_${Date.now()}`,
+      source: ctxId,
+      sourceHandle: taskHandleId === "context-in-top" ? "context-out-bottom" : "context-out-top",
+      target: taskId,
+      targetHandle: taskHandleId,
+      style: { stroke: "#10b981", strokeWidth: 2 }
+    };
+
+    return {
+      nodes: [...state.nodes, newContextNode],
+      edges: [...state.edges, newEdge]
+    };
   })
 }));

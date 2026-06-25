@@ -8,7 +8,12 @@ export const ContextNode: React.FC<{ id: string; data: any }> = ({ id, data }) =
   const updateNode = useWorkspaceStore((state) => state.updateTaskNode); // Uses the store's update action
   const openTab = useWorkspaceStore((state) => state.openTab);
   const deleteNode = useWorkspaceStore((state) => state.deleteNode);
+  const edges = useWorkspaceStore((state) => state.edges);
   const [isEditing, setIsEditing] = useState(false);
+
+  const activeEdges = edges.filter((e) => e.source === id);
+  const isTopConnected = activeEdges.some((e) => e.sourceHandle === "context-out-top");
+  const isBottomConnected = activeEdges.some((e) => e.sourceHandle === "context-out-bottom");
 
   const handleFileClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -246,18 +251,22 @@ export const ContextNode: React.FC<{ id: string; data: any }> = ({ id, data }) =
       </div>
 
       {/* Handles */}
-      <Handle
-        type="source"
-        position={Position.Top}
-        id="context-out-top"
-        style={{ background: "#10b981", width: 14, height: 14, border: "2.5px solid var(--bg-sidebar)" }}
-      />
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        id="context-out-bottom"
-        style={{ background: "#10b981", width: 14, height: 14, border: "2.5px solid var(--bg-sidebar)" }}
-      />
+      {!isBottomConnected && (
+        <Handle
+          type="source"
+          position={Position.Top}
+          id="context-out-top"
+          style={{ background: "#10b981", width: 14, height: 14, border: "2.5px solid var(--bg-sidebar)" }}
+        />
+      )}
+      {!isTopConnected && (
+        <Handle
+          type="source"
+          position={Position.Bottom}
+          id="context-out-bottom"
+          style={{ background: "#10b981", width: 14, height: 14, border: "2.5px solid var(--bg-sidebar)" }}
+        />
+      )}
     </div>
   );
 };

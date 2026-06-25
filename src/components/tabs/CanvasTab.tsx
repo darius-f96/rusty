@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import { ReactFlow, Background, BackgroundVariant } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import {
@@ -37,6 +37,82 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ onExecuteNode }) => {
   const addTaskNode = useWorkspaceStore((state) => state.addTaskNode);
 
   const [rfInstance, setRfInstance] = useState<any>(null);
+  const connectionStartRef = useRef<any>(null);
+
+  const onConnectStart = useCallback((_: any, { nodeId, handleId, handleType }: any) => {
+    connectionStartRef.current = { nodeId, handleId, handleType };
+  }, []);
+
+  const onConnectEnd = useCallback(
+    (event: any) => {
+      if (!connectionStartRef.current) return;
+
+      const target = event.target as Element;
+      const isPane = target.classList.contains("react-flow__pane") || target.closest(".react-flow__pane");
+
+      if (isPane && rfInstance) {
+        const { nodeId, handleId } = connectionStartRef.current;
+        const startNode = nodes.find((n) => n.id === nodeId);
+        
+        if (startNode && startNode.type === "taskNode" && handleId && handleId.startsWith("context-in")) {
+          const clientX = event.clientX || (event.touches && event.touches[0]?.clientX);
+          const clientY = event.clientY || (event.touches && event.touches[0]?.clientY);
+
+          if (clientX !== undefined && clientY !== undefined) {
+            const projected = rfInstance.screenToFlowPosition({ x: clientX, y: clientY });
+            useWorkspaceStore.getState().addAndConnectContextNode(
+              projected.x,
+              projected.y,
+              nodeId,
+              handleId
+            );
+          }
+        }
+      }
+
+      connectionStartRef.current = null;
+    },
+    [nodes, rfInstance]
+  );
+
+  const isValidConnection = useCallback(
+    (connection: any) => {
+      const { source, target, sourceHandle, targetHandle } = connection;
+      if (source === target) return false;
+
+      const sourceNode = nodes.find((n) => n.id === source);
+      const targetNode = nodes.find((n) => n.id === target);
+      if (!sourceNode || !targetNode) return false;
+
+      // Context node are not allowed to be connected to other ContextNodes
+      if (sourceNode.type === "contextNode" && targetNode.type === "contextNode") {
+        return false;
+      }
+
+      // Context node is not allowed to connect to more than one TaskNode
+      if (sourceNode.type === "contextNode") {
+        const hasExisting = edges.some(
+          (e) => e.source === source && e.target !== target
+        );
+        if (hasExisting) return false;
+
+        // Must connect to task node context-in handles
+        if (targetNode.type !== "taskNode" || !targetHandle?.startsWith("context-in")) {
+          return false;
+        }
+      }
+
+      // Enforce target logic for task nodes
+      if (sourceNode.type === "taskNode" && targetNode.type === "taskNode") {
+        if (sourceHandle !== "task-out" || targetHandle !== "task-in") {
+          return false;
+        }
+      }
+
+      return true;
+    },
+    [nodes, edges]
+  );
   const [nodeMenuOpen, setNodeMenuOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
@@ -300,6 +376,9 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ onExecuteNode }) => {
             onInit={setRfInstance}
             onDragOver={onDragOver}
             onDrop={onDrop}
+            onConnectStart={onConnectStart}
+            onConnectEnd={onConnectEnd}
+            isValidConnection={isValidConnection}
             proOptions={{ hideAttribution: true }}
             maxZoom={1.2}
             minZoom={0.2}
