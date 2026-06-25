@@ -23,6 +23,7 @@ export const Workspace: React.FC = () => {
 
   const customProviders = useWorkspaceStore((state) => state.customProviders);
   const activeCustomProviderId = useWorkspaceStore((state) => state.activeCustomProviderId);
+  const globalContextSummary = useWorkspaceStore((state) => state.globalContextSummary);
 
   const socketRef = useRef<WebSocket | null>(null);
 
@@ -40,6 +41,19 @@ export const Workspace: React.FC = () => {
         name: n.data.fileName as string,
         isDir: !!n.data.isDir,
       }));
+
+    // Gather text descriptions from connected context nodes
+    const contextDescriptions = connectedEdges
+      .map((edge) => nodes.find((n) => n.id === edge.source))
+      .filter((n): n is Exclude<typeof n, undefined> => n !== undefined && n.type === "contextNode")
+      .map((n) => {
+        const parts: string[] = [];
+        if (n.data.name) parts.push(`[${n.data.name}]`);
+        if (n.data.description) parts.push(n.data.description as string);
+        if (n.data.path) parts.push(`File: ${n.data.path}`);
+        return parts.join(" — ");
+      })
+      .filter((s) => s.length > 0);
 
     console.log("WebSocket [executeNode] starting task execution", { nodeId, inputFiles });
 
@@ -70,6 +84,8 @@ export const Workspace: React.FC = () => {
           model: node.data.model,
           workspaceRoot: rootPath,
           inputFiles,
+          globalContext: globalContextSummary || "",
+          contextDescriptions,
           customProvider:
             provider && provider.id !== "anthropic" && provider.id !== "openai" ? provider : null,
         })

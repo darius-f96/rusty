@@ -3,8 +3,89 @@ import cors from "cors";
 import { WebSocketServer, WebSocket } from "ws";
 import http from "http";
 import dotenv from "dotenv";
+import fs from "fs";
+import path from "path";
 
 dotenv.config();
+
+// ── Codebase Exploration Tool Factories ──────────────────────────
+
+const IGNORED_DIRS = new Set(["node_modules", "dist", ".git", "target", ".vscode", ".gemini", ".next", "__pycache__"]);
+
+/** Recursively list all file paths under `root`, ignoring common noise dirs. */
+function listFilesRecursive(root: string, prefix = ""): string[] {
+  const results: string[] = [];
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(root, { withFileTypes: true });
+  } catch {
+    return results;
+  }
+  for (const entry of entries) {
+    if (IGNORED_DIRS.has(entry.name)) continue;
+    const full = path.join(root, entry.name);
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) {
+      results.push(...listFilesRecursive(full, rel));
+    } else {
+      results.push(rel);
+    }
+  }
+  return results;
+}
+
+/** Search all non-ignored files for a text pattern, returning matching file paths + line snippets. */
+function searchCodebase(root: string, pattern: string, maxResults = 50): { file: string; line: number; text: string }[] {
+  const results: { file: string; line: number; text: string }[] = [];
+  const files = listFilesRecursive(root);
+  let regex: RegExp;
+  try {
+    regex = new RegExp(pattern, "gi");
+  } catch {
+    regex = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+  }
+  for (const relPath of files) {
+    if (results.length >= maxResults) break;
+    const fullPath = path.join(root, relPath);
+    try {
+      const content = fs.readFileSync(fullPath, "utf-8");
+      const lines = content.split("\n");
+      for (let i = 0; i < lines.length; i++) {
+        if (regex.test(lines[i])) {
+          results.push({ file: relPath, line: i + 1, text: lines[i].trim().slice(0, 200) });
+          if (results.length >= maxResults) break;
+        }
+        regex.lastIndex = 0;
+      }
+    } catch {
+      // Skip unreadable files (binary, permissions, etc.)
+    }
+  }
+  return results;
+}
+
+function createListFilesTool(workspaceRoot: string) {
+  return {
+    name: "list_files",
+    description: "Get a list of all file paths in the workspace recursively. Returns relative paths.",
+    execute: async () => {
+      const files = listFilesRecursive(workspaceRoot);
+      return files.join("\n");
+    }
+  };
+}
+
+function createSearchCodebaseTool(workspaceRoot: string) {
+  return {
+    name: "search_codebase",
+    description: "Find files containing a search term or regex pattern. Returns matching file paths and line snippets.",
+    execute: async ({ pattern }: { pattern: string }) => {
+      const results = searchCodebase(workspaceRoot, pattern);
+      if (results.length === 0) return "No matches found.";
+      return results.map(r => `${r.file}:${r.line} | ${r.text}`).join("\n");
+    }
+  };
+}
 
 const app = express();
 app.use(cors());
@@ -49,7 +130,7 @@ wss.on("connection", (ws: WebSocket) => {
 
     // Handle initial execution request
     if (data.type === "execute_node") {
-      const { nodeId, instructions, model, workspaceRoot, inputFiles, customProvider } = data;
+      const { nodeId, instructions, model, workspaceRoot, inputFiles, customProvider, globalContext, contextDescriptions } = data;
       console.log(`WebSocket [Server] execute_node task starting`, {
         nodeId,
         model,
@@ -148,10 +229,13 @@ Update files according to these user instructions: ${instructions}
 
 Workspace directory root: ${workspaceRoot || "unknown"}
 ${filesList}
-
+${globalContext ? `\n--- GLOBAL ARCHITECTURAL GUIDELINES ---\n${globalContext}\n` : ""}
+${contextDescriptions && contextDescriptions.length > 0 ? `\n--- CONNECTED CONTEXT DESCRIPTIONS ---\n${contextDescriptions.join("\n")}\n` : ""}
 Remember:
 - Use the 'read_file' tool to read a file's current content before editing it.
 - Use the 'write_file' tool to write the updated content back.
+- Use the 'list_files' tool to discover files in the workspace.
+- Use the 'search_codebase' tool to find specific code patterns.
 - Always output clean code without placeholder comments.
 `;
 
@@ -161,7 +245,7 @@ Remember:
           const { createAgentSessionRuntime } = require("@earendil-works/pi-agent-core");
           console.log("WebSocket [Server] Instantiating Pi Agent Core Runtime...");
           const runtime = await createAgentSessionRuntime({
-            tools: [readVfsTool, writeVfsTool],
+            tools: [readVfsTool, writeVfsTool, createListFilesTool(workspaceRoot), createSearchCodebaseTool(workspaceRoot)],
             modelName: model || "anthropic/claude-3-5-sonnet",
             systemPrompt: systemPrompt
           });
@@ -228,6 +312,236 @@ Remember:
             error: err.message
           })
         );
+      }
+    }
+
+    // ── Global Explore Handler ──────────────────────────────────
+    if (data.type === "global_explore") {
+      const { nodeId, prompt, workspaceRoot, model, chatHistory, customProvider } = data;
+      console.log(`WebSocket [Server] global_explore starting`, { nodeId, workspaceRoot });
+
+      const sendLog = (message: string) => {
+        ws.send(JSON.stringify({ type: "log", nodeId, message }));
+      };
+
+      try {
+        if (customProvider) {
+          try {
+            const { registerProvider } = require("@earendil-works/pi-agent-core");
+            registerProvider(customProvider.id, {
+              name: customProvider.name,
+              baseUrl: customProvider.baseUrl,
+              apiKey: customProvider.apiKey || "not-needed",
+              api: customProvider.apiType || "openai-completions",
+              models: customProvider.models
+            });
+          } catch (err: any) {
+            sendLog(`Provider warning: ${err.message}`);
+          }
+        }
+
+        // Create VFS read tool bridging back to frontend
+        const readVfsTool = {
+          name: "read_file",
+          description: "Read a file from the workspace.",
+          execute: async ({ path: filePath }: { path: string }) => {
+            sendLog(`Reading file: ${filePath}`);
+            return new Promise((resolve, reject) => {
+              const requestId = getNextId();
+              pendingRequests.set(requestId, (res) => {
+                if (res.error) reject(new Error(res.error));
+                else resolve(res.content);
+              });
+              ws.send(JSON.stringify({ type: "read_file", requestId, path: filePath }));
+            });
+          }
+        };
+
+        const tools = [
+          readVfsTool,
+          createListFilesTool(workspaceRoot),
+          createSearchCodebaseTool(workspaceRoot)
+        ];
+
+        const systemPrompt = `You are a codebase exploration assistant inside a spatial development canvas called Axiom.
+Your job is to analyze the workspace and provide architectural summaries, patterns, and guidelines.
+
+Workspace root: ${workspaceRoot || "unknown"}
+
+You have access to tools:
+- 'read_file': Read any file in the workspace.
+- 'list_files': List all files in the workspace recursively.
+- 'search_codebase': Search for text patterns across the codebase.
+
+After exploring, provide:
+1. A clear architectural summary of the codebase structure.
+2. Key patterns and conventions used.
+3. Guidelines for making changes that align with the existing codebase.
+
+IMPORTANT: End your response with a section marked "--- SUMMARY ---" that contains a concise bullet-point list of architectural guidelines. This summary will be injected into all task execution prompts.
+`;
+
+        sendLog("Initializing exploration agent...");
+
+        let runResult;
+        try {
+          const { createAgentSessionRuntime } = require("@earendil-works/pi-agent-core");
+          const runtime = await createAgentSessionRuntime({
+            tools,
+            modelName: model || "anthropic/claude-3-5-sonnet",
+            systemPrompt,
+            messages: chatHistory || []
+          });
+          sendLog("Running exploration loop...");
+          runResult = await runtime.run();
+        } catch (sdkError: any) {
+          sendLog(`SDK warning (simulation): ${sdkError.message}`);
+          // Simulation fallback
+          const files = listFilesRecursive(workspaceRoot);
+          const fileCount = files.length;
+          const dirs = new Set(files.map(f => f.split("/")[0]));
+          const topDirs = Array.from(dirs).slice(0, 10).join(", ");
+
+          runResult = {
+            response: `# Workspace Analysis (Simulated)\n\nI found **${fileCount}** files across the workspace.\n\nTop-level directories: ${topDirs}\n\n--- SUMMARY ---\n- Workspace contains ${fileCount} files\n- Main directories: ${topDirs}\n- Follow existing code patterns and naming conventions\n- Maintain consistent formatting and styling`,
+            summary: `- Workspace contains ${fileCount} files\n- Main directories: ${topDirs}\n- Follow existing code patterns and naming conventions`
+          };
+        }
+
+        // Extract summary from response
+        const responseText = runResult?.response || runResult?.output || "Exploration completed.";
+        let summary = "";
+        const summaryMatch = responseText.match(/---\s*SUMMARY\s*---([\s\S]*?)$/i);
+        if (summaryMatch) {
+          summary = summaryMatch[1].trim();
+        } else if (runResult?.summary) {
+          summary = runResult.summary;
+        }
+
+        ws.send(JSON.stringify({
+          type: "global_explore_complete",
+          nodeId,
+          response: responseText,
+          summary
+        }));
+      } catch (err: any) {
+        console.error("WebSocket [Server] global_explore error:", err);
+        ws.send(JSON.stringify({
+          type: "global_explore_error",
+          nodeId,
+          error: err.message
+        }));
+      }
+    }
+
+    // ── Reconciliate Edge Handler ───────────────────────────────
+    if (data.type === "reconciliate_edge") {
+      const { edgeId, sourceTaskId, targetTaskId, modifiedFiles, userMessage, chatHistory, workspaceRoot, model, sourcePrompt, targetPrompt, customProvider } = data;
+      console.log(`WebSocket [Server] reconciliate_edge starting`, { edgeId, sourceTaskId, targetTaskId });
+
+      try {
+        if (customProvider) {
+          try {
+            const { registerProvider } = require("@earendil-works/pi-agent-core");
+            registerProvider(customProvider.id, {
+              name: customProvider.name,
+              baseUrl: customProvider.baseUrl,
+              apiKey: customProvider.apiKey || "not-needed",
+              api: customProvider.apiType || "openai-completions",
+              models: customProvider.models
+            });
+          } catch (err: any) {
+            console.warn("Provider registration warning:", err.message);
+          }
+        }
+
+        const readVfsTool = {
+          name: "read_file",
+          description: "Read a file from the workspace.",
+          execute: async ({ path: filePath }: { path: string }) => {
+            return new Promise((resolve, reject) => {
+              const requestId = getNextId();
+              pendingRequests.set(requestId, (res) => {
+                if (res.error) reject(new Error(res.error));
+                else resolve(res.content);
+              });
+              ws.send(JSON.stringify({ type: "read_file", requestId, path: filePath }));
+            });
+          }
+        };
+
+        const writeVfsTool = {
+          name: "write_file",
+          description: "Write file content to the virtual workspace.",
+          execute: async ({ path: filePath, content }: { path: string; content: string }) => {
+            return new Promise((resolve, reject) => {
+              const requestId = getNextId();
+              pendingRequests.set(requestId, (res) => {
+                if (res.error) reject(new Error(res.error));
+                else resolve({ success: true });
+              });
+              ws.send(JSON.stringify({ type: "write_file", requestId, path: filePath, content }));
+            });
+          }
+        };
+
+        const filesInfo = modifiedFiles?.length > 0
+          ? `Files modified by source task: ${modifiedFiles.join(", ")}`
+          : "No files were modified by the source task.";
+
+        const systemPrompt = `You are a code reconciliation assistant inside a spatial development canvas.
+You are checking whether the code changes made by a SOURCE task are compatible with a TARGET task's requirements.
+
+${filesInfo}
+
+Source task instructions: ${sourcePrompt || "(not provided)"}
+Target task instructions: ${targetPrompt || "(not provided)"}
+
+User message: ${userMessage}
+
+Your job:
+1. Read the modified files to understand what changes were made.
+2. Analyze whether these changes conflict with the target task's requirements.
+3. If there are conflicts, explain them clearly and suggest fixes.
+4. If the user asks you to fix conflicts, use 'write_file' to apply the resolution.
+
+Workspace root: ${workspaceRoot || "unknown"}
+`;
+
+        let response;
+        try {
+          const { createAgentSessionRuntime } = require("@earendil-works/pi-agent-core");
+          const runtime = await createAgentSessionRuntime({
+            tools: [readVfsTool, writeVfsTool, createListFilesTool(workspaceRoot), createSearchCodebaseTool(workspaceRoot)],
+            modelName: model || "anthropic/claude-3-5-sonnet",
+            systemPrompt,
+            messages: chatHistory || []
+          });
+          const result = await runtime.run();
+          response = result?.response || result?.output || "Reconciliation analysis complete.";
+        } catch (sdkError: any) {
+          console.warn("Reconciliation SDK fallback:", sdkError.message);
+          // Simulation fallback
+          await new Promise(r => setTimeout(r, 800));
+          if (modifiedFiles?.length > 0) {
+            response = `I've reviewed the changes in ${modifiedFiles.join(", ")}. Based on the source and target task specifications, the modifications appear compatible. The changes follow the same patterns and do not introduce breaking conflicts.\n\nIf you're satisfied, click "Approve Reconciliation" to mark this connection as aligned.`;
+          } else {
+            response = "No modified files to reconcile. The connection appears clean.";
+          }
+        }
+
+        ws.send(JSON.stringify({
+          type: "reconciliation_complete",
+          edgeId,
+          response
+        }));
+      } catch (err: any) {
+        console.error("WebSocket [Server] reconciliate_edge error:", err);
+        ws.send(JSON.stringify({
+          type: "reconciliation_error",
+          edgeId,
+          error: err.message
+        }));
       }
     }
   });

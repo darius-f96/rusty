@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from "react";
+import React, { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { ReactFlow, Background, BackgroundVariant } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import {
@@ -7,16 +7,26 @@ import {
   Maximize,
   ChevronDown,
   Folder,
+  Globe,
+  GitMerge,
 } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
 import { SidePane } from "../SidePane";
+import { EdgeInspectorPane } from "../EdgeInspectorPane";
 import { ContextNode } from "../ContextNode";
 import { TaskNode } from "../TaskNode";
+import { GlobalChatNode } from "../GlobalChatNode";
+import { ReconciliationEdge } from "../ReconciliationEdge";
 import { invoke } from "@tauri-apps/api/core";
 
 const nodeTypes = {
   contextNode: ContextNode,
   taskNode: TaskNode,
+  globalChatNode: GlobalChatNode,
+};
+
+const edgeTypes = {
+  reconciliationEdge: ReconciliationEdge,
 };
 
 interface CanvasTabProps {
@@ -35,6 +45,50 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ onExecuteNode }) => {
   const setSelectedNodeId = useWorkspaceStore((state) => state.setSelectedNodeId);
   const addContextNode = useWorkspaceStore((state) => state.addContextNode);
   const addTaskNode = useWorkspaceStore((state) => state.addTaskNode);
+  const addGlobalChatNode = useWorkspaceStore((state) => state.addGlobalChatNode);
+  const selectedEdgeId = useWorkspaceStore((state) => state.selectedEdgeId);
+  const setSelectedEdgeId = useWorkspaceStore((state) => state.setSelectedEdgeId);
+  const edgeReconciliationStatus = useWorkspaceStore((state) => state.edgeReconciliationStatus);
+  const setEdgeStatus = useWorkspaceStore((state) => state.setEdgeStatus);
+
+  // Convert task-to-task edges to use custom reconciliation edge type
+  const styledEdges = useMemo(() => {
+    return edges.map((edge) => {
+      if (edge.sourceHandle === "task-out" && edge.targetHandle === "task-in") {
+        return { ...edge, type: "reconciliationEdge" };
+      }
+      return edge;
+    });
+  }, [edges]);
+
+  // Check if all sequence wires are reconciled (or there are none)
+  const allWiresReconciled = useMemo(() => {
+    const sequenceEdges = edges.filter(
+      (e) => e.sourceHandle === "task-out" && e.targetHandle === "task-in"
+    );
+    if (sequenceEdges.length === 0) return true;
+    return sequenceEdges.every(
+      (e) => edgeReconciliationStatus[e.id] === "reconciled"
+    );
+  }, [edges, edgeReconciliationStatus]);
+
+  // Reconciliate Graph: mark all sequence wires as unreconciled to trigger checks
+  const handleReconciliateGraph = useCallback(() => {
+    const sequenceEdges = edges.filter(
+      (e) => e.sourceHandle === "task-out" && e.targetHandle === "task-in"
+    );
+    if (sequenceEdges.length === 0) {
+      alert("No task-to-task connections to reconciliate.");
+      return;
+    }
+    sequenceEdges.forEach((edge) => {
+      // Only mark as unreconciled if not already reconciled
+      const currentStatus = edgeReconciliationStatus[edge.id];
+      if (currentStatus !== "reconciled") {
+        setEdgeStatus(edge.id, "unreconciled");
+      }
+    });
+  }, [edges, edgeReconciliationStatus, setEdgeStatus]);
 
   const [rfInstance, setRfInstance] = useState<any>(null);
   const connectionStartRef = useRef<any>(null);
@@ -306,6 +360,18 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ onExecuteNode }) => {
                 <Folder size={13} className="text-emerald-400" />
                 <span>Create Context Node</span>
               </button>
+              <div className="border-t border-[var(--border-color)] my-1" />
+              <button
+                onClick={() => {
+                  const center = getCanvasCenter();
+                  addGlobalChatNode(center.x - 75, center.y - 30);
+                  setNodeMenuOpen(false);
+                }}
+                className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
+              >
+                <Globe size={13} className="text-violet-400" />
+                <span>Create Global Explorer</span>
+              </button>
             </div>
           )}
         </div>
@@ -321,8 +387,21 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ onExecuteNode }) => {
           </button>
 
           <button
+            onClick={handleReconciliateGraph}
+            className="bg-[var(--bg-sidebar)]/80 border border-[var(--border-color)] hover:bg-[var(--bg-header)] text-[var(--text-normal)] text-xs font-mono font-bold px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer hover:border-violet-500/50"
+          >
+            <GitMerge size={13} className="text-violet-400" />
+            <span>Reconciliate Graph</span>
+          </button>
+
+          <button
             onClick={handleApplyChanges}
-            className="bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/85 text-white text-xs font-mono font-bold px-3.5 py-1.5 rounded-lg flex items-center space-x-1.5 transition-all shadow-lg glow-btn cursor-pointer"
+            disabled={!allWiresReconciled}
+            className={`text-white text-xs font-mono font-bold px-3.5 py-1.5 rounded-lg flex items-center space-x-1.5 transition-all shadow-lg cursor-pointer ${
+              allWiresReconciled
+                ? "bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/85 glow-btn"
+                : "bg-[var(--bg-sidebar)] text-[var(--text-muted)] cursor-not-allowed opacity-60"
+            }`}
           >
             <CheckSquare size={13} />
             <span>Apply Pipeline</span>
@@ -353,6 +432,22 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ onExecuteNode }) => {
               <Folder size={13} className="text-emerald-400" />
               <span>Add Context Node</span>
             </button>
+            <div className="border-t border-[var(--border-color)] my-1" />
+            <button
+              onClick={() => {
+                if (!contextMenu || !rfInstance) return;
+                const flowPosition = rfInstance.screenToFlowPosition({
+                  x: contextMenu.screenX,
+                  y: contextMenu.screenY,
+                });
+                addGlobalChatNode(flowPosition.x - 75, flowPosition.y - 30);
+                setContextMenu(null);
+              }}
+              className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
+            >
+              <Globe size={13} className="text-violet-400" />
+              <span>Add Global Explorer</span>
+            </button>
           </div>
         )}
 
@@ -365,11 +460,12 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ onExecuteNode }) => {
         >
           <ReactFlow
             nodes={nodes}
-            edges={edges}
+            edges={styledEdges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             onNodeClick={onNodeClick}
             onPaneClick={onPaneClick}
             onPaneContextMenu={onPaneContextMenu}
@@ -395,6 +491,13 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ onExecuteNode }) => {
         <SidePane
           onClose={() => setSelectedNodeId(null)}
           onExecuteNode={onExecuteNode}
+        />
+      )}
+
+      {/* Edge Inspector Pane */}
+      {selectedEdgeId && !selectedNodeId && (
+        <EdgeInspectorPane
+          onClose={() => setSelectedEdgeId(null)}
         />
       )}
     </div>

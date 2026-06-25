@@ -49,6 +49,12 @@ export interface Tab {
   commitHash?: string;
 }
 
+export interface GlobalChatMessage {
+  role: "user" | "assistant" | "system";
+  content: string;
+  timestamp: string;
+}
+
 export interface WorkspaceState {
   rootPath: string;
   nodes: Node[];
@@ -56,6 +62,8 @@ export interface WorkspaceState {
   selectedNodeId: string | null;
   fileTree: any[];
   nodeLogs: Record<string, string[]>;
+  globalContextSummary: string;
+  globalChatHistory: Record<string, GlobalChatMessage[]>;
   nodeStatus: Record<string, "idle" | "running" | "success" | "error">;
   customProviders: CustomProvider[];
   activeCustomProviderId: string | null;
@@ -63,6 +71,8 @@ export interface WorkspaceState {
   gitStatus: GitStatusResult | null;
   collapseAllTrigger?: number;
   expandedPaths: Record<string, boolean>;
+  selectedEdgeId: string | null;
+  edgeReconciliationStatus: Record<string, "idle" | "unreconciled" | "reconciled">;
   
   setRootPath: (path: string) => void;
   setGitStatus: (status: GitStatusResult | null) => void;
@@ -77,11 +87,15 @@ export interface WorkspaceState {
   
   addContextNode: (x: number, y: number, fileContext?: { path: string; name: string; isDir: boolean }) => void;
   addTaskNode: (x: number, y: number) => void;
+  addGlobalChatNode: (x: number, y: number) => void;
   updateTaskNode: (id: string, data: any) => void;
   deleteNode: (id: string) => void;
   addLog: (nodeId: string, message: string) => void;
   clearLogs: (nodeId: string) => void;
   setNodeStatus: (nodeId: string, status: "idle" | "running" | "success" | "error") => void;
+  setGlobalContextSummary: (summary: string) => void;
+  addGlobalChatMessage: (nodeId: string, message: GlobalChatMessage) => void;
+  clearGlobalChatHistory: (nodeId: string) => void;
   
   addCustomProvider: (provider: CustomProvider) => void;
   setActiveCustomProviderId: (id: string | null) => void;
@@ -103,6 +117,10 @@ export interface WorkspaceState {
   togglePathExpanded: (path: string) => void;
   collapseAllFolders: () => void;
   addAndConnectContextNode: (x: number, y: number, taskId: string, taskHandleId: string) => void;
+  getGlobalChatHistory: (nodeId: string) => GlobalChatMessage[];
+  setSelectedEdgeId: (id: string | null) => void;
+  setEdgeStatus: (edgeId: string, status: "idle" | "unreconciled" | "reconciled") => void;
+  getSequenceEdges: () => Edge[];
 }
 
 export const useWorkspaceStore = create<WorkspaceState>((set) => ({
@@ -114,6 +132,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   nodeLogs: {},
   nodeStatus: {},
   expandedPaths: {},
+  globalContextSummary: "",
+  globalChatHistory: {},
+  selectedEdgeId: null,
+  edgeReconciliationStatus: {},
   customProviders: [
     {
       id: "anthropic",
@@ -283,6 +305,38 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     return { nodes: [...state.nodes, newNode] };
   }),
 
+  addGlobalChatNode: (x, y) => set((state) => {
+    const id = `global_chat_${Date.now()}`;
+
+    // Prevent overlapping nodes
+    let finalX = x;
+    let finalY = y;
+    let attempts = 0;
+    while (
+      state.nodes.some(
+        (n) => Math.abs(n.position.x - finalX) < 60 && Math.abs(n.position.y - finalY) < 60
+      ) &&
+      attempts < 100
+    ) {
+      finalX += 50;
+      finalY += 50;
+      attempts++;
+    }
+
+    const newNode: Node = {
+      id,
+      type: "globalChatNode",
+      position: { x: finalX, y: finalY },
+      data: {
+        id,
+        name: "Global Explorer",
+        status: "idle",
+        summary: ""
+      }
+    };
+    return { nodes: [...state.nodes, newNode] };
+  }),
+
   updateTaskNode: (id, data) => set((state) => ({
     nodes: state.nodes.map((node) => {
       if (node.id === id) {
@@ -324,6 +378,22 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
 
   setNodeStatus: (nodeId, status) => set((state) => ({
     nodeStatus: { ...state.nodeStatus, [nodeId]: status }
+  })),
+
+  setGlobalContextSummary: (summary) => set({ globalContextSummary: summary }),
+
+  addGlobalChatMessage: (nodeId, message) => set((state) => {
+    const history = state.globalChatHistory[nodeId] || [];
+    return {
+      globalChatHistory: {
+        ...state.globalChatHistory,
+        [nodeId]: [...history, message]
+      }
+    };
+  }),
+
+  clearGlobalChatHistory: (nodeId) => set((state) => ({
+    globalChatHistory: { ...state.globalChatHistory, [nodeId]: [] }
   })),
 
   addCustomProvider: (provider) => set((state) => ({
@@ -400,5 +470,18 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       nodes: [...state.nodes, newContextNode],
       edges: [...state.edges, newEdge]
     };
-  })
+  }),
+  getGlobalChatHistory: (nodeId): GlobalChatMessage[] => {
+    return useWorkspaceStore.getState().globalChatHistory[nodeId] || [];
+  },
+  setSelectedEdgeId: (id) => set({ selectedEdgeId: id }),
+  setEdgeStatus: (edgeId, status) => set((state) => ({
+    edgeReconciliationStatus: { ...state.edgeReconciliationStatus, [edgeId]: status }
+  })),
+  getSequenceEdges: (): Edge[] => {
+    const state = useWorkspaceStore.getState();
+    return state.edges.filter(
+      (e) => e.sourceHandle === "task-out" && e.targetHandle === "task-in"
+    );
+  }
 }));
