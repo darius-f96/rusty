@@ -132,7 +132,7 @@ export const SearchPalette: React.FC<SearchPaletteProps> = ({ onClose }) => {
   let currentFlatIndex = 0;
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-start justify-center pt-[15vh] px-4 font-mono select-none">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[9999] flex items-start justify-center pt-[15vh] px-4 font-mono select-none modal-overlay">
       <div
         ref={containerRef}
         className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[65vh]"

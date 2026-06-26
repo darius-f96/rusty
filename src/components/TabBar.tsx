@@ -53,7 +53,7 @@ export const TabBar: React.FC<TabBarProps> = ({ groupId }) => {
       {/* Scrollable Tab Container */}
       <div
         ref={tabsContainerRef}
-        className="flex-1 flex items-stretch h-full overflow-x-auto scrollbar-none scroll-smooth min-w-0"
+        className="flex-1 flex items-stretch h-full overflow-x-auto scrollbar-none scroll-smooth min-w-0 tabs-container"
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => {
           const tabId = e.dataTransfer.getData("text/plain");

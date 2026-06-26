@@ -3,6 +3,7 @@ import { Sidebar } from "./components/Sidebar";
 import { Header } from "./components/Header";
 import { Workspace } from "./components/Workspace";
 import { useWorkspaceStore } from "./store";
+import { SearchPalette } from "./components/SearchPalette";
 
 function App() {
   const devLogs = useWorkspaceStore((state) => state.devLogs);
@@ -10,6 +11,7 @@ function App() {
   const setShowDevConsole = useWorkspaceStore((state) => state.setShowDevConsole);
   const clearDevLogs = useWorkspaceStore((state) => state.clearDevLogs);
   const addDevLog = useWorkspaceStore((state) => state.addDevLog);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const stored = localStorage.getItem("sidebar_width");
@@ -155,6 +157,10 @@ function App() {
           state.closeTab(currentActive, state.activeGroupId);
           console.log(`Shortcut captured: Closed active tab ${currentActive}`);
         }
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        e.stopPropagation();
+        setSearchOpen(true);
       }
     };
 
@@ -167,7 +173,7 @@ function App() {
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-[var(--bg-app)] text-[var(--text-light)] font-sans">
       {/* 1. Header Bar */}
-      <Header />
+      <Header onSearchOpen={() => setSearchOpen(true)} />
 
       {/* 2. Workspace Cards Content Area */}
       <div className="flex-1 flex min-h-0 w-full p-4 pt-2 gap-4 overflow-hidden">
@@ -247,6 +253,10 @@ function App() {
           </div>
         </div>
       </div>
+      {/* Search Command Palette Overlay */}
+      {searchOpen && (
+        <SearchPalette onClose={() => setSearchOpen(false)} />
+      )}
     </div>
   );
 }

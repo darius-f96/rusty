@@ -368,7 +368,7 @@ export const Workspace: React.FC = () => {
   };
 
   return (
-    <div ref={containerRef} className="flex-1 flex h-full min-w-0 overflow-hidden relative bg-[var(--bg-editor)]">
+    <div ref={containerRef} className="flex-1 flex h-full min-w-0 overflow-hidden relative bg-[var(--bg-editor)] workspace-container">
       {editorGroups.map((group, idx) => {
         const widthPercent = (groupSizes[idx] || (1 / editorGroups.length)) * 100;
         const isLast = idx === editorGroups.length - 1;
@@ -378,7 +378,7 @@ export const Workspace: React.FC = () => {
             {/* Editor Pane Column */}
             <div
               style={{ width: `${widthPercent}%` }}
-              className={`flex flex-col h-full min-w-0 overflow-hidden ${
+              className={`flex flex-col h-full min-w-0 overflow-hidden editor-container ${
                 !isLast ? "border-r border-[var(--border-color)]" : ""
               }`}
               onClick={() => {

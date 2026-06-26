@@ -62,3 +62,30 @@
 .react-flow__edge-path {
   shape-rendering: geometricPrecision;
 }
+
+/* Enable hardware accelerated rendering globally for improved quality and frame rates */
+.monaco-editor,
+.react-flow__viewport,
+.react-flow__node,
+.react-flow__edge-path,
+.workspace-container,
+.editor-container,
+.tabs-container,
+.side-pane,
+.modal-overlay {
+  transform: translate3d(0, 0, 0);
+  -webkit-transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  perspective: 1000px;
+  -webkit-perspective: 1000px;
+  transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.modal-overlay {
+  z-index: 9999 !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  backdrop-filter: blur(12px) !important;
+}

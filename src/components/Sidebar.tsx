@@ -151,7 +151,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <div
       ref={containerRef}
-      className="flex h-full z-10 relative bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-[20px] overflow-hidden shadow-lg flex-shrink-0"
+      className="flex h-full z-10 relative bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-[20px] overflow-hidden shadow-lg flex-shrink-0 side-pane"
       style={{ width: `${isExplorerOpen ? sidebarWidth : 56}px` }}
     >
       {/* 1. Left Icon Dock (Activity Bar) */}
