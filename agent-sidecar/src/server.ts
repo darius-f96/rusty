@@ -207,7 +207,7 @@ async function callLlmWithToolsMultiRound(
   tools: Array<{ name: string; description: string; inputSchema?: any; execute: (args: any) => Promise<any> }>,
   workspaceRoot: string,
   sendLog: (msg: string) => void,
-  maxRounds = 5,
+  maxRounds = 50,
   chatHistory: Array<any> = []
 ): Promise<string> {
   const { baseUrl, apiKey, model } = config;
@@ -325,7 +325,8 @@ async function callLlmWithToolsMultiRound(
       if (tool) {
         try {
           const result = await tool.execute(toolArgs);
-          const truncatedResult = truncateToolResult(String(result), MAX_TOOL_RESULT_LENGTH);
+          const resultStr = typeof result === "string" ? result : JSON.stringify(result);
+          const truncatedResult = truncateToolResult(resultStr, MAX_TOOL_RESULT_LENGTH);
           console.log(`WebSocket [Server] Tool ${toolName} success (result length: ${truncatedResult.length})`);
           messages.push({
             role: "tool",
@@ -820,7 +821,7 @@ wss.on("connection", (ws: WebSocket) => {
                   reject(new Error(res.error));
                 } else {
                   console.log(`WebSocket [Server] write_file success for: ${resolvedPath}`);
-                  resolve({ success: true });
+                  resolve(`File successfully written to: ${resolvedPath}`);
                 }
               });
               safeSend(ws, { type: "write_file", requestId, path: resolvedPath, content });
@@ -850,6 +851,13 @@ Remember:
 - Use the 'list_files' tool to discover files in the workspace.
 - Use the 'search_codebase' tool to find specific code patterns.
 - Always output clean code without placeholder comments.
+
+CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
+1. STRICT SCOPE CONTROL: Focus strictly on implementing ONLY what is requested in the user instructions. Do NOT edit, create, or delete any files or configurations that are not directly requested (for example, do not configure RedisConfig, properties files, or build dependencies unless explicitly asked to).
+2. MINIMIZE CODEBASE EXPLORATION: Do not spend tool rounds reading unrelated files or listing directories unless they are directly relevant to the classes/methods you need to write. Avoid scanning the entire codebase.
+3. USE PROVIDED CONTEXT FIRST: If code examples, templates, or snippets are provided in the "<Context>" or "CONNECTED CONTEXT DESCRIPTIONS", use them directly. Do not invent alternative patterns or waste rounds search-matching them. Implement them exactly as specified.
+4. TARGETED WRITING: Go straight to creating or modifying the requested files as quickly as possible. Do not get sidetracked by other improvements or warnings in the codebase.
+5. TERMINATE PROMPTLY: Once you have successfully written or updated all requested files, do NOT run redundant tools (like search_codebase, list_files, or read_file) to double-check or verify your work. Stop calling tools immediately and provide your final response summarizing the changes made.
 `;
 
         // Determine if we should use the multi-round chat-history fallback
@@ -968,7 +976,7 @@ Remember:
               allTools as any,
               workspaceRoot,
               sendLog,
-              20, // max 20 rounds
+              50, // max 50 rounds
               chatHistory ? chatHistory.slice(0, -1) : []
             );
 
@@ -1190,7 +1198,7 @@ IMPORTANT: End your response with a section marked "--- SUMMARY ---" that contai
             tools as Array<{ name: string; description: string; inputSchema?: any; execute: (args: any) => Promise<any> }>,
             workspaceRoot,
             sendLog,
-            15, // max 15 rounds of tool calls
+            50, // max 50 rounds of tool calls
             chatHistory || []
           );
 
@@ -1295,7 +1303,7 @@ IMPORTANT: End your response with a section marked "--- SUMMARY ---" that contai
               const requestId = getNextId();
               registerPendingRequest(requestId, (res) => {
                 if (res.error) reject(new Error(res.error));
-                else resolve({ success: true });
+                else resolve(`File successfully written to: ${resolvedPath}`);
               });
               safeSend(ws, { type: "write_file", requestId, path: resolvedPath, content });
             });
