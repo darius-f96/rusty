@@ -719,12 +719,13 @@ wss.on("connection", (ws: WebSocket) => {
 
     // Handle initial execution request
     if (data.type === "execute_node") {
-      const { nodeId, instructions, model, workspaceRoot, inputFiles, customProvider, globalContext, contextDescriptions } = data;
+      const { nodeId, instructions, model, workspaceRoot, inputFiles, customProvider, globalContext, contextDescriptions, chatHistory } = data;
       console.log(`WebSocket [Server] execute_node task starting`, {
         nodeId,
         model,
         workspaceRoot,
-        inputFilesCount: inputFiles?.length || 0
+        inputFilesCount: inputFiles?.length || 0,
+        chatHistoryCount: chatHistory?.length || 0
       });
 
       // Keep track of files modified by this task execution
@@ -760,6 +761,13 @@ wss.on("connection", (ws: WebSocket) => {
         const readVfsTool = {
           name: "read_file",
           description: "Read a file's content from the virtual workspace.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              path: { type: "string", description: "The file path to read" }
+            },
+            required: ["path"]
+          },
           execute: async ({ path: filePath }: { path: string }) => {
             console.log(`WebSocket [Server] tool read_file requested: ${filePath}`);
             sendLog(`AI reading file context: ${filePath}`);
@@ -783,6 +791,14 @@ wss.on("connection", (ws: WebSocket) => {
         const writeVfsTool = {
           name: "write_file",
           description: "Write or edit a file's content in the virtual workspace.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              path: { type: "string", description: "The file path to write/edit" },
+              content: { type: "string", description: "The full content of the file" }
+            },
+            required: ["path", "content"]
+          },
           execute: async ({ path: filePath, content }: { path: string; content: string }) => {
             console.log(`WebSocket [Server] tool write_file requested: ${filePath} (${content.length} chars)`);
             sendLog(`AI modifying file: ${filePath}`);
@@ -830,73 +846,169 @@ Remember:
 - Always output clean code without placeholder comments.
 `;
 
-        // Simulate Pi SDK run loop or construct actual session runtime
+        // Determine if we should use the multi-round chat-history fallback
         let runResult;
-        try {
-          const { createAgentSession } = await import("@earendil-works/pi-coding-agent");
-          const { getModel } = await import("@earendil-works/pi-ai");
+        let useMultiRound = !!(chatHistory && chatHistory.length > 1);
 
-          let selectedModel;
-          if (model && model.includes("/")) {
-            const [provider, modelName] = model.split("/");
-            selectedModel = getModel(provider, modelName);
-          } else {
-            selectedModel = getModel("anthropic", "claude-3-5-sonnet-20241022");
-          }
-
-          console.log("WebSocket [Server] Creating task session with model:", selectedModel ? (selectedModel as any).modelId || (selectedModel as any).name || "default" : "default");
-
-          const allTools = [readVfsTool, writeVfsTool, createListFilesTool(workspaceRoot), createSearchCodebaseTool(workspaceRoot)];
-
-          const { session } = await createAgentSession({
-            cwd: workspaceRoot,
-            model: selectedModel,
-            tools: ["read", "write", "list_files", "search_codebase"],
-            customTools: allTools as any
-          });
-
-          sendLog("Executing agent reasoning loop...");
-          console.log("WebSocket [Server] Running agent core loop...");
-
-          const result = await session.prompt(instructions);
-          runResult = { status: "success", modified: Array.from(modifiedFiles), response: (result as any).output || (result as any).message?.content || "Task completed." };
-        } catch (sdkError: any) {
-          console.warn("WebSocket [Server] Pi SDK load warning (using simulation fallback):", sdkError.message);
-          sendLog(`Pi SDK load warning (using simulation fallback): ${sdkError.message}`);
-          
-          // Simulation fallback for prototype/offline run
-          await new Promise((resolve) => setTimeout(resolve, 1200));
-          
-          const targetFile = inputFiles && inputFiles.length > 0 
-            ? inputFiles[0].path 
-            : "./src/App.tsx";
-            
-          sendLog(`Simulated AI reading connected target: ${targetFile}`);
+        if (!useMultiRound) {
           try {
-            const text = await readVfsTool.execute({ path: targetFile }) as string;
-            
-            sendLog("Simulated AI planning refactoring edits...");
-            await new Promise((resolve) => setTimeout(resolve, 1200));
-            
-            let updatedContent = text;
-            if (text.includes("Welcome to Tauri + React")) {
-              updatedContent = text.replace(
-                "Welcome to Tauri + React",
-                "Axiom Refactored Code"
-              );
-            } else if (text.trim().length > 0) {
-              updatedContent = `// Edited by Axiom AI simulation at ${new Date().toLocaleTimeString()}\n${text}`;
+            const { createAgentSession } = await import("@earendil-works/pi-coding-agent");
+            const { getModel } = await import("@earendil-works/pi-ai");
+
+            let selectedModel;
+            if (model && model.includes("/")) {
+              const [provider, modelName] = model.split("/");
+              selectedModel = getModel(provider, modelName);
             } else {
-              updatedContent = `// Created by Axiom AI simulation at ${new Date().toLocaleTimeString()}\n`;
+              selectedModel = getModel("anthropic", "claude-3-5-sonnet-20241022");
             }
-            
-            await writeVfsTool.execute({ path: targetFile, content: updatedContent });
-            runResult = { status: "success" };
-          } catch (simErr: any) {
-            console.error("Simulation failed:", simErr);
-            throw new Error(`Simulation failed: ${simErr.message}`);
+
+            console.log("WebSocket [Server] Creating task session with model:", selectedModel ? (selectedModel as any).modelId || (selectedModel as any).name || "default" : "default");
+
+            const allTools = [readVfsTool, writeVfsTool, createListFilesTool(workspaceRoot), createSearchCodebaseTool(workspaceRoot)];
+
+            const { session } = await createAgentSession({
+              cwd: workspaceRoot,
+              model: selectedModel,
+              tools: ["read", "write", "list_files", "search_codebase"],
+              customTools: allTools as any
+            });
+
+            sendLog("Executing agent reasoning loop...");
+            console.log("WebSocket [Server] Running agent core loop...");
+
+            const result = await session.prompt(instructions);
+            runResult = { status: "success", modified: Array.from(modifiedFiles), response: (result as any).output || (result as any).message?.content || "Task completed." };
+          } catch (sdkError: any) {
+            console.warn("WebSocket [Server] Pi SDK load warning (using custom fallback):", sdkError.message);
+            sendLog(`Pi SDK warning: ${sdkError.message}. Using multi-round custom fallback...`);
+            useMultiRound = true;
           }
         }
+
+        if (useMultiRound) {
+          // Determine LLM configuration
+          let llmConfig: LlmConfig | null = null;
+          try {
+            let modelId = model || "claude-3-5-sonnet";
+
+            if (customProvider && customProvider.baseUrl) {
+              let selectedModel = modelId;
+              if (selectedModel.includes("/")) {
+                selectedModel = selectedModel.split("/")[1];
+              }
+              if (!selectedModel || selectedModel === "claude-3-5-sonnet") {
+                const firstModel = customProvider.models?.[0]?.id || "";
+                selectedModel = firstModel.includes("/") ? firstModel.split("/")[1] : firstModel;
+              }
+              llmConfig = {
+                baseUrl: customProvider.baseUrl.replace(/\/$/, ""),
+                apiKey: customProvider.apiKey || "not-needed",
+                model: selectedModel
+              };
+            } else if (model && model.includes("/")) {
+              const [provider, modelName] = model.split("/");
+              if (provider === "anthropic") {
+                llmConfig = {
+                  baseUrl: "https://api.anthropic.com/v1",
+                  apiKey: process.env.ANTHROPIC_API_KEY || "",
+                  model: modelName
+                };
+              } else if (provider === "openai") {
+                llmConfig = {
+                  baseUrl: "https://api.openai.com/v1",
+                  apiKey: process.env.OPENAI_API_KEY || "",
+                  model: modelName
+                };
+              } else {
+                llmConfig = {
+                  baseUrl: "http://localhost:11434/v1",
+                  apiKey: "not-needed",
+                  model: modelName
+                };
+              }
+            }
+            
+            // Try to load API key from environment variables matching provider prefix if missing
+            if (llmConfig && (!llmConfig.apiKey || llmConfig.apiKey === "not-needed")) {
+              if (model && model.includes("/")) {
+                const providerId = model.split("/")[0].toUpperCase();
+                const envKeyName = `${providerId}_API_KEY`;
+                if (process.env[envKeyName]) {
+                  llmConfig.apiKey = process.env[envKeyName]!;
+                }
+              }
+            }
+          } catch (configErr: any) {
+            console.error("Failed to resolve LLM config:", configErr);
+          }
+
+          if (llmConfig) {
+            sendLog(`Calling LLM custom runner: ${llmConfig.model} (Endpoint: ${llmConfig.baseUrl})`);
+            sendLog(`[System Prompt Details]\n${systemPrompt}`);
+            sendLog(`[User Prompt Details]\n${instructions}`);
+            console.log("\n--- CUSTOM RUNNER LLM INVOCATION ---");
+            console.log("Model:", llmConfig.model);
+            console.log("Base URL:", llmConfig.baseUrl);
+            console.log("System Prompt:\n", systemPrompt);
+            console.log("User Message:\n", instructions);
+
+            const allTools = [readVfsTool, writeVfsTool, createListFilesTool(workspaceRoot), createSearchCodebaseTool(workspaceRoot)];
+            
+            const responseText = await callLlmWithToolsMultiRound(
+              llmConfig,
+              systemPrompt,
+              instructions,
+              allTools as any,
+              workspaceRoot,
+              sendLog,
+              10, // max 10 rounds
+              chatHistory ? chatHistory.slice(0, -1) : []
+            );
+
+            runResult = {
+              status: "success",
+              modified: Array.from(modifiedFiles),
+              response: responseText
+            };
+          } else {
+            // Simulation fallback for prototype/offline run
+            sendLog("No LLM configuration could be resolved. Running simulated edit fallback...");
+            await new Promise((resolve) => setTimeout(resolve, 1200));
+            
+            const targetFile = inputFiles && inputFiles.length > 0 
+              ? inputFiles[0].path 
+              : "./src/App.tsx";
+              
+            sendLog(`Simulated AI reading connected target: ${targetFile}`);
+            try {
+              const text = await readVfsTool.execute({ path: targetFile }) as string;
+              
+              sendLog("Simulated AI planning refactoring edits...");
+              await new Promise((resolve) => setTimeout(resolve, 1200));
+              
+              let updatedContent = text;
+              if (text.includes("Welcome to Tauri + React")) {
+                updatedContent = text.replace(
+                  "Welcome to Tauri + React",
+                  "Axiom Refactored Code"
+                );
+              } else if (text.trim().length > 0) {
+                updatedContent = `// Edited by Axiom AI simulation at ${new Date().toLocaleTimeString()}\n${text}`;
+              } else {
+                updatedContent = `// Created by Axiom AI simulation at ${new Date().toLocaleTimeString()}\n`;
+              }
+              
+              await writeVfsTool.execute({ path: targetFile, content: updatedContent });
+              runResult = { status: "success", modified: Array.from(modifiedFiles), response: "Simulated edits applied to VFS." };
+            } catch (simErr: any) {
+              console.error("Simulation failed:", simErr);
+              throw new Error(`Simulation failed: ${simErr.message}`);
+            }
+          }
+        }
+
+
 
         const finalModifiedList = Array.from(modifiedFiles);
         console.log(`WebSocket [Server] task execution complete! Modified files:`, finalModifiedList);

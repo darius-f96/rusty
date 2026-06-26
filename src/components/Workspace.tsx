@@ -21,16 +21,29 @@ export const Workspace: React.FC = () => {
   const clearLogs = useWorkspaceStore((state) => state.clearLogs);
   const setNodeStatus = useWorkspaceStore((state) => state.setNodeStatus);
 
-  const customProviders = useWorkspaceStore((state) => state.customProviders);
-  const activeCustomProviderId = useWorkspaceStore((state) => state.activeCustomProviderId);
   const globalContextSummary = useWorkspaceStore((state) => state.globalContextSummary);
 
   const socketRef = useRef<WebSocket | null>(null);
 
   // WebSocket execution runner
-  const executeNode = (nodeId: string) => {
+  const executeNode = (nodeId: string, customPrompt?: string) => {
     const node = nodes.find((n) => n.id === nodeId);
     if (!node || node.type !== "taskNode") return;
+
+    const activeModel = useWorkspaceStore.getState().activeModel;
+    const customProviders = useWorkspaceStore.getState().customProviders;
+    const activeCustomProviderId = useWorkspaceStore.getState().activeCustomProviderId;
+
+    const nodeModel = (node.data as any).model || activeModel;
+
+    // Resolve provider for the node's model
+    let provider = null;
+    if (nodeModel && (nodeModel as string).includes("/")) {
+      const providerId = (nodeModel as string).split("/")[0];
+      provider = customProviders.find((p) => p.id === providerId);
+    } else {
+      provider = customProviders.find((p) => p.id === activeCustomProviderId);
+    }
 
     const connectedEdges = edges.filter((edge) => edge.target === nodeId);
     const inputFiles = connectedEdges
@@ -67,6 +80,44 @@ export const Workspace: React.FC = () => {
       }`
     );
 
+    // Setup chat messages for prompt chat
+    const store = useWorkspaceStore.getState();
+    let currentInstructions = node.data.prompt || "";
+    let chatHistoryToSend: any[] = [];
+
+    if (customPrompt) {
+      // Refinement message from Prompt Chat
+      const userMsg = {
+        role: "user" as const,
+        content: customPrompt,
+        timestamp: new Date().toLocaleTimeString()
+      };
+      store.addGlobalChatMessage(nodeId, userMsg);
+      chatHistoryToSend = store.getGlobalChatHistory(nodeId).map(m => ({ role: m.role, content: m.content }));
+      currentInstructions = customPrompt;
+    } else {
+      // Initial "Run Executor" procedure call
+      store.clearGlobalChatHistory(nodeId);
+      
+      let formattedPrompt = "";
+      if (globalContextSummary) {
+        formattedPrompt += `<general context>\n${globalContextSummary}\n</general context>\n`;
+      }
+      formattedPrompt += `<TaskNodeContent>\n${node.data.prompt || ""}\n</TaskNodeContent>\n`;
+      if (contextDescriptions.length > 0) {
+        formattedPrompt += `<Context>\n${contextDescriptions.join("\n")}\n</Context>`;
+      }
+
+      const userMsg = {
+        role: "user" as const,
+        content: formattedPrompt,
+        timestamp: new Date().toLocaleTimeString()
+      };
+      store.addGlobalChatMessage(nodeId, userMsg);
+      chatHistoryToSend = [{ role: "user", content: formattedPrompt }];
+      currentInstructions = formattedPrompt;
+    }
+
     const socket = new WebSocket("ws://localhost:4000");
     socketRef.current = socket;
 
@@ -74,18 +125,17 @@ export const Workspace: React.FC = () => {
       console.log("WebSocket connection opened to sidecar");
       addLog(nodeId, "Connection established. Dispatching task execution details...");
 
-      const provider = customProviders.find((p) => p.id === activeCustomProviderId);
-
       socket.send(
         JSON.stringify({
           type: "execute_node",
           nodeId,
-          instructions: node.data.prompt,
-          model: node.data.model,
+          instructions: currentInstructions,
+          model: nodeModel,
           workspaceRoot: rootPath,
           inputFiles,
           globalContext: globalContextSummary || "",
           contextDescriptions,
+          chatHistory: chatHistoryToSend,
           customProvider:
             provider &&
             (provider.id !== "anthropic" && provider.id !== "openai" || !!provider.apiKey)
@@ -145,11 +195,20 @@ export const Workspace: React.FC = () => {
 
         if (data.type === "execution_complete" && data.nodeId === nodeId) {
           const modified = data.result?.modified || [];
+          const responseText = data.result?.response || "Task completed successfully.";
           console.log("WebSocket [execution_complete] modified files:", modified);
           addLog(
             nodeId,
             `AI task execution successfully completed. Modified: ${modified.join(", ") || "none"}`
           );
+
+          // Add assistant message to history
+          const assistantMsg = {
+            role: "assistant" as const,
+            content: responseText,
+            timestamp: new Date().toLocaleTimeString()
+          };
+          store.addGlobalChatMessage(nodeId, assistantMsg);
 
           useWorkspaceStore.getState().updateTaskNode(nodeId, { modifiedFiles: modified });
           setNodeStatus(nodeId, "success");
@@ -159,6 +218,15 @@ export const Workspace: React.FC = () => {
         if (data.type === "execution_error" && data.nodeId === nodeId) {
           console.error("WebSocket [execution_error]:", data.error);
           addLog(nodeId, `AI Execution Error: ${data.error}`);
+
+          // Add assistant error message to history
+          const assistantMsg = {
+            role: "assistant" as const,
+            content: `Execution failed: ${data.error}`,
+            timestamp: new Date().toLocaleTimeString()
+          };
+          store.addGlobalChatMessage(nodeId, assistantMsg);
+
           setNodeStatus(nodeId, "error");
           socket.close();
         }

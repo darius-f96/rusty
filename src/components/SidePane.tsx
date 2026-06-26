@@ -10,7 +10,7 @@ const EMPTY_ARRAY: any[] = [];
 
 interface SidePaneProps {
   onClose: () => void;
-  onExecuteNode: (nodeId: string) => void;
+  onExecuteNode: (nodeId: string, customPrompt?: string) => void;
 }
 
 export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) => {
@@ -519,46 +519,68 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
       </div>
 
       {/* Tabs Row */}
-      <div className="flex border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/10 text-xs font-mono select-none">
-        {selectedNode.type !== "globalChatNode" && (
+      <div className="flex border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/10 text-xs font-mono select-none justify-between items-center pr-3 flex-shrink-0">
+        <div className="flex">
+          {selectedNode.type !== "globalChatNode" && (
+            <button
+              onClick={() => setActiveTab("diff")}
+              className={`flex items-center space-x-1.5 px-4 py-2.5 border-b-2 transition-all ${
+                activeTab === "diff"
+                  ? "border-[var(--accent-color)] text-[var(--text-light)] bg-[var(--accent-bg)] font-semibold"
+                  : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-light)]"
+              }`}
+            >
+              <Code size={14} />
+              <span>VFS Diff</span>
+            </button>
+          )}
           <button
-            onClick={() => setActiveTab("diff")}
+            onClick={() => setActiveTab("chat")}
             className={`flex items-center space-x-1.5 px-4 py-2.5 border-b-2 transition-all ${
-              activeTab === "diff"
+              activeTab === "chat"
                 ? "border-[var(--accent-color)] text-[var(--text-light)] bg-[var(--accent-bg)] font-semibold"
                 : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-light)]"
             }`}
           >
-            <Code size={14} />
-            <span>VFS Diff</span>
+            <MessageSquare size={14} />
+            <span>{selectedNode.type === "globalChatNode" ? "Explorer Chat" : "Prompt Chat"}</span>
           </button>
-        )}
-        <button
-          onClick={() => setActiveTab("chat")}
-          className={`flex items-center space-x-1.5 px-4 py-2.5 border-b-2 transition-all ${
-            activeTab === "chat"
-              ? "border-[var(--accent-color)] text-[var(--text-light)] bg-[var(--accent-bg)] font-semibold"
-              : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-light)]"
-          }`}
-        >
-          <MessageSquare size={14} />
-          <span>{selectedNode.type === "globalChatNode" ? "Explorer Chat" : "Prompt Chat"}</span>
-        </button>
-        {selectedNode.type !== "contextNode" && (
-          <button
-            onClick={() => setActiveTab("console")}
-            className={`flex items-center space-x-1.5 px-4 py-2.5 border-b-2 transition-all relative ${
-              activeTab === "console"
-                ? "border-[var(--accent-color)] text-[var(--text-light)] bg-[var(--accent-bg)] font-semibold"
-                : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-light)]"
-            }`}
-          >
-            <Terminal size={14} />
-            <span>Console Stream</span>
-            {nodeStatus === "running" && (
-              <span className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-[var(--accent-color)] animate-ping" />
-            )}
-          </button>
+          {selectedNode.type !== "contextNode" && (
+            <button
+              onClick={() => setActiveTab("console")}
+              className={`flex items-center space-x-1.5 px-4 py-2.5 border-b-2 transition-all relative ${
+                activeTab === "console"
+                  ? "border-[var(--accent-color)] text-[var(--text-light)] bg-[var(--accent-bg)] font-semibold"
+                  : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-light)]"
+              }`}
+            >
+              <Terminal size={14} />
+              <span>Console Stream</span>
+              {nodeStatus === "running" && (
+                <span className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-[var(--accent-color)] animate-ping" />
+              )}
+            </button>
+          )}
+        </div>
+
+        {selectedNode.type === "taskNode" && (
+          <div className="flex items-center space-x-1.5 py-1">
+            <span className="text-[10px] text-[var(--text-muted)] font-sans uppercase font-semibold">Model:</span>
+            <select
+              value={(selectedNode.data as any).model || activeModel}
+              onChange={(e) => updateNode(selectedNode.id, { model: e.target.value })}
+              className="bg-[var(--bg-app)] text-[var(--text-normal)] border border-[var(--border-color)] rounded px-1.5 py-0.5 outline-none text-[10px] max-w-[140px] focus:border-[var(--border-active)] cursor-pointer"
+            >
+              {providers.flatMap((p) => p.models).map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+              {providers.flatMap((p) => p.models).length === 0 && (
+                <option value="">No models</option>
+              )}
+            </select>
+          </div>
         )}
       </div>
 
@@ -768,9 +790,8 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
               </div>
             </div>
           ) : (
-            // TaskNode Chat View (Existing logic)
+            // TaskNode Chat View
             <div className="flex flex-col h-full bg-[var(--bg-app)]">
-              {/* Mocked conversation preview */}
               <div className="flex-1 p-4 space-y-4 overflow-y-auto text-xs">
                 <div className="flex flex-col bg-[var(--bg-sidebar)]/60 border border-[var(--border-color)]/80 rounded-xl p-3 w-full space-y-1 text-left">
                   <span className="font-mono text-[9px] uppercase font-bold text-violet-400">System Agent</span>
@@ -778,12 +799,31 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
                     I will check the attached file inputs and execute your modifications. You can type instructions below to refine my work.
                   </span>
                 </div>
-                {chatMessage && nodeStatus === "success" && (
-                  <div className="flex flex-col bg-[var(--accent-bg)]/20 border border-[var(--accent-color)]/30 rounded-xl p-3 w-full space-y-1 text-left">
-                    <span className="font-mono text-[9px] uppercase font-bold text-[var(--accent-color)]">User</span>
-                    <span className="leading-relaxed text-[var(--text-light)]">{chatMessage}</span>
-                  </div>
-                )}
+
+                {globalChatHistory.map((msg: any, idx: number) => {
+                  // Skip the first long prompt context block to keep chat history view clean
+                  if (idx === 0 && msg.role === "user") return null;
+
+                  return (
+                    <div
+                      key={idx}
+                      className={`flex flex-col rounded-xl p-3 border space-y-1 w-full ${
+                        msg.role === "user"
+                          ? "bg-[var(--accent-bg)]/20 border-[var(--accent-color)]/30 text-left text-[var(--text-light)]"
+                          : "bg-[var(--bg-sidebar)]/60 border border-[var(--border-color)]/80 text-left"
+                      }`}
+                    >
+                      <span className={`font-mono text-[9px] uppercase font-bold ${
+                        msg.role === "user" ? "text-[var(--accent-color)]" : "text-violet-400"
+                      }`}>
+                        {msg.role === "user" ? "User" : "System Agent"} · {msg.timestamp}
+                      </span>
+                      <div className="leading-relaxed text-[var(--text-normal)]">
+                        {msg.role === "user" ? msg.content : processResponse(msg.content)}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Input prompt area */}
@@ -791,8 +831,9 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
-                    if (!chatMessage.trim()) return;
-                    onExecuteNode(selectedNode.id);
+                    if (!chatMessage.trim() || nodeStatus === "running") return;
+                    onExecuteNode(selectedNode.id, chatMessage);
+                    setChatMessage("");
                   }}
                   className="flex items-center space-x-2 bg-[var(--bg-app)] border border-[var(--border-color)] p-1.5 rounded-lg focus-within:border-[var(--border-active)]"
                 >

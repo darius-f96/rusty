@@ -10,12 +10,16 @@ const EMPTY_ARRAY: any[] = [];
 
 interface TaskTabProps {
   tab: any;
-  onExecuteNode: (nodeId: string) => void;
+  onExecuteNode: (nodeId: string, customPrompt?: string) => void;
 }
 
 export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode }) => {
   const nodes = useWorkspaceStore((state) => state.nodes);
   const activeTabId = useWorkspaceStore((state) => state.activeTabId);
+  const customProviders = useWorkspaceStore((state) => state.customProviders);
+  const activeModel = useWorkspaceStore((state) => state.activeModel);
+  const updateTaskNode = useWorkspaceStore((state) => state.updateTaskNode);
+  const chatHistory = useWorkspaceStore((state) => state.globalChatHistory[taskNodeId] || EMPTY_ARRAY);
   const isActive = activeTabId === tab.id;
 
   const taskNodeId = tab.key;
@@ -111,43 +115,64 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode }) => {
     <div className="w-full h-full bg-[var(--bg-app)] flex flex-col text-[var(--text-normal)] font-sans relative">
       <div className="flex-1 flex flex-col overflow-hidden relative">
         {/* Task Sub Tabs Row */}
-        <div className="flex border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/50 text-xs font-mono">
-          <button
-            onClick={() => setTaskSubTab("diff")}
-            className={`flex items-center space-x-1.5 px-4 py-2 border-b-2 transition-all ${
-              taskSubTab === "diff"
-                ? "border-[var(--accent-color)] text-[var(--text-light)] bg-[var(--accent-bg)] font-semibold"
-                : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-light)]"
-            }`}
-          >
-            <Code size={14} />
-            <span>VFS Diff</span>
-          </button>
-          <button
-            onClick={() => setTaskSubTab("chat")}
-            className={`flex items-center space-x-1.5 px-4 py-2 border-b-2 transition-all ${
-              taskSubTab === "chat"
-                ? "border-[var(--accent-color)] text-[var(--text-light)] bg-[var(--accent-bg)] font-semibold"
-                : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-light)]"
-            }`}
-          >
-            <MessageSquare size={14} />
-            <span>Prompt Chat</span>
-          </button>
-          <button
-            onClick={() => setTaskSubTab("console")}
-            className={`flex items-center space-x-1.5 px-4 py-2 border-b-2 transition-all relative ${
-              taskSubTab === "console"
-                ? "border-[var(--accent-color)] text-[var(--text-light)] bg-[var(--accent-bg)] font-semibold"
-                : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-light)]"
-            }`}
-          >
-            <Terminal size={14} />
-            <span>Console Stream</span>
-            {nodeStatus === "running" && (
-              <span className="absolute top-2.5 right-2 w-1.5 h-1.5 rounded-full bg-[var(--accent-color)] animate-ping" />
-            )}
-          </button>
+        <div className="flex border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/50 text-xs font-mono justify-between items-center pr-3 select-none flex-shrink-0">
+          <div className="flex">
+            <button
+              onClick={() => setTaskSubTab("diff")}
+              className={`flex items-center space-x-1.5 px-4 py-2 border-b-2 transition-all ${
+                taskSubTab === "diff"
+                  ? "border-[var(--accent-color)] text-[var(--text-light)] bg-[var(--accent-bg)] font-semibold"
+                  : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-light)]"
+              }`}
+            >
+              <Code size={14} />
+              <span>VFS Diff</span>
+            </button>
+            <button
+              onClick={() => setTaskSubTab("chat")}
+              className={`flex items-center space-x-1.5 px-4 py-2 border-b-2 transition-all ${
+                taskSubTab === "chat"
+                  ? "border-[var(--accent-color)] text-[var(--text-light)] bg-[var(--accent-bg)] font-semibold"
+                  : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-light)]"
+              }`}
+            >
+              <MessageSquare size={14} />
+              <span>Prompt Chat</span>
+            </button>
+            <button
+              onClick={() => setTaskSubTab("console")}
+              className={`flex items-center space-x-1.5 px-4 py-2 border-b-2 transition-all relative ${
+                taskSubTab === "console"
+                  ? "border-[var(--accent-color)] text-[var(--text-light)] bg-[var(--accent-bg)] font-semibold"
+                  : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-light)]"
+              }`}
+            >
+              <Terminal size={14} />
+              <span>Console Stream</span>
+              {nodeStatus === "running" && (
+                <span className="absolute top-2.5 right-2 w-1.5 h-1.5 rounded-full bg-[var(--accent-color)] animate-ping" />
+              )}
+            </button>
+          </div>
+
+          {/* Model Selector Dropdown */}
+          <div className="flex items-center space-x-2 py-1">
+            <span className="text-[10px] text-[var(--text-muted)] font-sans uppercase font-semibold">Model:</span>
+            <select
+              value={(taskNode.data as any).model || activeModel}
+              onChange={(e) => updateTaskNode(taskNodeId, { model: e.target.value })}
+              className="bg-[var(--bg-app)] text-[var(--text-normal)] border border-[var(--border-color)] rounded px-2.5 py-1 outline-none text-[11px] max-w-[200px] focus:border-[var(--border-active)] cursor-pointer"
+            >
+              {customProviders.flatMap((p) => p.models).map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name} ({m.id})
+                </option>
+              ))}
+              {customProviders.flatMap((p) => p.models).length === 0 && (
+                <option value="">No models configured</option>
+              )}
+            </select>
+          </div>
         </div>
 
         {/* Task Diff Selector Dropdown */}
@@ -226,23 +251,43 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode }) => {
                 <div className="flex flex-col bg-[var(--bg-sidebar)]/60 border border-[var(--border-color)]/80 rounded-xl p-3 w-full space-y-1 text-left">
                   <span className="font-mono text-[9px] uppercase font-bold text-violet-400">System Agent</span>
                   <div className="leading-relaxed text-[var(--text-normal)]">
-                    {processResponse("I will check the attached file inputs and execute your modifications. You can type instructions below to refine my work.")}
+                    I will check the attached file inputs and execute your modifications. You can type instructions below to refine my work.
                   </div>
                 </div>
-                {chatMessage && nodeStatus === "success" && (
-                  <div className="flex flex-col bg-[var(--accent-bg)]/20 border border-[var(--accent-color)]/30 rounded-xl p-3 w-full space-y-1 text-left text-[var(--text-light)]">
-                    <span className="font-mono text-[9px] uppercase font-bold text-[var(--accent-color)]">User</span>
-                    <div className="leading-relaxed">{processResponse(chatMessage)}</div>
-                  </div>
-                )}
+
+                {chatHistory.map((msg: any, idx: number) => {
+                  // Skip the first long prompt context block to keep chat history view clean
+                  if (idx === 0 && msg.role === "user") return null;
+
+                  return (
+                    <div
+                      key={idx}
+                      className={`flex flex-col rounded-xl p-3 border space-y-1 w-full ${
+                        msg.role === "user"
+                          ? "bg-[var(--accent-bg)]/20 border-[var(--accent-color)]/30 text-left text-[var(--text-light)]"
+                          : "bg-[var(--bg-sidebar)]/60 border border-[var(--border-color)]/80 text-left"
+                      }`}
+                    >
+                      <span className={`font-mono text-[9px] uppercase font-bold ${
+                        msg.role === "user" ? "text-[var(--accent-color)]" : "text-violet-400"
+                      }`}>
+                        {msg.role === "user" ? "User" : "System Agent"} · {msg.timestamp}
+                      </span>
+                      <div className="leading-relaxed text-[var(--text-normal)]">
+                        {msg.role === "user" ? msg.content : processResponse(msg.content)}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
               <div className="p-3 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/20">
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
-                    if (!chatMessage.trim()) return;
-                    onExecuteNode(taskNodeId);
+                    if (!chatMessage.trim() || nodeStatus === "running") return;
+                    onExecuteNode(taskNodeId, chatMessage);
+                    setChatMessage("");
                   }}
                   className="flex items-center space-x-2 bg-[var(--bg-app)] border border-[var(--border-color)] p-1.5 rounded-lg focus-within:border-[var(--border-active)]"
                 >

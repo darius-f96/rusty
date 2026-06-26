@@ -66,10 +66,14 @@ export const LlmSetupTab: React.FC = () => {
         if (res.ok) {
           const data = await res.json();
           if (data && Array.isArray(data.data)) {
-            const mapped = data.data.map((m: any) => ({
-              id: m.id,
-              name: m.id.split("/").pop() || m.id
-            }));
+            const mapped = data.data.map((m: any) => {
+              const prefix = activeCustomProviderId + "/";
+              const id = m.id.startsWith(prefix) ? m.id : `${prefix}${m.id}`;
+              return {
+                id,
+                name: m.id.split("/").pop() || m.id
+              };
+            });
             if (mapped.length > 0) {
               updateProviderSettings(activeCustomProviderId, { models: mapped });
               setActiveModel(mapped[0].id);
@@ -126,10 +130,14 @@ export const LlmSetupTab: React.FC = () => {
       const data = await res.json();
       
       if (data && Array.isArray(data.data)) {
-        const mapped = data.data.map((m: any) => ({
-          id: m.id,
-          name: m.id.split("/").pop() || m.id
-        }));
+        const mapped = data.data.map((m: any) => {
+          const prefix = activeCustomProviderId + "/";
+          const id = m.id.startsWith(prefix) ? m.id : `${prefix}${m.id}`;
+          return {
+            id,
+            name: m.id.split("/").pop() || m.id
+          };
+        });
         
         if (mapped.length > 0) {
           updateProviderSettings(activeCustomProviderId, { models: mapped });
@@ -160,9 +168,11 @@ export const LlmSetupTab: React.FC = () => {
     e.preventDefault();
     if (!provId || !provName) return;
 
+    const providerId = provId.trim().toLowerCase();
     const modelsList = provModels.split(",").map((m) => {
-      const id = m.trim();
-      return { id, name: id.split("/").pop() || id };
+      const modelName = m.trim();
+      const id = modelName.includes("/") ? modelName : `${providerId}/${modelName}`;
+      return { id, name: modelName.split("/").pop() || modelName };
     });
 
     const newProvider: CustomProvider = {
