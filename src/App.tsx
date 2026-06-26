@@ -11,9 +11,18 @@ function App() {
   const clearDevLogs = useWorkspaceStore((state) => state.clearDevLogs);
   const addDevLog = useWorkspaceStore((state) => state.addDevLog);
 
-  const [sidebarWidth, setSidebarWidth] = useState(320);
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const stored = localStorage.getItem("sidebar_width");
+    if (stored) {
+      const val = parseInt(stored, 10);
+      if (!isNaN(val) && val >= 200 && val <= 600) {
+        return val;
+      }
+    }
+    return 320;
+  });
   const isSidebarDraggingRef = useRef(false);
-  const sidebarWidthRef = useRef(320);
+  const sidebarWidthRef = useRef(sidebarWidth);
   const sidebarElementRef = useRef<HTMLDivElement>(null);
   const consoleScrollRef = useRef<HTMLDivElement>(null);
 
@@ -52,8 +61,12 @@ function App() {
   }, [handleSidebarMouseMove, handleSidebarMouseUp]);
 
   // Keep widthRef in sync when state changes (e.g. from collapse/expand buttons)
+  // and save active sidebar width if expanded
   useEffect(() => {
     sidebarWidthRef.current = sidebarWidth;
+    if (sidebarWidth > 56) {
+      localStorage.setItem("sidebar_width", String(sidebarWidth));
+    }
   }, [sidebarWidth]);
 
   // Cleanup on unmount

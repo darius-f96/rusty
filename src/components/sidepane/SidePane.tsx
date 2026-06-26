@@ -33,14 +33,37 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
   const [activeTab, setActiveTab] = useState<"diff" | "chat" | "console">("diff");
   const [activeDiffFile, setActiveDiffFile] = useState<string>("");
 
+  const nodeType = selectedNode?.type || "default";
+  const storageKey = `side_pane_width_${nodeType}`;
+
   // Resize hook
-  const { width, containerRef, startResizing } = useResizable(500);
+  const { width, setWidth, containerRef, startResizing } = useResizable(500, storageKey);
 
   // Explorer WS hook
   const explorer = useExplorerWebSocket(selectedNode);
 
   // Diff content hook
   const { originalCode, modifiedCode } = useDiffContent(selectedNodeId, activeDiffFile, nodeStatus);
+
+  // Sync width when storageKey changes (different node type selected)
+  useEffect(() => {
+    const stored = localStorage.getItem(storageKey);
+    if (stored) {
+      const val = parseInt(stored, 10);
+      if (!isNaN(val) && val > 200 && val < 1200) {
+        setWidth(val);
+        if (containerRef.current) {
+          containerRef.current.style.width = `${val}px`;
+        }
+        return;
+      }
+    }
+    const defaultWidth = 500;
+    setWidth(defaultWidth);
+    if (containerRef.current) {
+      containerRef.current.style.width = `${defaultWidth}px`;
+    }
+  }, [storageKey, setWidth, containerRef]);
 
   // Set default active tab based on selected node type
   useEffect(() => {

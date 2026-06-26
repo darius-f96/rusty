@@ -1,17 +1,34 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 
-export const useResizable = (initialWidth = 500) => {
-  const [width, setWidth] = useState(initialWidth);
+export const useResizable = (initialWidth = 500, storageKey?: string) => {
+  const [width, setWidth] = useState(() => {
+    if (storageKey) {
+      const stored = localStorage.getItem(storageKey);
+      if (stored) {
+        const val = parseInt(stored, 10);
+        if (!isNaN(val) && val > 200 && val < 1200) {
+          return val;
+        }
+      }
+    }
+    return initialWidth;
+  });
+
   const isResizing = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const widthRef = useRef(initialWidth);
+  const widthRef = useRef(width);
+
+  // Sync widthRef with state changes
+  useEffect(() => {
+    widthRef.current = width;
+  }, [width]);
 
   const animationFrameIdRef = useRef<number | null>(null);
 
   const handleMouseMove = useCallback((mouseMoveEvent: MouseEvent) => {
     if (!isResizing.current) return;
     const newWidth = window.innerWidth - mouseMoveEvent.clientX;
-    if (newWidth > 300 && newWidth < 1000) {
+    if (newWidth > 200 && newWidth < 1200) {
       widthRef.current = newWidth;
       if (animationFrameIdRef.current) {
         cancelAnimationFrame(animationFrameIdRef.current);
@@ -34,7 +51,10 @@ export const useResizable = (initialWidth = 500) => {
       cancelAnimationFrame(animationFrameIdRef.current);
     }
     setWidth(widthRef.current);
-  }, [handleMouseMove]);
+    if (storageKey) {
+      localStorage.setItem(storageKey, String(widthRef.current));
+    }
+  }, [handleMouseMove, storageKey]);
 
   const startResizing = useCallback((mouseDownEvent: React.MouseEvent) => {
     mouseDownEvent.preventDefault();
@@ -58,5 +78,5 @@ export const useResizable = (initialWidth = 500) => {
     };
   }, [handleMouseMove, handleMouseUp]);
 
-  return { width, containerRef, startResizing };
+  return { width, setWidth, containerRef, startResizing };
 };
