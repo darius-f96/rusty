@@ -121,6 +121,19 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
     });
   };
 
+  const scrollToLine = (editor: any, lineNum: number) => {
+    if (!editor || !lineNum) return;
+    editor.revealLineInCenter(lineNum);
+    editor.setPosition({ lineNumber: lineNum, column: 1 });
+    editor.focus();
+  };
+
+  useEffect(() => {
+    if (editorRef.current && tab.line) {
+      scrollToLine(editorRef.current, tab.line);
+    }
+  }, [tab.line]);
+
   const handleEditorMount = (editor: any) => {
     editorRef.current = editor;
 
@@ -133,6 +146,9 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
 
     setTimeout(() => {
       editor.layout();
+      if (tab.line) {
+        scrollToLine(editor, tab.line);
+      }
     }, 50);
   };
 

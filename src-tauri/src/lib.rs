@@ -222,6 +222,142 @@ async fn move_file_or_dir(src: String, dest: String) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(Serialize, Clone, Debug)]
+pub struct SearchMatch {
+    path: String,
+    name: String,
+    line: usize,
+    content: String,
+    is_content_match: bool,
+}
+
+fn search_dir_recursive(
+    dir: &Path,
+    query: &str,
+    match_case: bool,
+    whole_word: bool,
+    is_regex: bool,
+    results: &mut Vec<SearchMatch>,
+) -> Result<(), String> {
+    let read_dir = std::fs::read_dir(dir).map_err(|e| e.to_string())?;
+
+    // Precompile regex if needed
+    let regex_matcher = if is_regex {
+        Some(regex::RegexBuilder::new(query)
+            .case_insensitive(!match_case)
+            .build()
+            .map_err(|e| format!("Invalid regex: {}", e))?)
+    } else {
+        None
+    };
+
+    let query_lower = query.to_lowercase();
+
+    for entry in read_dir {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let entry_path = entry.path();
+        let name = entry.file_name().to_string_lossy().into_owned();
+
+        if entry_path.is_dir() {
+            if name == "node_modules"
+                || name == ".git"
+                || name == "target"
+                || name == "dist"
+                || name == ".vscode"
+                || name == ".gemini"
+            {
+                continue;
+            }
+            search_dir_recursive(&entry_path, query, match_case, whole_word, is_regex, results)?;
+        } else {
+            // 1. Check filename match
+            let is_name_match = if match_case {
+                name.contains(query)
+            } else {
+                name.to_lowercase().contains(&query_lower)
+            };
+
+            if is_name_match {
+                results.push(SearchMatch {
+                    path: entry_path.to_string_lossy().into_owned(),
+                    name: name.clone(),
+                    line: 0,
+                    content: String::new(),
+                    is_content_match: false,
+                });
+            }
+
+            // 2. Check file content match
+            if let Ok(content) = std::fs::read_to_string(&entry_path) {
+                let mut line_num = 1;
+                for raw_line in content.lines() {
+                    let is_match = if let Some(ref re) = regex_matcher {
+                        re.is_match(raw_line)
+                    } else if match_case {
+                        if whole_word {
+                            // Check word boundaries by comparing whole words
+                            raw_line.split(|c: char| !c.is_alphanumeric() && c != '_')
+                                .any(|w| w == query)
+                        } else {
+                            raw_line.contains(query)
+                        }
+                    } else {
+                        if whole_word {
+                            raw_line.split(|c: char| !c.is_alphanumeric() && c != '_')
+                                .any(|w| w.to_lowercase() == query_lower)
+                        } else {
+                            raw_line.to_lowercase().contains(&query_lower)
+                        }
+                    };
+
+                    if is_match {
+                        results.push(SearchMatch {
+                            path: entry_path.to_string_lossy().into_owned(),
+                            name: name.clone(),
+                            line: line_num,
+                            content: raw_line.trim().to_string(),
+                            is_content_match: true,
+                        });
+                    }
+                    line_num += 1;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn search_project(
+    root_dir: String,
+    query: String,
+    match_case: bool,
+    whole_word: bool,
+    is_regex: bool,
+) -> Result<Vec<SearchMatch>, String> {
+    println!(
+        "Rust [search_project] querying: '{}' (case: {}, word: {}, regex: {}) under: {}",
+        query, match_case, whole_word, is_regex, root_dir
+    );
+    
+    if query.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let root_path = Path::new(&root_dir);
+    if !root_path.exists() {
+        return Err("Directory does not exist".into());
+    }
+
+    let mut results = Vec::new();
+    search_dir_recursive(root_path, &query, match_case, whole_word, is_regex, &mut results)?;
+    
+    // Limit results count to prevent sending huge payloads
+    results.truncate(150);
+    
+    Ok(results)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -240,6 +376,7 @@ pub fn run() {
             create_directory,
             delete_file_or_dir,
             move_file_or_dir,
+            search_project,
             git::git_status,
             git::git_init,
             git::git_stage_file,

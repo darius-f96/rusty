@@ -49,6 +49,7 @@ export interface Tab {
   key: string;
   diffType?: "staged" | "unstaged" | "commit";
   commitHash?: string;
+  line?: number;
 }
 
 export interface EditorGroup {
@@ -848,8 +849,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     let newGroups = state.editorGroups.map((group) => {
       if (group.id === targetGroupId) {
         const hasTab = group.openTabs.some((t) => t.id === tab.id);
-        const newTabs = hasTab ? group.openTabs : [...group.openTabs, tab];
-        return { ...group, openTabs: newTabs, activeTabId: tab.id };
+        const newTabs = group.openTabs.map((t) => {
+          if (t.id === tab.id) {
+            return { ...t, ...tab };
+          }
+          return t;
+        });
+        const finalTabs = hasTab ? newTabs : [...group.openTabs, tab];
+        return { ...group, openTabs: finalTabs, activeTabId: tab.id };
       }
       return group;
     });
