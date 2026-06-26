@@ -11,6 +11,7 @@ interface CustomSelectProps {
   options: Option[];
   placeholder?: string;
   className?: string;
+  buttonClassName?: string;
 }
 
 export const CustomSelect: React.FC<CustomSelectProps> = ({
@@ -18,9 +19,11 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
   onChange,
   options,
   placeholder = "Select option...",
-  className = ""
+  className = "",
+  buttonClassName = ""
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
   
   const selectedOption = options.find(o => o.id === value);
@@ -35,13 +38,26 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, []);
 
+  // Reset search when opening/closing
+  useEffect(() => {
+    if (!isOpen) {
+      setSearchQuery("");
+    }
+  }, [isOpen]);
+
+  const filteredOptions = options.filter(opt =>
+    opt.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const showSearch = options.length > 5;
+
   return (
     <div ref={containerRef} className={`relative select-none font-sans text-xs ${className}`}>
       {/* Dropdown Button */}
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between bg-[var(--bg-app)] text-[var(--text-normal)] border border-[var(--border-color)] focus:border-[var(--border-active)] rounded-lg px-2.5 py-1.5 outline-none cursor-pointer text-left transition-all hover:border-[var(--border-active)]/50"
+        className={buttonClassName || "w-full flex items-center justify-between bg-[var(--bg-app)] text-[var(--text-normal)] border border-[var(--border-color)] focus:border-[var(--border-active)] rounded-lg px-2.5 py-1.5 outline-none cursor-pointer text-left transition-all hover:border-[var(--border-active)]/50"}
       >
         <span className="truncate">{selectedOption ? selectedOption.name : placeholder}</span>
         <svg
@@ -56,33 +72,46 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
 
       {/* Dropdown Options List */}
       {isOpen && (
-        <div className="absolute left-0 right-0 mt-1 bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-lg shadow-2xl max-h-48 overflow-y-auto z-[100] animate-fadeIn p-1 custom-scrollbar">
-          {options.length > 0 ? (
-            options.map((opt) => {
-              const isSelected = opt.id === value;
-              return (
-                <div
-                  key={opt.id}
-                  onClick={() => {
-                    onChange(opt.id);
-                    setIsOpen(false);
-                  }}
-                  className={`px-2.5 py-1.5 rounded-md cursor-pointer transition-colors text-[11px] text-left truncate ${
-                    isSelected
-                      ? "bg-[var(--accent-bg)]/35 text-[var(--text-light)] font-semibold"
-                      : "text-[var(--text-normal)] hover:bg-[var(--bg-app)] hover:text-[var(--text-light)]"
-                  }`}
-                  title={opt.name}
-                >
-                  {opt.name}
-                </div>
-              );
-            })
-          ) : (
-            <div className="px-2.5 py-1.5 text-[var(--text-muted)] text-center italic text-[11px]">
-              No options available
+        <div className="absolute left-0 right-0 mt-1 bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-lg shadow-2xl z-[100] animate-fadeIn p-1 flex flex-col max-h-56">
+          {showSearch && (
+            <div className="p-1 border-b border-[var(--border-color)]/30 mb-1">
+              <input
+                type="text"
+                placeholder="Search..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-[var(--bg-app)] border border-[var(--border-color)] text-[var(--text-normal)] rounded px-2 py-1 text-[11px] focus:border-[var(--accent-color)] focus:outline-none placeholder:text-[var(--text-muted)]/70 font-mono"
+              />
             </div>
           )}
+          <div className="overflow-y-auto max-h-40 custom-scrollbar flex-1">
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map((opt) => {
+                const isSelected = opt.id === value;
+                return (
+                  <div
+                    key={opt.id}
+                    onClick={() => {
+                      onChange(opt.id);
+                      setIsOpen(false);
+                    }}
+                    className={`px-2.5 py-1.5 rounded-md cursor-pointer transition-colors text-[11px] text-left truncate ${
+                      isSelected
+                        ? "bg-[var(--accent-bg)]/35 text-[var(--text-light)] font-semibold"
+                        : "text-[var(--text-normal)] hover:bg-[var(--bg-app)] hover:text-[var(--text-light)]"
+                    }`}
+                    title={opt.name}
+                  >
+                    {opt.name}
+                  </div>
+                );
+              })
+            ) : (
+              <div className="px-2.5 py-1.5 text-[var(--text-muted)] text-center italic text-[11px]">
+                No options found
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

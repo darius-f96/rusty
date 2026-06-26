@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { GitBranch, Plus, Minus, RotateCcw, Check, AlertCircle, ArrowUp, ArrowDown, GitCommit, ChevronDown } from "lucide-react";
 import { useWorkspaceStore } from "../store";
 import { invoke } from "@tauri-apps/api/core";
+import { CustomSelect } from "./CustomSelect";
 
 export const SourceControl: React.FC = () => {
   const rootPath = useWorkspaceStore((state) => state.rootPath);
@@ -301,28 +302,15 @@ export const SourceControl: React.FC = () => {
           </button>
         </div>
         {gitStatus && (
-          <div className="flex items-center space-x-1 bg-[var(--accent-bg)]/35 text-[var(--accent-color)] px-2 py-0.5 rounded font-mono text-[10px] border border-[var(--accent-color)]/25 relative hover:border-[var(--accent-color)]/50 transition-all cursor-pointer">
-            <GitBranch size={10} className="flex-shrink-0" />
-            <select
+          <div className="flex items-center space-x-1 bg-[var(--accent-bg)]/35 text-[var(--accent-color)] px-2 py-0.5 rounded font-mono text-[10px] border border-[var(--accent-color)]/25 relative hover:border-[var(--accent-color)]/50 transition-all cursor-pointer min-w-[100px]">
+            <GitBranch size={10} className="flex-shrink-0 mr-1" />
+            <CustomSelect
               value={gitStatus.currentBranch}
-              onChange={(e) => handleSwitchBranch(e.target.value)}
-              className="bg-transparent border-none text-[var(--accent-color)] font-mono text-[10px] focus:outline-none cursor-pointer pr-1 appearance-none outline-none font-bold"
-              style={{
-                WebkitAppearance: "none",
-                MozAppearance: "none",
-              }}
-            >
-              <option value={gitStatus.currentBranch} className="bg-[var(--bg-sidebar)] text-[var(--text-normal)]">
-                {gitStatus.currentBranch}
-              </option>
-              {branches
-                .filter((b) => b !== gitStatus.currentBranch)
-                .map((branch) => (
-                  <option key={branch} value={branch} className="bg-[var(--bg-sidebar)] text-[var(--text-normal)]">
-                    {branch}
-                  </option>
-                ))}
-            </select>
+              onChange={handleSwitchBranch}
+              options={branches.map((b) => ({ id: b, name: b }))}
+              buttonClassName="bg-transparent border-none text-[var(--accent-color)] font-mono text-[10px] focus:outline-none cursor-pointer outline-none font-bold p-0 flex items-center justify-between w-full"
+              className="flex-1"
+            />
           </div>
         )}
       </div>

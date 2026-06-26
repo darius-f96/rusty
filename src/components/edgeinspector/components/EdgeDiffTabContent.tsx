@@ -7,6 +7,7 @@
 
 import React from "react";
 import { DiffEditor } from "@monaco-editor/react";
+import { CustomSelect } from "../../CustomSelect";
 
 interface EdgeDiffTabContentProps {
   sourceModifiedFiles: string[];
@@ -45,25 +46,25 @@ export const EdgeDiffTabContent: React.FC<EdgeDiffTabContentProps> = ({
   originalCode,
   modifiedCode
 }) => {
+  const fileOptions = sourceModifiedFiles.map((file) => ({
+    id: file,
+    name: file.split("/").pop() || file,
+  }));
+
   return (
     <div className="flex flex-col h-full w-full">
       {sourceModifiedFiles.length > 0 && (
         <div className="px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)] flex items-center justify-between text-xs font-mono flex-shrink-0">
-          <span className="text-[var(--text-muted)]">File:</span>
-          <select
+          <span className="text-[var(--text-muted)] mr-4">File:</span>
+          <CustomSelect
             value={diffFile}
-            onChange={(e) => {
-              setDiffFile(e.target.value);
-              loadDiffContent(e.target.value);
+            onChange={(val) => {
+              setDiffFile(val);
+              loadDiffContent(val);
             }}
-            className="bg-[var(--bg-app)] text-[var(--text-normal)] border border-[var(--border-color)] rounded px-2.5 py-1 outline-none text-[11px] max-w-[300px] truncate focus:border-rose-400 cursor-pointer"
-          >
-            {sourceModifiedFiles.map((file) => (
-              <option key={file} value={file}>
-                {file.split("/").pop() || file}
-              </option>
-            ))}
-          </select>
+            options={fileOptions}
+            className="w-64"
+          />
         </div>
       )}
 

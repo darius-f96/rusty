@@ -1,6 +1,7 @@
 import React from "react";
 import { Code, MessageSquare, Terminal } from "lucide-react";
 import { useWorkspaceStore } from "../../../store";
+import { CustomSelect } from "../../CustomSelect";
 
 interface SidePaneTabsProps {
   selectedNode: any;
@@ -18,6 +19,11 @@ export const SidePaneTabs: React.FC<SidePaneTabsProps> = ({
   const activeModel = useWorkspaceStore((state) => state.activeModel);
   const providers = useWorkspaceStore((state) => state.customProviders);
   const updateNode = useWorkspaceStore((state) => state.updateTaskNode);
+
+  const modelOptions = providers.flatMap((p) => p.models).map((m) => ({
+    id: m.id,
+    name: m.name,
+  }));
 
   return (
     <div className="flex border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/10 text-xs font-mono select-none justify-between items-center pr-3 flex-shrink-0">
@@ -67,20 +73,13 @@ export const SidePaneTabs: React.FC<SidePaneTabsProps> = ({
       {selectedNode.type === "taskNode" && (
         <div className="flex items-center space-x-1.5 py-1">
           <span className="text-[10px] text-[var(--text-muted)] font-sans uppercase font-semibold">Model:</span>
-          <select
+          <CustomSelect
             value={(selectedNode.data as any).model || activeModel}
-            onChange={(e) => updateNode(selectedNode.id, { model: e.target.value })}
-            className="bg-[var(--bg-app)] text-[var(--text-normal)] border border-[var(--border-color)] rounded px-1.5 py-0.5 outline-none text-[10px] max-w-[140px] focus:border-[var(--border-active)] cursor-pointer"
-          >
-            {providers.flatMap((p) => p.models).map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-            {providers.flatMap((p) => p.models).length === 0 && (
-              <option value="">No models</option>
-            )}
-          </select>
+            onChange={(val) => updateNode(selectedNode.id, { model: val })}
+            options={modelOptions}
+            placeholder="No models"
+            className="w-36"
+          />
         </div>
       )}
     </div>

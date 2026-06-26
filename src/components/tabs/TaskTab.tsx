@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { DiffEditor } from "@monaco-editor/react";
 import { Terminal, MessageSquare, Code, Play, Sparkles } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
+import { CustomSelect } from "../CustomSelect";
 import { invoke } from "@tauri-apps/api/core";
 import { getFileTypeDetails } from "../../services/fileTypeService";
 import { processResponse } from "../../services/responseProcessingService";
@@ -161,38 +162,32 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, groupId })
           {/* Model Selector Dropdown */}
           <div className="flex items-center space-x-2 py-1">
             <span className="text-[10px] text-[var(--text-muted)] font-sans uppercase font-semibold">Model:</span>
-            <select
+            <CustomSelect
               value={(taskNode.data as any).model || activeModel}
-              onChange={(e) => updateTaskNode(taskNodeId, { model: e.target.value })}
-              className="bg-[var(--bg-app)] text-[var(--text-normal)] border border-[var(--border-color)] rounded px-2.5 py-1 outline-none text-[11px] max-w-[200px] focus:border-[var(--border-active)] cursor-pointer"
-            >
-              {customProviders.flatMap((p) => p.models).map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name} ({m.id})
-                </option>
-              ))}
-              {customProviders.flatMap((p) => p.models).length === 0 && (
-                <option value="">No models configured</option>
-              )}
-            </select>
+              onChange={(val) => updateTaskNode(taskNodeId, { model: val })}
+              options={customProviders.flatMap((p) => p.models).map((m) => ({
+                id: m.id,
+                name: `${m.name} (${m.id})`,
+              }))}
+              placeholder="No models configured"
+              className="w-48"
+            />
           </div>
         </div>
 
         {/* Task Diff Selector Dropdown */}
         {taskSubTab === "diff" && modifiedFiles.length > 0 && (
           <div className="px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)] flex items-center justify-between text-xs font-mono">
-            <span className="text-[var(--text-muted)]">File Diff:</span>
-            <select
+            <span className="text-[var(--text-muted)] mr-4">File Diff:</span>
+            <CustomSelect
               value={activeDiffFile}
-              onChange={(e) => setActiveDiffFile(e.target.value)}
-              className="bg-[var(--bg-app)] text-[var(--text-normal)] border border-[var(--border-color)] rounded px-2.5 py-1 outline-none text-[11px] max-w-[300px] truncate focus:border-[var(--border-active)] cursor-pointer"
-            >
-              {modifiedFiles.map((file) => (
-                <option key={file} value={file}>
-                  {file.split("/").pop() || file}
-                </option>
-              ))}
-            </select>
+              onChange={setActiveDiffFile}
+              options={modifiedFiles.map((file) => ({
+                id: file,
+                name: file.split("/").pop() || file,
+              }))}
+              className="w-64"
+            />
           </div>
         )}
 

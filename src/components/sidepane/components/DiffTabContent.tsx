@@ -1,5 +1,6 @@
 import React from "react";
 import { DiffEditor } from "@monaco-editor/react";
+import { CustomSelect } from "../../CustomSelect";
 
 interface DiffTabContentProps {
   selectedNode: any;
@@ -42,23 +43,23 @@ export const DiffTabContent: React.FC<DiffTabContentProps> = ({
   originalCode,
   modifiedCode
 }) => {
+  const diffOptions = modifiedFiles.map((file) => ({
+    id: file,
+    name: file.split("/").pop() || file,
+  }));
+
   return (
     <div className="flex flex-col h-full w-full">
       {/* File Diff Dropdown Selector (only for TaskNode when files are edited) */}
       {selectedNode.type === "taskNode" && modifiedFiles.length > 0 && (
         <div className="px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)] flex items-center justify-between text-xs font-mono flex-shrink-0">
-          <span className="text-[var(--text-muted)]">File Diff:</span>
-          <select
+          <span className="text-[var(--text-muted)] mr-4">File Diff:</span>
+          <CustomSelect
             value={activeDiffFile}
-            onChange={(e) => setActiveDiffFile(e.target.value)}
-            className="bg-[var(--bg-app)] text-[var(--text-normal)] border border-[var(--border-color)] rounded px-2.5 py-1 outline-none text-[11px] max-w-[300px] truncate focus:border-[var(--border-active)] cursor-pointer"
-          >
-            {modifiedFiles.map((file) => (
-              <option key={file} value={file}>
-                {file.split("/").pop() || file}
-              </option>
-            ))}
-          </select>
+            onChange={setActiveDiffFile}
+            options={diffOptions}
+            className="w-64"
+          />
         </div>
       )}
 
