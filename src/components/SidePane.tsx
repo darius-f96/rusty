@@ -29,15 +29,21 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
   const modifiedFiles = (selectedNode?.data?.modifiedFiles as string[]) || EMPTY_ARRAY;
   const [activeDiffFile, setActiveDiffFile] = useState<string>("");
 
-  // Resizable state
+  // Resizable state — use ref for live DOM updates during drag, state for React
   const [width, setWidth] = useState(500);
   const isResizing = useRef(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const widthRef = useRef(500);
 
   const handleMouseMove = useCallback((mouseMoveEvent: MouseEvent) => {
     if (!isResizing.current) return;
     const newWidth = window.innerWidth - mouseMoveEvent.clientX;
     if (newWidth > 300 && newWidth < 1000) {
-      setWidth(newWidth);
+      widthRef.current = newWidth;
+      // Directly mutate DOM — no React re-render
+      if (containerRef.current) {
+        containerRef.current.style.width = `${newWidth}px`;
+      }
     }
   }, []);
 
@@ -45,19 +51,29 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
     isResizing.current = false;
     document.removeEventListener("mousemove", handleMouseMove);
     document.removeEventListener("mouseup", handleMouseUp);
-  }, []);
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    // Commit the final width to React state once
+    setWidth(widthRef.current);
+  }, [handleMouseMove]);
 
   const startResizing = useCallback((mouseDownEvent: React.MouseEvent) => {
     mouseDownEvent.preventDefault();
     isResizing.current = true;
+    widthRef.current = width;
+    // Prevent text selection and set resize cursor globally during drag
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
-  }, [handleMouseMove, handleMouseUp]);
+  }, [handleMouseMove, handleMouseUp, width]);
 
   useEffect(() => {
     return () => {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
     };
   }, [handleMouseMove, handleMouseUp]);
 
@@ -460,6 +476,7 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
 
   return (
     <div 
+      ref={containerRef}
       style={{ width: `${width}px` }} 
       className="border-l border-[var(--border-color)] bg-[var(--bg-app)]/95 flex flex-col h-full text-[var(--text-normal)] font-sans shadow-2xl relative"
     >

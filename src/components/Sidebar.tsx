@@ -10,12 +10,14 @@ interface SidebarProps {
   sidebarWidth: number;
   setSidebarWidth: (width: number) => void;
   onSidebarMouseDown: (e: React.MouseEvent) => void;
+  containerRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   sidebarWidth,
   setSidebarWidth,
   onSidebarMouseDown,
+  containerRef,
 }) => {
   const fileTree = useWorkspaceStore((state) => state.fileTree);
   const setFileTree = useWorkspaceStore((state) => state.setFileTree);
@@ -139,6 +141,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <div
+      ref={containerRef}
       className="flex h-full z-10 relative bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-[20px] overflow-hidden shadow-lg flex-shrink-0"
       style={{ width: `${isExplorerOpen ? sidebarWidth : 56}px` }}
     >

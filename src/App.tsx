@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { Header } from "./components/Header";
 import { Workspace } from "./components/Workspace";
@@ -13,32 +13,58 @@ function App() {
 
   const [sidebarWidth, setSidebarWidth] = useState(320);
   const isSidebarDraggingRef = useRef(false);
+  const sidebarWidthRef = useRef(320);
+  const sidebarElementRef = useRef<HTMLDivElement>(null);
   const consoleScrollRef = useRef<HTMLDivElement>(null);
 
-  const handleSidebarMouseDown = (e: React.MouseEvent) => {
+  const handleSidebarMouseMove = useCallback((moveEvent: MouseEvent) => {
+    if (!isSidebarDraggingRef.current) return;
+    const startX = (isSidebarDraggingRef as any)._startX as number;
+    const startWidth = (isSidebarDraggingRef as any)._startWidth as number;
+    const dx = moveEvent.clientX - startX;
+    const newWidth = Math.max(200, Math.min(600, startWidth + dx));
+    sidebarWidthRef.current = newWidth;
+    // Directly mutate DOM — no React re-render
+    if (sidebarElementRef.current) {
+      sidebarElementRef.current.style.width = `${newWidth}px`;
+    }
+  }, []);
+
+  const handleSidebarMouseUp = useCallback(() => {
+    isSidebarDraggingRef.current = false;
+    document.removeEventListener("mousemove", handleSidebarMouseMove);
+    document.removeEventListener("mouseup", handleSidebarMouseUp);
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    // Commit the final width to React state once
+    setSidebarWidth(sidebarWidthRef.current);
+  }, [handleSidebarMouseMove]);
+
+  const handleSidebarMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     isSidebarDraggingRef.current = true;
-    const startX = e.clientX;
-    const startWidth = sidebarWidth;
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (!isSidebarDraggingRef.current) return;
-      const dx = moveEvent.clientX - startX;
-      const newWidth = Math.max(200, Math.min(600, startWidth + dx));
-      setSidebarWidth(newWidth);
-    };
-
-    const handleMouseUp = () => {
-      isSidebarDraggingRef.current = false;
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-      document.body.style.cursor = "";
-    };
-
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
+    (isSidebarDraggingRef as any)._startX = e.clientX;
+    (isSidebarDraggingRef as any)._startWidth = sidebarWidthRef.current;
     document.body.style.cursor = "col-resize";
-  };
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", handleSidebarMouseMove);
+    document.addEventListener("mouseup", handleSidebarMouseUp);
+  }, [handleSidebarMouseMove, handleSidebarMouseUp]);
+
+  // Keep widthRef in sync when state changes (e.g. from collapse/expand buttons)
+  useEffect(() => {
+    sidebarWidthRef.current = sidebarWidth;
+  }, [sidebarWidth]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      document.removeEventListener("mousemove", handleSidebarMouseMove);
+      document.removeEventListener("mouseup", handleSidebarMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [handleSidebarMouseMove, handleSidebarMouseUp]);
 
   // Global console/rejection interceptor
   useEffect(() => {
@@ -129,6 +155,7 @@ function App() {
           sidebarWidth={sidebarWidth}
           setSidebarWidth={setSidebarWidth}
           onSidebarMouseDown={handleSidebarMouseDown}
+          containerRef={sidebarElementRef}
         />
 
         {/* Main Workspace Card Panel */}
