@@ -10,6 +10,8 @@ import {
   applyEdgeChanges,
 } from "@xyflow/react";
 import { invoke } from "@tauri-apps/api/core";
+import { themes, applyThemeProperties, defineMonacoTheme } from "./theme";
+import { loader } from "@monaco-editor/react";
 
 export interface CustomProvider {
   id: string;
@@ -73,6 +75,9 @@ export interface WorkspaceState {
   expandedPaths: Record<string, boolean>;
   selectedEdgeId: string | null;
   edgeReconciliationStatus: Record<string, "idle" | "unreconciled" | "reconciled">;
+  
+  activeThemeId: string;
+  setActiveThemeId: (themeId: string) => void;
   
   setRootPath: (path: string) => void;
   setGitStatus: (status: GitStatusResult | null) => void;
@@ -178,6 +183,18 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     { id: "canvas", type: "canvas", title: "Axiom", key: "canvas" }
   ],
   activeTabId: "canvas",
+  activeThemeId: "dark",
+  setActiveThemeId: (themeId) => {
+    const t = themes[themeId] || themes.dark;
+    applyThemeProperties(t);
+    set({ activeThemeId: themeId });
+    loader.init().then((monaco) => {
+      defineMonacoTheme(monaco, t);
+      monaco.editor.setTheme("axiom-custom-theme");
+    }).catch(e => {
+      console.warn("Failed to update monaco theme:", e);
+    });
+  },
 
   setRootPath: (path) => {
     set({

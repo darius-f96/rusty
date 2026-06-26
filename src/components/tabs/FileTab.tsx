@@ -3,35 +3,13 @@ import Editor, { loader } from "@monaco-editor/react";
 import { useWorkspaceStore } from "../../store";
 import { invoke } from "@tauri-apps/api/core";
 import { getFileTypeDetails } from "../../services/fileTypeService";
-import { theme } from "../../theme";
+import { themes, defineMonacoTheme } from "../../theme";
 
 // Register custom Monaco theme once
 loader.init().then((monaco) => {
-  monaco.editor.defineTheme("axiom-custom-theme", {
-    base: "vs-dark",
-    inherit: true,
-    rules: [
-      { token: "", foreground: theme.textNormal.replace("#", "") },
-      { token: "comment", foreground: theme.syntax.comments.replace("#", ""), fontStyle: "italic" },
-      { token: "keyword", foreground: theme.syntax.keywords.replace("#", "") },
-      { token: "string", foreground: theme.syntax.strings.replace("#", "") },
-      { token: "number", foreground: theme.syntax.numbers.replace("#", "") },
-      { token: "regexp", foreground: theme.syntax.strings.replace("#", "") },
-      { token: "type", foreground: theme.syntax.types.replace("#", "") },
-      { token: "class", foreground: theme.syntax.types.replace("#", "") },
-      { token: "function", foreground: theme.syntax.functions.replace("#", "") },
-      { token: "variable", foreground: theme.syntax.variables.replace("#", "") },
-    ],
-    colors: {
-      "editor.background": theme.bgEditor,
-      "editor.foreground": theme.textNormal,
-      "editorLineNumber.foreground": theme.textMuted,
-      "editorLineNumber.activeForeground": theme.textLight,
-      "editor.lineHighlightBackground": theme.bgSidebar + "33", // transparent overlay
-      "editor.selectionBackground": theme.accent + "44",
-      "editorCursor.foreground": theme.accent,
-    },
-  });
+  const activeThemeId = useWorkspaceStore.getState().activeThemeId;
+  const activeTheme = themes[activeThemeId] || themes.dark;
+  defineMonacoTheme(monaco, activeTheme);
 });
 
 interface FileTabProps {
