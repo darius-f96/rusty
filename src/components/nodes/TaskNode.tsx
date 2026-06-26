@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Handle, Position } from "@xyflow/react";
 import { Sparkles, AlertCircle, CheckCircle2, Loader2, Pencil, Check, Trash2 } from "lucide-react";
-import { useWorkspaceStore } from "../store";
+import { useWorkspaceStore } from "../../store";
 
 export const TaskNode: React.FC<{ id: string; data: any }> = ({ id, data }) => {
   const updateTaskNode = useWorkspaceStore((state) => state.updateTaskNode);

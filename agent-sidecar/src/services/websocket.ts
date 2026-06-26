@@ -1,0 +1,87 @@
+/**
+ * WebSocket Service
+ * 
+ * Manages WebSocket messaging helpers, request tracking maps, request/response pairing via IDs,
+ * safe sending utilities, and request queue cleanups on client disconnections.
+ */
+
+import { WebSocket } from "ws";
+import fs from "fs";
+import path from "path";
+
+// Map to track active websocket callbacks for tool requests
+export const pendingRequests = new Map<string, (response: any) => void>();
+
+// Timeout for pending tool requests (30 seconds)
+const PENDING_REQUEST_TIMEOUT_MS = 30_000;
+
+// Helper to generate unique request IDs
+let nextRequestId = 1;
+export function getNextId() {
+  return `req_${nextRequestId++}`;
+}
+
+/** Register a pending request with an automatic timeout. Returns a cleanup function. */
+export function registerPendingRequest(requestId: string, resolver: (response: any) => void): () => void {
+  const timer = setTimeout(() => {
+    if (pendingRequests.has(requestId)) {
+      console.warn(`WebSocket [Server] Pending request ${requestId} timed out after ${PENDING_REQUEST_TIMEOUT_MS}ms`);
+      pendingRequests.delete(requestId);
+      resolver({ error: `Request timed out after ${PENDING_REQUEST_TIMEOUT_MS / 1000}s — client may have disconnected.` });
+    }
+  }, PENDING_REQUEST_TIMEOUT_MS);
+
+  pendingRequests.set(requestId, (res) => {
+    clearTimeout(timer);
+    resolver(res);
+  });
+
+  return () => {
+    clearTimeout(timer);
+    pendingRequests.delete(requestId);
+  };
+}
+
+/** Clean up all pending requests (called when a WebSocket disconnects). */
+export function cleanupPendingRequests() {
+  if (pendingRequests.size > 0) {
+    console.warn(`WebSocket [Server] Cleaning up ${pendingRequests.size} pending request(s) after client disconnect.`);
+    for (const [id, resolver] of pendingRequests) {
+      try {
+        resolver({ error: "WebSocket client disconnected before response was received." });
+      } catch (e) {
+        console.error(`WebSocket [Server] Error cleaning up request ${id}:`, e);
+      }
+    }
+    pendingRequests.clear();
+  }
+}
+
+/** Safely send a payload over a WebSocket connection, guarding against CLOSED/CLOSING states and unexpected write failures. */
+export function safeSend(ws: WebSocket, payload: any) {
+  if (!ws) return;
+  if (ws.readyState === WebSocket.OPEN) {
+    try {
+      ws.send(JSON.stringify(payload));
+    } catch (err: any) {
+      console.error("WebSocket [Server] Error in ws.send:", err);
+      try {
+        fs.appendFileSync(
+          path.join(process.cwd(), "sidecar_error.log"),
+          `[${new Date().toISOString()}] WebSocket Send Error: ${err?.stack || err}\n\n`
+        );
+      } catch (logErr) {
+        console.error("Failed to write to sidecar_error.log:", logErr);
+      }
+    }
+  } else {
+    const readyStateLabels: Record<number, string> = {
+      0: "CONNECTING",
+      1: "OPEN",
+      2: "CLOSING",
+      3: "CLOSED"
+    };
+    const stateStr = readyStateLabels[ws.readyState] || String(ws.readyState);
+    console.warn(`WebSocket [Server] Cannot send message, socket not open (readyState: ${stateStr}). Payload type: ${payload?.type}`);
+  }
+}

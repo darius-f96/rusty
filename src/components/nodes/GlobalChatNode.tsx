@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Globe, Pencil, Check, Trash2, Sparkles, X, Loader2 } from "lucide-react";
-import { useWorkspaceStore } from "../store";
-import { processResponse } from "../services/responseProcessingService";
+import { useWorkspaceStore } from "../../store";
+import { processResponse } from "../../services/responseProcessingService";
 
 export const GlobalChatNode: React.FC<{ id: string; data: any }> = ({ id, data }) => {
   const updateNode = useWorkspaceStore((state) => state.updateTaskNode);
@@ -64,8 +64,8 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = ({ id, data }
   const statusBorder = {
     idle: "border-[var(--border-color)] hover:border-violet-500/50",
     running: "border-violet-500/70 shadow-[0_0_15px_rgba(139,92,246,0.2)] animate-pulse",
-    success: "border-emerald-500/60 shadow-[0_0_10px_rgba(16,185,129,0.1)]",
-    error: "border-rose-500/60 shadow-[0_0_10px_rgba(244,63,94,0.1)]"
+    success: "border-emerald-500/60 shadow-[0_0_10px_rgba(16,185,129,0.15)]",
+    error: "border-rose-500/60 shadow-[0_0_10px_rgba(244,63,94,0.15)]"
   };
 
   const summaryText = data.summary || globalContextSummary;

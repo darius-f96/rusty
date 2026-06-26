@@ -11,11 +11,11 @@ import {
   GitMerge,
 } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
-import { SidePane } from "../SidePane";
-import { EdgeInspectorPane } from "../EdgeInspectorPane";
-import { ContextNode } from "../ContextNode";
-import { TaskNode } from "../TaskNode";
-import { GlobalChatNode } from "../GlobalChatNode";
+import { SidePane } from "../sidepane/SidePane";
+import { EdgeInspectorPane } from "../edgeinspector/EdgeInspectorPane";
+import { ContextNode } from "../nodes/ContextNode";
+import { TaskNode } from "../nodes/TaskNode";
+import { GlobalChatNode } from "../nodes/GlobalChatNode";
 import { ReconciliationEdge } from "../ReconciliationEdge";
 import { invoke } from "@tauri-apps/api/core";
 

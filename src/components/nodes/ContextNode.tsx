@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Handle, Position } from "@xyflow/react";
 import { Folder, Pencil, Check, X, Info, Trash2 } from "lucide-react";
-import { FileIcon } from "../services/fileTypeService";
-import { useWorkspaceStore } from "../store";
+import { FileIcon } from "../../services/fileTypeService";
+import { useWorkspaceStore } from "../../store";
 
 export const ContextNode: React.FC<{ id: string; data: any }> = ({ id, data }) => {
   const updateNode = useWorkspaceStore((state) => state.updateTaskNode); // Uses the store's update action
