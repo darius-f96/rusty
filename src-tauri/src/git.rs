@@ -711,3 +711,132 @@ pub async fn git_reset_to_commit(root_dir: String, commit_hash: String) -> Resul
         Err(String::from_utf8_lossy(&output.stderr).into_owned())
     }
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct GitBlameLine {
+    pub line_number: usize,
+    pub commit_hash: String,
+    pub author: String,
+    pub date: String,
+}
+
+/// Runs git blame on a file to fetch the author and date of the last commit for each line.
+#[tauri::command]
+pub async fn git_blame(root_dir: String, file_path: String) -> Result<Vec<GitBlameLine>, String> {
+    if !Path::new(&root_dir).exists() {
+        return Err("Directory does not exist".into());
+    }
+
+    let relative_path = if file_path.starts_with(&root_dir) {
+        let prefix_len = root_dir.len();
+        let stripped = &file_path[prefix_len..];
+        stripped.trim_start_matches('/').trim_start_matches('\\').to_string()
+    } else {
+        file_path
+    };
+
+    let output = Command::new("git")
+        .args(&["blame", "-w", "--date=short", &relative_path])
+        .current_dir(&root_dir)
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).into_owned());
+    }
+
+    let out_str = String::from_utf8_lossy(&output.stdout);
+    let mut blame_lines = Vec::new();
+
+    for line in out_str.lines() {
+        if let Some(open_paren_idx) = line.find('(') {
+            let hash = line[..open_paren_idx].trim().to_string();
+            if let Some(close_paren_idx) = line[open_paren_idx..].find(')') {
+                let actual_close_idx = open_paren_idx + close_paren_idx;
+                let inside = &line[open_paren_idx + 1..actual_close_idx];
+                
+                let tokens: Vec<&str> = inside.split_whitespace().collect();
+                if tokens.len() >= 2 {
+                    let line_number_str = tokens.last().cloned().unwrap_or("0");
+                    let line_number = line_number_str.parse::<usize>().unwrap_or(0);
+                    
+                    let date = tokens[tokens.len() - 2].to_string();
+                    let author = tokens[..tokens.len() - 2].join(" ");
+                    
+                    blame_lines.push(GitBlameLine {
+                        line_number,
+                        commit_hash: hash,
+                        author,
+                        date,
+                    });
+                }
+            }
+        }
+    }
+
+    Ok(blame_lines)
+}
+
+/// Retrieves the last 100 commits affecting a specific file.
+#[tauri::command]
+pub async fn git_get_file_commit_history(root_dir: String, file_path: String) -> Result<Vec<GitCommitInfo>, String> {
+    if !Path::new(&root_dir).exists() {
+        return Err("Directory does not exist".into());
+    }
+
+    let relative_path = if file_path.starts_with(&root_dir) {
+        let prefix_len = root_dir.len();
+        let stripped = &file_path[prefix_len..];
+        stripped.trim_start_matches('/').trim_start_matches('\\').to_string()
+    } else {
+        file_path
+    };
+
+    let log_output = Command::new("git")
+        .args(&[
+            "log",
+            "--format=%H|%P|%an|%cr|%s|%d",
+            "--max-count=100",
+            "--follow",
+            "--",
+            &relative_path,
+        ])
+        .current_dir(&root_dir)
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if !log_output.status.success() {
+        return Ok(Vec::new());
+    }
+
+    let log_str = String::from_utf8_lossy(&log_output.stdout);
+    let mut history = Vec::new();
+
+    for line in log_str.lines() {
+        let parts: Vec<&str> = line.split('|').collect();
+        if parts.len() < 5 {
+            continue;
+        }
+
+        let hash = parts[0].trim().to_string();
+        let short_hash = if hash.len() >= 7 { hash[0..7].to_string() } else { hash.clone() };
+        let parents: Vec<String> = parts[1].split_whitespace().map(|s| s.to_string()).collect();
+        let author = parts[2].trim().to_string();
+        let date = parts[3].trim().to_string();
+        let subject = parts[4].trim().to_string();
+        let decorations = parts.get(5).cloned().unwrap_or(&"").trim().to_string();
+
+        history.push(GitCommitInfo {
+            hash,
+            short_hash,
+            parents,
+            author,
+            date,
+            subject,
+            decorations,
+            is_unpushed: false,
+        });
+    }
+
+    Ok(history)
+}

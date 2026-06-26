@@ -298,7 +298,7 @@ export const Workspace: React.FC = () => {
                 <SettingsTab />
               )}
               {tab.type === "git-history" && (
-                <GitHistoryTab />
+                <GitHistoryTab tab={tab} />
               )}
               {tab.type === "workspace" && (
                 <WorkspaceTab />

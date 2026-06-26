@@ -24,7 +24,7 @@ interface parsedDecoration {
  * Renders a visual log/graph of recent commits in the active Git repository.
  * Highlights unpushed (outgoing) commits and parses branch/tag decorations as badges.
  */
-export const GitHistoryTabContent: React.FC = () => {
+export const GitHistoryTabContent: React.FC<{ tab?: any }> = ({ tab }) => {
   const rootPath = useWorkspaceStore((state) => state.rootPath);
   const loadGitStatus = useWorkspaceStore((state) => state.loadGitStatus);
   const gitStatus = useWorkspaceStore((state) => state.gitStatus);
@@ -121,9 +121,15 @@ export const GitHistoryTabContent: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const history: GitCommitInfo[] = await invoke("git_get_commit_history", {
-        rootDir: rootPath,
-      });
+      const isFileHistory = tab && tab.key && tab.key !== "git-history";
+      const history: GitCommitInfo[] = isFileHistory
+        ? await invoke("git_get_file_commit_history", {
+            rootDir: rootPath,
+            filePath: tab.key,
+          })
+        : await invoke("git_get_commit_history", {
+            rootDir: rootPath,
+          });
       setCommits(history);
     } catch (err: any) {
       console.error("Failed to load commit history:", err);
@@ -133,10 +139,10 @@ export const GitHistoryTabContent: React.FC = () => {
     }
   };
 
-  // Run on mount or when root path changes
+  // Run on mount or when root path/tab changes
   useEffect(() => {
     fetchCommitHistory();
-  }, [rootPath]);
+  }, [rootPath, tab?.key]);
 
   // Handle manual refresh
   const handleRefresh = async () => {
@@ -218,50 +224,59 @@ export const GitHistoryTabContent: React.FC = () => {
 
   const unpushedCommitsCount = commits.filter((c) => c.is_unpushed).length;
 
+  const isFileHistory = tab && tab.key && tab.key !== "git-history";
+  const fileBasename = isFileHistory ? tab.key.split(/[/\\]/).pop() || tab.key : "";
+
   return (
     <div className="w-full h-full flex flex-col bg-[var(--bg-app)] font-sans text-xs select-none text-[var(--text-normal)]">
       {/* Control Header Panel */}
       <div className="px-6 py-4 bg-[var(--bg-sidebar)] border-b border-[var(--border-color)] flex items-center justify-between flex-shrink-0">
         <div className="space-y-1">
           <div className="flex items-center space-x-2">
-            <h2 className="text-base font-bold text-[var(--text-light)]">Git Commit History</h2>
+            <h2 className="text-base font-bold text-[var(--text-light)]">
+              {isFileHistory ? `History: ${fileBasename}` : "Git Commit History"}
+            </h2>
             <span className="bg-[var(--accent-bg)] text-[var(--accent-color)] text-[10px] px-2 py-0.5 rounded font-mono font-bold border border-[var(--accent-color)]/25">
               {gitStatus?.currentBranch || "detached"}
             </span>
           </div>
-          <p className="text-[10px] text-[var(--text-muted)] font-mono">
-            Showing last 100 commits from all branches
+          <p className="text-[10px] text-[var(--text-muted)] font-mono truncate max-w-lg">
+            {isFileHistory ? `Showing commits affecting ${tab.key}` : "Showing last 100 commits from all branches"}
           </p>
         </div>
 
         {/* Action Controls */}
         <div className="flex items-center space-x-2">
-          {unpushedCommitsCount > 0 && (
+          {!isFileHistory && unpushedCommitsCount > 0 && (
             <div className="flex items-center space-x-1.5 bg-amber-500/10 border border-amber-500/30 text-amber-400 px-3 py-1.5 rounded-lg text-[10px] font-mono font-semibold mr-2 select-none">
               <ArrowUp size={11} className="animate-bounce" />
               <span>{unpushedCommitsCount} outgoing commit{unpushedCommitsCount > 1 ? "s" : ""}</span>
             </div>
           )}
 
-          <button
-            onClick={handlePull}
-            disabled={loading || isPulling || isPushing}
-            className="bg-[var(--bg-app)] border border-[var(--border-color)] hover:border-[var(--border-active)] hover:text-[var(--text-light)] text-[var(--text-normal)] disabled:opacity-50 px-3 py-1.5 rounded-lg font-mono font-semibold transition-all flex items-center space-x-1.5 cursor-pointer"
-            title="Pull remote commits"
-          >
-            <ArrowDown size={12} className={isPulling ? "animate-bounce" : ""} />
-            <span>Pull</span>
-          </button>
+          {!isFileHistory && (
+            <>
+              <button
+                onClick={handlePull}
+                disabled={loading || isPulling || isPushing}
+                className="bg-[var(--bg-app)] border border-[var(--border-color)] hover:border-[var(--border-active)] hover:text-[var(--text-light)] text-[var(--text-normal)] disabled:opacity-50 px-3 py-1.5 rounded-lg font-mono font-semibold transition-all flex items-center space-x-1.5 cursor-pointer"
+                title="Pull remote commits"
+              >
+                <ArrowDown size={12} className={isPulling ? "animate-bounce" : ""} />
+                <span>Pull</span>
+              </button>
 
-          <button
-            onClick={handlePush}
-            disabled={loading || isPulling || isPushing}
-            className="bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/85 text-white disabled:bg-[var(--border-color)] disabled:opacity-50 px-3.5 py-1.5 rounded-lg font-mono font-bold transition-all shadow-md hover:shadow-indigo-500/10 flex items-center space-x-1.5 cursor-pointer glow-btn"
-            title="Push local commits"
-          >
-            <ArrowUp size={12} className={isPushing ? "animate-bounce" : ""} />
-            <span>Push</span>
-          </button>
+              <button
+                onClick={handlePush}
+                disabled={loading || isPulling || isPushing}
+                className="bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/85 text-white disabled:bg-[var(--border-color)] disabled:opacity-50 px-3.5 py-1.5 rounded-lg font-mono font-bold transition-all shadow-md hover:shadow-indigo-500/10 flex items-center space-x-1.5 cursor-pointer glow-btn"
+                title="Push local commits"
+              >
+                <ArrowUp size={12} className={isPushing ? "animate-bounce" : ""} />
+                <span>Push</span>
+              </button>
+            </>
+          )}
 
           <button
             onClick={handleRefresh}
