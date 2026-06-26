@@ -9,6 +9,7 @@ import { GitDiffTab } from "./tabs/GitDiffTab";
 import { LlmSetupTab } from "./tabs/LlmSetupTab";
 import { SettingsTab } from "./tabs/SettingsTab";
 import { GitHistoryTab } from "./tabs/GitHistoryTab";
+import { WorkspaceTab } from "./tabs/WorkspaceTab";
 
 export const Workspace: React.FC = () => {
   const rootPath = useWorkspaceStore((state) => state.rootPath);
@@ -298,6 +299,9 @@ export const Workspace: React.FC = () => {
               )}
               {tab.type === "git-history" && (
                 <GitHistoryTab />
+              )}
+              {tab.type === "workspace" && (
+                <WorkspaceTab />
               )}
             </div>
           );

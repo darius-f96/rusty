@@ -44,7 +44,7 @@ export interface GitStatusResult {
 
 export interface Tab {
   id: string;
-  type: "canvas" | "file" | "task" | "settings" | "llm-setup" | "git-diff" | "git-history";
+  type: "canvas" | "file" | "task" | "settings" | "llm-setup" | "git-diff" | "git-history" | "workspace";
   title: string;
   key: string;
   diffType?: "staged" | "unstaged" | "commit";
@@ -127,6 +127,8 @@ export interface WorkspaceState {
   setSelectedEdgeId: (id: string | null) => void;
   setEdgeStatus: (edgeId: string, status: "idle" | "unreconciled" | "reconciled") => void;
   getSequenceEdges: () => Edge[];
+  saveSecureConfig: () => Promise<void>;
+  loadSecureConfig: () => Promise<void>;
 }
 
 export const useWorkspaceStore = create<WorkspaceState>((set) => ({
@@ -194,9 +196,22 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     }).catch(e => {
       console.warn("Failed to update monaco theme:", e);
     });
+    setTimeout(() => useWorkspaceStore.getState().saveSecureConfig(), 0);
   },
 
   setRootPath: (path) => {
+    if (path) {
+      try {
+        const stored = localStorage.getItem("previous_workspaces");
+        const list: string[] = stored ? JSON.parse(stored) : [];
+        const filtered = list.filter((p) => p !== path);
+        filtered.unshift(path);
+        if (filtered.length > 10) filtered.pop();
+        localStorage.setItem("previous_workspaces", JSON.stringify(filtered));
+      } catch (e) {
+        console.error("Failed to update previous workspaces history:", e);
+      }
+    }
     set({
       rootPath: path,
       openTabs: [{ id: "canvas", type: "canvas", title: "Axiom", key: "canvas" }],
@@ -209,6 +224,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       nodeStatus: {}
     });
     useWorkspaceStore.getState().loadGitStatus();
+    setTimeout(() => useWorkspaceStore.getState().saveSecureConfig(), 0);
   },
   setGitStatus: (status) => set({ gitStatus: status }),
   loadGitStatus: async () => {
@@ -424,21 +440,31 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     globalChatHistory: { ...state.globalChatHistory, [nodeId]: [] }
   })),
 
-  addCustomProvider: (provider) => set((state) => ({
-    customProviders: [...state.customProviders.filter(p => p.id !== provider.id), provider]
-  })),
+  addCustomProvider: (provider) => set((state) => {
+    const updated = [...state.customProviders.filter(p => p.id !== provider.id), provider];
+    setTimeout(() => useWorkspaceStore.getState().saveSecureConfig(), 0);
+    return { customProviders: updated };
+  }),
 
-  updateProviderSettings: (providerId, settings) => set((state) => ({
-    customProviders: state.customProviders.map((p) => {
+  updateProviderSettings: (providerId, settings) => set((state) => {
+    const updated = state.customProviders.map((p) => {
       if (p.id === providerId) {
         return { ...p, ...settings };
       }
       return p;
-    })
-  })),
+    });
+    setTimeout(() => useWorkspaceStore.getState().saveSecureConfig(), 0);
+    return { customProviders: updated };
+  }),
 
-  setActiveCustomProviderId: (id) => set({ activeCustomProviderId: id }),
-  setActiveModel: (model) => set({ activeModel: model }),
+  setActiveCustomProviderId: (id) => {
+    set({ activeCustomProviderId: id });
+    setTimeout(() => useWorkspaceStore.getState().saveSecureConfig(), 0);
+  },
+  setActiveModel: (model) => {
+    set({ activeModel: model });
+    setTimeout(() => useWorkspaceStore.getState().saveSecureConfig(), 0);
+  },
   
   addDevLog: (type, text) => set((state) => {
     const newLog: DevLog = {
@@ -520,5 +546,65 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     return state.edges.filter(
       (e) => e.sourceHandle === "task-out" && e.targetHandle === "task-in"
     );
+  },
+
+  saveSecureConfig: async () => {
+    const state = useWorkspaceStore.getState();
+    const { SecureStorageService } = await import("./services/secureStorageService");
+    await SecureStorageService.saveSecureData("axiom_secure_config", {
+      customProviders: state.customProviders,
+      activeCustomProviderId: state.activeCustomProviderId,
+      activeModel: state.activeModel,
+      activeThemeId: state.activeThemeId,
+      lastWorkspacePath: state.rootPath,
+    });
+  },
+
+  loadSecureConfig: async () => {
+    const { SecureStorageService } = await import("./services/secureStorageService");
+    const config = await SecureStorageService.loadSecureData<{
+      customProviders?: CustomProvider[];
+      activeCustomProviderId?: string | null;
+      activeModel?: string;
+      activeThemeId?: string;
+      lastWorkspacePath?: string;
+    }>("axiom_secure_config");
+
+    if (config) {
+      const updates: Partial<WorkspaceState> = {};
+      if (config.customProviders) updates.customProviders = config.customProviders;
+      if (config.activeCustomProviderId !== undefined) updates.activeCustomProviderId = config.activeCustomProviderId;
+      if (config.activeModel) updates.activeModel = config.activeModel;
+
+      if (config.activeThemeId) {
+        updates.activeThemeId = config.activeThemeId;
+        const themeId = config.activeThemeId;
+        const { themes, applyThemeProperties, defineMonacoTheme } = await import("./theme");
+        const t = themes[themeId] || themes.dark;
+        applyThemeProperties(t);
+
+        const { loader } = await import("@monaco-editor/react");
+        loader.init().then((monaco) => {
+          defineMonacoTheme(monaco, t);
+          monaco.editor.setTheme("axiom-custom-theme");
+        }).catch(e => console.warn("Failed to set monaco theme:", e));
+      }
+
+      set(updates);
+
+      if (config.lastWorkspacePath) {
+        try {
+          const { invoke } = await import("@tauri-apps/api/core");
+          const tree: any[] = await invoke("get_directory_structure", { rootDir: config.lastWorkspacePath });
+          set({
+            rootPath: config.lastWorkspacePath,
+            fileTree: tree
+          });
+          await useWorkspaceStore.getState().loadGitStatus();
+        } catch (err) {
+          console.error("Failed to load last workspace folder:", err);
+        }
+      }
+    }
   }
 }));

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { X, Cpu, Settings, GitCommit, ChevronDown } from "lucide-react";
+import { X, Cpu, Settings, GitCommit, ChevronDown, FolderOpen } from "lucide-react";
 import { useWorkspaceStore } from "../store";
 import { FileIcon } from "../services/fileTypeService";
 import { AxiomIcon } from "./AxiomIcon";
@@ -120,6 +120,16 @@ export const TabBar: React.FC = () => {
                   }
                 />
               )}
+              {tab.type === "workspace" && (
+                <FolderOpen
+                  size={11}
+                  className={
+                    isActive
+                      ? "text-[var(--accent-color)]"
+                      : "text-[var(--text-muted)]"
+                  }
+                />
+              )}
 
               <span className="truncate max-w-[120px]">{tab.title}</span>
 
@@ -185,6 +195,7 @@ export const TabBar: React.FC = () => {
                       {tab.type === "settings" && <Settings size={11} />}
                       {tab.type === "git-history" && <GitCommit size={11} />}
                       {tab.type === "git-diff" && <GitCommit size={11} />}
+                      {tab.type === "workspace" && <FolderOpen size={11} />}
                       <span className="truncate">{tab.title}</span>
                     </div>
 

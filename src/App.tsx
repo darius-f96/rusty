@@ -66,6 +66,13 @@ function App() {
     };
   }, [handleSidebarMouseMove, handleSidebarMouseUp]);
 
+  // Load secure configuration on startup
+  useEffect(() => {
+    useWorkspaceStore.getState().loadSecureConfig().catch((err) => {
+      console.error("Failed to load secure configuration on startup:", err);
+    });
+  }, []);
+
   // Global console/rejection interceptor
   useEffect(() => {
     const originalLog = console.log;

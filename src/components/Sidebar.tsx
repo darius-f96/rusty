@@ -30,34 +30,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [sidebarView, setSidebarView] = useState<"explorer" | "git">("explorer");
   const [lastWidth, setLastWidth] = useState(320);
 
-  const handleOpenWorkspace = async () => {
-    try {
-      const { open } = await import("@tauri-apps/plugin-dialog");
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: "Select Workspace Folder",
-      });
-      if (selected && typeof selected === "string") {
-        console.log("Selected workspace directory:", selected);
-        
-        const { invoke } = await import("@tauri-apps/api/core");
-        const tree: any[] = await invoke("get_directory_structure", { rootDir: selected });
-        
-        const store = useWorkspaceStore.getState();
-        store.setFileTree(tree);
-        store.setRootPath(selected);
-
-        // Switch to explorer view and expand sidebar if it was collapsed
-        setSidebarView("explorer");
-        if (!isExplorerOpen) {
-          setSidebarWidth(lastWidth);
-          setIsExplorerOpen(true);
-        }
-      }
-    } catch (err: any) {
-      console.error("Failed to open directory dialog:", err);
-    }
+  const handleOpenWorkspace = () => {
+    openTab({
+      id: "workspace_select",
+      type: "workspace",
+      title: "Workspaces",
+      key: "workspace",
+    });
   };
 
   const handleExplorerTabClick = () => {
@@ -181,7 +160,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {/* Open Workspace Action */}
           <button
             onClick={handleOpenWorkspace}
-            className="p-2.5 rounded-lg transition-all cursor-pointer relative group text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
+            className={`p-2.5 rounded-lg transition-all cursor-pointer relative group ${
+              activeTabId === "workspace_select"
+                ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
+                : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
+            }`}
             title="Open Workspace"
           >
             <FolderOpen size={20} />
