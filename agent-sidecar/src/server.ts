@@ -776,8 +776,14 @@ wss.on("connection", (ws: WebSocket) => {
               const requestId = getNextId();
               registerPendingRequest(requestId, (res) => {
                 if (res.error) {
-                  console.error(`WebSocket [Server] read_file failed for: ${resolvedPath}`, res.error);
-                  reject(new Error(res.error));
+                  const errorMsg = String(res.error).toLowerCase();
+                  if (errorMsg.includes("not found") || errorMsg.includes("no such file") || errorMsg.includes("exist")) {
+                    console.log(`WebSocket [Server] read_file target not found, returning placeholder for new file creation: ${resolvedPath}`);
+                    resolve("[File does not exist yet. You can create it by calling write_file with content.]");
+                  } else {
+                    console.error(`WebSocket [Server] read_file failed for: ${resolvedPath}`, res.error);
+                    reject(new Error(res.error));
+                  }
                 } else {
                   console.log(`WebSocket [Server] read_file success for: ${resolvedPath} (${res.content?.length || 0} chars)`);
                   resolve(res.content);
@@ -962,7 +968,7 @@ Remember:
               allTools as any,
               workspaceRoot,
               sendLog,
-              10, // max 10 rounds
+              20, // max 20 rounds
               chatHistory ? chatHistory.slice(0, -1) : []
             );
 
@@ -1076,8 +1082,14 @@ Remember:
               const requestId = getNextId();
               registerPendingRequest(requestId, (res) => {
                 if (res.error) {
-                  console.error(`WebSocket [Server] read_file error: ${res.error}`);
-                  reject(new Error(res.error));
+                  const errorMsg = String(res.error).toLowerCase();
+                  if (errorMsg.includes("not found") || errorMsg.includes("no such file") || errorMsg.includes("exist")) {
+                    console.log(`WebSocket [Server] global_explore read_file target not found, returning placeholder: ${resolvedPath}`);
+                    resolve("[File does not exist yet. You can create it by calling write_file with content.]");
+                  } else {
+                    console.error(`WebSocket [Server] read_file error: ${res.error}`);
+                    reject(new Error(res.error));
+                  }
                 } else {
                   console.log(`WebSocket [Server] read_file success: ${filePath} (${res.content?.length || 0} chars)`);
                   resolve(res.content);
@@ -1178,7 +1190,7 @@ IMPORTANT: End your response with a section marked "--- SUMMARY ---" that contai
             tools as Array<{ name: string; description: string; inputSchema?: any; execute: (args: any) => Promise<any> }>,
             workspaceRoot,
             sendLog,
-            5, // max 5 rounds of tool calls
+            15, // max 15 rounds of tool calls
             chatHistory || []
           );
 
@@ -1257,8 +1269,17 @@ IMPORTANT: End your response with a section marked "--- SUMMARY ---" that contai
             return new Promise((resolve, reject) => {
               const requestId = getNextId();
               registerPendingRequest(requestId, (res) => {
-                if (res.error) reject(new Error(res.error));
-                else resolve(res.content);
+                if (res.error) {
+                  const errorMsg = String(res.error).toLowerCase();
+                  if (errorMsg.includes("not found") || errorMsg.includes("no such file") || errorMsg.includes("exist")) {
+                    console.log(`WebSocket [Server] reconciliate_edge read_file target not found, returning placeholder: ${resolvedPath}`);
+                    resolve("[File does not exist yet. You can create it by calling write_file with content.]");
+                  } else {
+                    reject(new Error(res.error));
+                  }
+                } else {
+                  resolve(res.content);
+                }
               });
               safeSend(ws, { type: "read_file", requestId, path: resolvedPath });
             });
