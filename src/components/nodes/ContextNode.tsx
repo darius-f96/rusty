@@ -1,10 +1,10 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, memo } from "react";
 import { Handle, Position } from "@xyflow/react";
 import { Folder, Pencil, Check, X, Info, Trash2 } from "lucide-react";
 import { FileIcon } from "../../services/fileTypeService";
 import { useWorkspaceStore } from "../../store";
 
-export const ContextNode: React.FC<{ id: string; data: any }> = ({ id, data }) => {
+export const ContextNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) => {
   const updateNode = useWorkspaceStore((state) => state.updateTaskNode); // Uses the store's update action
   const openTab = useWorkspaceStore((state) => state.openTab);
   const deleteNode = useWorkspaceStore((state) => state.deleteNode);
@@ -269,4 +269,4 @@ export const ContextNode: React.FC<{ id: string; data: any }> = ({ id, data }) =
       )}
     </div>
   );
-};
+});

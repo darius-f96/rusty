@@ -6,14 +6,21 @@ export const useResizable = (initialWidth = 500) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const widthRef = useRef(initialWidth);
 
+  const animationFrameIdRef = useRef<number | null>(null);
+
   const handleMouseMove = useCallback((mouseMoveEvent: MouseEvent) => {
     if (!isResizing.current) return;
     const newWidth = window.innerWidth - mouseMoveEvent.clientX;
     if (newWidth > 300 && newWidth < 1000) {
       widthRef.current = newWidth;
-      if (containerRef.current) {
-        containerRef.current.style.width = `${newWidth}px`;
+      if (animationFrameIdRef.current) {
+        cancelAnimationFrame(animationFrameIdRef.current);
       }
+      animationFrameIdRef.current = requestAnimationFrame(() => {
+        if (containerRef.current) {
+          containerRef.current.style.width = `${widthRef.current}px`;
+        }
+      });
     }
   }, []);
 
@@ -23,6 +30,9 @@ export const useResizable = (initialWidth = 500) => {
     document.removeEventListener("mouseup", handleMouseUp);
     document.body.style.cursor = "";
     document.body.style.userSelect = "";
+    if (animationFrameIdRef.current) {
+      cancelAnimationFrame(animationFrameIdRef.current);
+    }
     setWidth(widthRef.current);
   }, [handleMouseMove]);
 
@@ -42,6 +52,9 @@ export const useResizable = (initialWidth = 500) => {
       document.removeEventListener("mouseup", handleMouseUp);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
+      if (animationFrameIdRef.current) {
+        cancelAnimationFrame(animationFrameIdRef.current);
+      }
     };
   }, [handleMouseMove, handleMouseUp]);
 

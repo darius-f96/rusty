@@ -1,9 +1,9 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, memo } from "react";
 import { Globe, Pencil, Check, Trash2, Sparkles, X, Loader2 } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
 import { processResponse } from "../../services/responseProcessingService";
 
-export const GlobalChatNode: React.FC<{ id: string; data: any }> = ({ id, data }) => {
+export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) => {
   const updateNode = useWorkspaceStore((state) => state.updateTaskNode);
   const deleteNode = useWorkspaceStore((state) => state.deleteNode);
   const globalContextSummary = useWorkspaceStore((state) => state.globalContextSummary);
@@ -183,4 +183,4 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = ({ id, data }
       </div>
     </div>
   );
-};
+});

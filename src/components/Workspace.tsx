@@ -267,7 +267,12 @@ export const Workspace: React.FC = () => {
       <div className="flex-1 min-h-0 relative bg-[var(--bg-editor)] overflow-hidden">
         {openTabs.map((tab) => {
           const isActive = tab.id === activeTabId;
-          const bgClass = tab.type === "canvas" ? "bg-[var(--bg-canvas)]" : "bg-[var(--bg-editor)]";
+          const isCanvas = tab.type === "canvas";
+
+          // Optimize rendering: unmount non-active file/task/diff tabs
+          if (!isActive && !isCanvas) return null;
+
+          const bgClass = isCanvas ? "bg-[var(--bg-canvas)]" : "bg-[var(--bg-editor)]";
           return (
             <div
               key={tab.id}

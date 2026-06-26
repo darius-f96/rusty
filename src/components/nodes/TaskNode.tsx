@@ -1,9 +1,9 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, memo } from "react";
 import { Handle, Position } from "@xyflow/react";
 import { Sparkles, AlertCircle, CheckCircle2, Loader2, Pencil, Check, Trash2 } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
 
-export const TaskNode: React.FC<{ id: string; data: any }> = ({ id, data }) => {
+export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) => {
   const updateTaskNode = useWorkspaceStore((state) => state.updateTaskNode);
   const nodeStatus = useWorkspaceStore((state) => state.nodeStatus[id] || "idle");
   const deleteNode = useWorkspaceStore((state) => state.deleteNode);
@@ -188,4 +188,4 @@ export const TaskNode: React.FC<{ id: string; data: any }> = ({ id, data }) => {
       />
     </div>
   );
-};
+});
