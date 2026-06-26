@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Folder, Cpu, Settings, GitBranch, ChevronLeft, Plus, FolderPlus, FoldHorizontal, RefreshCw } from "lucide-react";
+import { FolderOpen, Files, Cpu, Settings, GitBranch, ChevronLeft, Plus, FolderPlus, FoldHorizontal, RefreshCw } from "lucide-react";
 import { useWorkspaceStore } from "../store";
 import { FileTree } from "./FileTree";
 import { invoke } from "@tauri-apps/api/core";
@@ -29,6 +29,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [isExplorerOpen, setIsExplorerOpen] = useState(true);
   const [sidebarView, setSidebarView] = useState<"explorer" | "git">("explorer");
   const [lastWidth, setLastWidth] = useState(320);
+
+  const handleOpenWorkspace = async () => {
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: "Select Workspace Folder",
+      });
+      if (selected && typeof selected === "string") {
+        console.log("Selected workspace directory:", selected);
+        
+        const { invoke } = await import("@tauri-apps/api/core");
+        const tree: any[] = await invoke("get_directory_structure", { rootDir: selected });
+        
+        const store = useWorkspaceStore.getState();
+        store.setFileTree(tree);
+        store.setRootPath(selected);
+
+        // Switch to explorer view and expand sidebar if it was collapsed
+        setSidebarView("explorer");
+        if (!isExplorerOpen) {
+          setSidebarWidth(lastWidth);
+          setIsExplorerOpen(true);
+        }
+      }
+    } catch (err: any) {
+      console.error("Failed to open directory dialog:", err);
+    }
+  };
 
   const handleExplorerTabClick = () => {
     if (!isExplorerOpen) {
@@ -148,7 +178,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* 1. Left Icon Dock (Activity Bar) */}
       <div className="w-14 bg-black/15 flex flex-col items-center py-4 justify-between h-full border-r border-[var(--border-color)] flex-shrink-0">
         <div className="flex flex-col items-center space-y-4 w-full">
-          {/* Project Explorer Toggle */}
+          {/* Open Workspace Action */}
+          <button
+            onClick={handleOpenWorkspace}
+            className="p-2.5 rounded-lg transition-all cursor-pointer relative group text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
+            title="Open Workspace"
+          >
+            <FolderOpen size={20} />
+            <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-zinc-950 text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-zinc-800 whitespace-nowrap">
+              Open Workspace
+            </span>
+          </button>
+
+          {/* Files (Explorer View Toggle) */}
           <button
             onClick={handleExplorerTabClick}
             className={`p-2.5 rounded-lg transition-all cursor-pointer relative group ${
@@ -156,11 +198,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
                 : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
             }`}
-            title="Toggle File Explorer"
+            title="Files"
           >
-            <Folder size={20} />
+            <Files size={20} />
             <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-zinc-950 text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-zinc-800 whitespace-nowrap">
-              File Explorer
+              Files
             </span>
           </button>
 

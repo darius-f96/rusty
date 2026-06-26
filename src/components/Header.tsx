@@ -1,57 +1,40 @@
 import React from "react";
-import { ChevronDown, FolderOpen } from "lucide-react";
-import { useWorkspaceStore } from "../store";
+import { Search } from "lucide-react";
 import { AxiomIcon } from "./AxiomIcon";
 
 export const Header: React.FC = () => {
-  const rootPath = useWorkspaceStore((state) => state.rootPath);
-  const folderName = rootPath ? rootPath.split(/[/\\]/).pop() || rootPath : "Select Workspace...";
-
-  const handleOpenWorkspace = async () => {
-    try {
-      const { open } = await import("@tauri-apps/plugin-dialog");
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: "Select Workspace Folder",
-      });
-      if (selected && typeof selected === "string") {
-        console.log("Selected workspace directory:", selected);
-        
-        const { invoke } = await import("@tauri-apps/api/core");
-        const tree: any[] = await invoke("get_directory_structure", { rootDir: selected });
-        
-        const store = useWorkspaceStore.getState();
-        store.setFileTree(tree);
-        store.setRootPath(selected);
-      }
-    } catch (err: any) {
-      console.error("Failed to open directory dialog:", err);
-    }
-  };
-
   return (
     <header className="w-full h-14 px-6 flex items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-app)] select-none z-30 flex-shrink-0">
-      {/* Left Area: Logo and Workspace Select */}
-      <div className="flex items-center space-x-6">
-        <div className="flex items-center space-x-2.5">
-          <div className="w-8 h-8 rounded-lg bg-[var(--bg-sidebar)] border border-[var(--border-color)] flex items-center justify-center text-[var(--accent-color)] shadow-md transition-all">
-            <AxiomIcon size={18} className="animate-spin-slow" />
-          </div>
-          <span className="text-sm font-black tracking-wider text-[var(--text-light)] font-sans">
-            Axiom
-          </span>
+      {/* Left Area: Logo */}
+      <div className="flex items-center space-x-2.5">
+        <div className="w-8 h-8 rounded-lg bg-[var(--bg-sidebar)] border border-[var(--border-color)] flex items-center justify-center text-[var(--accent-color)] shadow-md transition-all">
+          <AxiomIcon size={18} className="animate-spin-slow" />
         </div>
+        <span className="text-sm font-black tracking-wider text-[var(--text-light)] font-sans">
+          Axiom
+        </span>
+      </div>
 
-        <div 
-          onClick={handleOpenWorkspace}
-          className="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-[var(--bg-sidebar)] border border-[var(--border-color)] hover:border-[var(--border-active)] text-xs text-[var(--text-normal)] hover:text-[var(--text-light)] font-mono transition-all cursor-pointer shadow-sm select-none"
-        >
-          <FolderOpen size={13} className="text-[var(--accent-color)]" />
-          <span className="max-w-[200px] truncate font-medium">{folderName}</span>
-          <ChevronDown size={12} className="text-[var(--text-muted)]" />
+      {/* Middle Area: Non-functional Search Bar */}
+      <div className="flex-1 max-w-md mx-auto relative px-4">
+        <div className="relative group">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Search workspace..."
+            disabled
+            className="w-full h-9 pl-9 pr-12 rounded-lg bg-[var(--bg-sidebar)] border border-[var(--border-color)] text-xs text-[var(--text-normal)] opacity-85 select-none cursor-not-allowed transition-all focus:outline-none"
+          />
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center space-x-0.5 pointer-events-none">
+            <kbd className="px-1.5 py-0.5 text-[9px] font-sans font-medium rounded border border-[var(--border-color)] bg-[var(--bg-app)] text-[var(--text-muted)]">⌘</kbd>
+            <kbd className="px-1.5 py-0.5 text-[9px] font-sans font-medium rounded border border-[var(--border-color)] bg-[var(--bg-app)] text-[var(--text-muted)]">K</kbd>
+          </div>
         </div>
       </div>
+
+      {/* Right Area placeholder to balance flex layout */}
+      <div className="w-[120px] flex justify-end" />
     </header>
   );
 };
+
