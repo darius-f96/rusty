@@ -231,100 +231,31 @@ pub struct SearchMatch {
     is_content_match: bool,
 }
 
-fn search_dir_recursive(
-    dir: &Path,
-    query: &str,
-    match_case: bool,
-    whole_word: bool,
-    is_regex: bool,
-    results: &mut Vec<SearchMatch>,
-) -> Result<(), String> {
-    let read_dir = std::fs::read_dir(dir).map_err(|e| e.to_string())?;
+struct ScoredSearchMatch {
+    match_val: SearchMatch,
+    score: i64,
+}
 
-    // Precompile regex if needed
-    let regex_matcher = if is_regex {
-        Some(regex::RegexBuilder::new(query)
-            .case_insensitive(!match_case)
-            .build()
-            .map_err(|e| format!("Invalid regex: {}", e))?)
-    } else {
-        None
-    };
-
-    let query_lower = query.to_lowercase();
-
-    for entry in read_dir {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let entry_path = entry.path();
-        let name = entry.file_name().to_string_lossy().into_owned();
-
-        if entry_path.is_dir() {
-            if name == "node_modules"
-                || name == ".git"
-                || name == "target"
-                || name == "dist"
-                || name == ".vscode"
-                || name == ".gemini"
-            {
-                continue;
-            }
-            search_dir_recursive(&entry_path, query, match_case, whole_word, is_regex, results)?;
-        } else {
-            // 1. Check filename match
-            let is_name_match = if match_case {
-                name.contains(query)
-            } else {
-                name.to_lowercase().contains(&query_lower)
-            };
-
-            if is_name_match {
-                results.push(SearchMatch {
-                    path: entry_path.to_string_lossy().into_owned(),
-                    name: name.clone(),
-                    line: 0,
-                    content: String::new(),
-                    is_content_match: false,
-                });
-            }
-
-            // 2. Check file content match
-            if let Ok(content) = std::fs::read_to_string(&entry_path) {
-                let mut line_num = 1;
-                for raw_line in content.lines() {
-                    let is_match = if let Some(ref re) = regex_matcher {
-                        re.is_match(raw_line)
-                    } else if match_case {
-                        if whole_word {
-                            // Check word boundaries by comparing whole words
-                            raw_line.split(|c: char| !c.is_alphanumeric() && c != '_')
-                                .any(|w| w == query)
-                        } else {
-                            raw_line.contains(query)
-                        }
-                    } else {
-                        if whole_word {
-                            raw_line.split(|c: char| !c.is_alphanumeric() && c != '_')
-                                .any(|w| w.to_lowercase() == query_lower)
-                        } else {
-                            raw_line.to_lowercase().contains(&query_lower)
-                        }
-                    };
-
-                    if is_match {
-                        results.push(SearchMatch {
-                            path: entry_path.to_string_lossy().into_owned(),
-                            name: name.clone(),
-                            line: line_num,
-                            content: raw_line.trim().to_string(),
-                            is_content_match: true,
-                        });
-                    }
-                    line_num += 1;
-                }
-            }
+fn read_and_check_text_file(path: &Path) -> Option<String> {
+    if let Ok(metadata) = std::fs::metadata(path) {
+        // Skip files larger than 2MB
+        if metadata.len() > 2 * 1024 * 1024 {
+            return None;
         }
     }
-    Ok(())
+
+    let mut file = std::fs::File::open(path).ok()?;
+    use std::io::{Read, Seek};
+    let mut buffer = [0; 1024];
+    let bytes_read = file.read(&mut buffer).ok()?;
+    if buffer[..bytes_read].contains(&0) {
+        return None; // Binary file detection
+    }
+
+    file.seek(std::io::SeekFrom::Start(0)).ok()?;
+    let mut content = String::new();
+    file.read_to_string(&mut content).ok()?;
+    Some(content)
 }
 
 #[tauri::command]
@@ -339,7 +270,7 @@ async fn search_project(
         "Rust [search_project] querying: '{}' (case: {}, word: {}, regex: {}) under: {}",
         query, match_case, whole_word, is_regex, root_dir
     );
-    
+
     if query.trim().is_empty() {
         return Ok(Vec::new());
     }
@@ -349,13 +280,154 @@ async fn search_project(
         return Err("Directory does not exist".into());
     }
 
-    let mut results = Vec::new();
-    search_dir_recursive(root_path, &query, match_case, whole_word, is_regex, &mut results)?;
-    
-    // Limit results count to prevent sending huge payloads
-    results.truncate(150);
-    
-    Ok(results)
+    let results = Arc::new(Mutex::new(Vec::new()));
+    let query_lower = query.to_lowercase();
+    let query_arc = Arc::new(query);
+    let query_lower_arc = Arc::new(query_lower);
+    let root_path_buf = root_path.to_path_buf();
+    let root_path_arc = Arc::new(root_path_buf);
+
+    let regex_matcher = if is_regex {
+        let re = regex::RegexBuilder::new(&query_arc)
+            .case_insensitive(!match_case)
+            .build()
+            .map_err(|e| format!("Invalid regex: {}", e))?;
+        Some(Arc::new(re))
+    } else {
+        None
+    };
+
+    use fuzzy_matcher::FuzzyMatcher;
+    use ignore::WalkBuilder;
+
+    let walker = WalkBuilder::new(&*root_path_arc)
+        .hidden(true) // Skip hidden files and directories (like .git) by default
+        .build_parallel();
+
+    walker.run(|| {
+        let results = results.clone();
+        let query = query_arc.clone();
+        let query_lower = query_lower_arc.clone();
+        let root_path = root_path_arc.clone();
+        let regex_matcher = regex_matcher.clone();
+        let matcher = fuzzy_matcher::skim::SkimMatcherV2::default();
+
+        Box::new(move |entry_result| {
+            let entry = match entry_result {
+                Ok(e) => e,
+                Err(_) => return ignore::WalkState::Continue,
+            };
+
+            let path = entry.path();
+
+            // Guard against massive build/dependency directories if not gitignored
+            if entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
+                if let Some(dir_name) = path.file_name().and_then(|n| n.to_str()) {
+                    if dir_name == "node_modules"
+                        || dir_name == ".git"
+                        || dir_name == "target"
+                        || dir_name == "dist"
+                        || dir_name == ".vscode"
+                        || dir_name == ".gemini"
+                    {
+                        return ignore::WalkState::Skip;
+                    }
+                }
+            }
+
+            if entry.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
+                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
+                let rel_path = path.strip_prefix(&*root_path)
+                    .unwrap_or(path)
+                    .to_string_lossy()
+                    .into_owned();
+
+                // 1. Fuzzy match filename
+                let filename_score = matcher.fuzzy_match(&rel_path, &*query).unwrap_or(0);
+                if filename_score > 0 {
+                    let mut lock = results.lock().unwrap();
+                    lock.push(ScoredSearchMatch {
+                        match_val: SearchMatch {
+                            path: path.to_string_lossy().into_owned(),
+                            name: name.clone(),
+                            line: 0,
+                            content: String::new(),
+                            is_content_match: false,
+                        },
+                        score: filename_score,
+                    });
+                }
+
+                // 2. Scan file content
+                if let Some(content) = read_and_check_text_file(path) {
+                    let mut line_num = 1;
+                    for raw_line in content.lines() {
+                        let is_match = if let Some(ref re) = regex_matcher {
+                            re.is_match(raw_line)
+                        } else if match_case {
+                            if whole_word {
+                                raw_line.split(|c: char| !c.is_alphanumeric() && c != '_')
+                                    .any(|w| w == query.as_str())
+                            } else {
+                                raw_line.contains(query.as_str())
+                            }
+                        } else {
+                            if whole_word {
+                                raw_line.split(|c: char| !c.is_alphanumeric() && c != '_')
+                                    .any(|w| w.to_lowercase() == query_lower.as_str())
+                            } else {
+                                raw_line.to_lowercase().contains(query_lower.as_str())
+                            }
+                        };
+
+                        if is_match {
+                            let mut lock = results.lock().unwrap();
+                            lock.push(ScoredSearchMatch {
+                                match_val: SearchMatch {
+                                    path: path.to_string_lossy().into_owned(),
+                                    name: name.clone(),
+                                    line: line_num,
+                                    content: raw_line.trim().to_string(),
+                                    is_content_match: true,
+                                },
+                                score: 0,
+                            });
+                        }
+                        line_num += 1;
+                    }
+                }
+            }
+
+            ignore::WalkState::Continue
+        })
+    });
+
+    // Unwrap results and sort them
+    let mut scored_results = Arc::try_unwrap(results)
+        .map_err(|_| "Failed to resolve search results threads".to_string())?
+        .into_inner()
+        .map_err(|e| e.to_string())?;
+
+    scored_results.sort_by(|a, b| {
+        match (a.match_val.is_content_match, b.match_val.is_content_match) {
+            (false, false) => b.score.cmp(&a.score), // Sort filename matches by fuzzy score desc
+            (false, true) => std::cmp::Ordering::Less, // Filenames always first
+            (true, false) => std::cmp::Ordering::Greater,
+            (true, true) => {
+                // Sort content matches alphabetically by path, then line number
+                a.match_val.path.cmp(&b.match_val.path)
+                    .then_with(|| a.match_val.line.cmp(&b.match_val.line))
+            }
+        }
+    });
+
+    let mut final_results: Vec<SearchMatch> = scored_results
+        .into_iter()
+        .map(|r| r.match_val)
+        .collect();
+
+    final_results.truncate(150);
+    Ok(final_results)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

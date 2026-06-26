@@ -1,18 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Search, X, File, AlignLeft, Info } from "lucide-react";
 import { useWorkspaceStore } from "../store";
-import { invoke } from "@tauri-apps/api/core";
+import { searchService, SearchMatch } from "../services/searchService";
 
 interface SearchPaletteProps {
   onClose: () => void;
-}
-
-interface SearchMatch {
-  path: string;
-  name: string;
-  line: number;
-  content: string;
-  is_content_match: boolean;
 }
 
 export const SearchPalette: React.FC<SearchPaletteProps> = ({ onClose }) => {
@@ -59,7 +51,7 @@ export const SearchPalette: React.FC<SearchPaletteProps> = ({ onClose }) => {
     setSearching(true);
     const delayDebounce = setTimeout(async () => {
       try {
-        const matches: SearchMatch[] = await invoke("search_project", {
+        const matches = await searchService.searchProject({
           rootDir: rootPath,
           query,
           matchCase,
