@@ -160,7 +160,10 @@ const FileTreeNode: React.FC<{ node: any }> = ({ node }) => {
   const setPathExpanded = useWorkspaceStore((state) => state.setPathExpanded);
   const openTab = useWorkspaceStore((state) => state.openTab);
   const gitStatus = useWorkspaceStore((state) => state.gitStatus);
-  const activeTabId = useWorkspaceStore((state) => state.activeTabId);
+  const editorGroups = useWorkspaceStore((state) => state.editorGroups);
+  const activeGroupId = useWorkspaceStore((state) => state.activeGroupId);
+  const activeGroup = editorGroups.find((g) => g.id === activeGroupId);
+  const activeTabId = activeGroup ? activeGroup.activeTabId : null;
 
   const isOpen = !!expandedPaths[node.path];
   const gitState = getGitState(node, gitStatus);

@@ -15,8 +15,12 @@ export const Workspace: React.FC = () => {
   const rootPath = useWorkspaceStore((state) => state.rootPath);
   const nodes = useWorkspaceStore((state) => state.nodes);
   const edges = useWorkspaceStore((state) => state.edges);
-  const openTabs = useWorkspaceStore((state) => state.openTabs);
-  const activeTabId = useWorkspaceStore((state) => state.activeTabId);
+  const editorGroups = useWorkspaceStore((state) => state.editorGroups);
+  const groupSizes = useWorkspaceStore((state) => state.groupSizes);
+  const setGroupSizes = useWorkspaceStore((state) => state.setGroupSizes);
+  const activeGroupId = useWorkspaceStore((state) => state.activeGroupId);
+  const setActiveGroupId = useWorkspaceStore((state) => state.setActiveGroupId);
+  const moveTab = useWorkspaceStore((state) => state.moveTab);
 
   const addLog = useWorkspaceStore((state) => state.addLog);
   const clearLogs = useWorkspaceStore((state) => state.clearLogs);
@@ -25,6 +29,43 @@ export const Workspace: React.FC = () => {
   const globalContextSummary = useWorkspaceStore((state) => state.globalContextSummary);
 
   const socketRef = useRef<WebSocket | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleMouseDown = (e: React.MouseEvent, index: number) => {
+    e.preventDefault();
+    if (!containerRef.current) return;
+
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const startX = e.clientX;
+    const startSizes = [...groupSizes];
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      const deltaPercent = deltaX / containerRect.width;
+
+      const newSizes = [...startSizes];
+      const newPercent_i = startSizes[index] + deltaPercent;
+
+      const minPercent = 0.10;
+      const totalOfTwo = startSizes[index] + startSizes[index + 1];
+
+      let percent_i = Math.max(minPercent, Math.min(totalOfTwo - minPercent, newPercent_i));
+      let percent_ip1 = totalOfTwo - percent_i;
+
+      newSizes[index] = percent_i;
+      newSizes[index + 1] = percent_ip1;
+
+      setGroupSizes(newSizes);
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  };
 
   // WebSocket execution runner
   const executeNode = (nodeId: string, customPrompt?: string) => {
@@ -259,54 +300,93 @@ export const Workspace: React.FC = () => {
     };
   };
 
+  const renderTabPanel = (tabsList: any[], activeId: string | null, groupId: string) => {
+    return tabsList.map((tab) => {
+      const isActive = tab.id === activeId;
+      const isCanvas = tab.type === "canvas";
+
+      // Optimize rendering: unmount non-active file/task/diff tabs
+      if (!isActive && !isCanvas) return null;
+
+      const bgClass = isCanvas ? "bg-[var(--bg-canvas)]" : "bg-[var(--bg-editor)]";
+      return (
+        <div
+          key={`${groupId}-${tab.id}`}
+          className={`${isActive ? "w-full h-full" : "absolute -left-[99999px] top-0 w-full h-full"} ${bgClass} overflow-hidden`}
+        >
+          {tab.type === "canvas" && (
+            <CanvasTab onExecuteNode={executeNode} />
+          )}
+          {tab.type === "file" && (
+            <FileTab tab={tab} groupId={groupId} />
+          )}
+          {tab.type === "task" && (
+            <TaskTab tab={tab} onExecuteNode={executeNode} groupId={groupId} />
+          )}
+          {tab.type === "git-diff" && (
+            <GitDiffTab tab={tab} groupId={groupId} />
+          )}
+          {tab.type === "llm-setup" && (
+            <LlmSetupTab />
+          )}
+          {tab.type === "settings" && (
+            <SettingsTab />
+          )}
+          {tab.type === "git-history" && (
+            <GitHistoryTab tab={tab} />
+          )}
+          {tab.type === "workspace" && (
+            <WorkspaceTab />
+          )}
+        </div>
+      );
+    });
+  };
+
   return (
-    <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative">
-      {/* Workspace Unified Tab Bar */}
-      <TabBar />
+    <div ref={containerRef} className="flex-1 flex h-full min-w-0 overflow-hidden relative bg-[var(--bg-editor)]">
+      {editorGroups.map((group, idx) => {
+        const widthPercent = (groupSizes[idx] || (1 / editorGroups.length)) * 100;
+        const isLast = idx === editorGroups.length - 1;
 
-      {/* Tab Panel Render Targets */}
-      <div className="flex-1 min-h-0 relative bg-[var(--bg-editor)] overflow-hidden">
-        {openTabs.map((tab) => {
-          const isActive = tab.id === activeTabId;
-          const isCanvas = tab.type === "canvas";
-
-          // Optimize rendering: unmount non-active file/task/diff tabs
-          if (!isActive && !isCanvas) return null;
-
-          const bgClass = isCanvas ? "bg-[var(--bg-canvas)]" : "bg-[var(--bg-editor)]";
-          return (
+        return (
+          <React.Fragment key={group.id}>
+            {/* Editor Pane Column */}
             <div
-              key={tab.id}
-              className={`${isActive ? "w-full h-full" : "absolute -left-[99999px] top-0 w-full h-full"} ${bgClass} overflow-hidden`}
+              style={{ width: `${widthPercent}%` }}
+              className={`flex flex-col h-full min-w-0 overflow-hidden ${
+                !isLast ? "border-r border-[var(--border-color)]" : ""
+              }`}
+              onClick={() => {
+                if (activeGroupId !== group.id) {
+                  setActiveGroupId(group.id);
+                }
+              }}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                const tabId = e.dataTransfer.getData("text/plain");
+                const fromGroupId = e.dataTransfer.getData("from-group-id");
+                if (tabId && fromGroupId && fromGroupId !== group.id) {
+                  moveTab(tabId, fromGroupId, group.id);
+                }
+              }}
             >
-              {tab.type === "canvas" && (
-                <CanvasTab onExecuteNode={executeNode} />
-              )}
-              {tab.type === "file" && (
-                <FileTab tab={tab} />
-              )}
-              {tab.type === "task" && (
-                <TaskTab tab={tab} onExecuteNode={executeNode} />
-              )}
-              {tab.type === "git-diff" && (
-                <GitDiffTab tab={tab} />
-              )}
-              {tab.type === "llm-setup" && (
-                <LlmSetupTab />
-              )}
-              {tab.type === "settings" && (
-                <SettingsTab />
-              )}
-              {tab.type === "git-history" && (
-                <GitHistoryTab tab={tab} />
-              )}
-              {tab.type === "workspace" && (
-                <WorkspaceTab />
-              )}
+              <TabBar groupId={group.id} />
+              <div className="flex-1 min-h-0 relative bg-[var(--bg-editor)] overflow-hidden">
+                {renderTabPanel(group.openTabs, group.activeTabId, group.id)}
+              </div>
             </div>
-          );
-        })}
-      </div>
+
+            {/* Resize Handle (only show between adjacent panes) */}
+            {!isLast && (
+              <div
+                className="w-1 bg-[var(--border-color)] hover:bg-[var(--accent-color)] active:bg-[var(--accent-color)] cursor-col-resize transition-all flex-shrink-0 z-30 relative"
+                onMouseDown={(e) => handleMouseDown(e, idx)}
+              />
+            )}
+          </React.Fragment>
+        );
+      })}
     </div>
   );
 };

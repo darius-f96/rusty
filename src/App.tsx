@@ -149,9 +149,10 @@ function App() {
         e.stopPropagation();
 
         const state = useWorkspaceStore.getState();
-        const currentActive = state.activeTabId;
+        const activeGroup = state.editorGroups.find((g) => g.id === state.activeGroupId);
+        const currentActive = activeGroup?.activeTabId;
         if (currentActive && currentActive !== "canvas") {
-          state.closeTab(currentActive);
+          state.closeTab(currentActive, state.activeGroupId);
           console.log(`Shortcut captured: Closed active tab ${currentActive}`);
         }
       }

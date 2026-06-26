@@ -17,6 +17,8 @@ export const useResizable = (initialWidth = 500, storageKey?: string) => {
   const isResizing = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const widthRef = useRef(width);
+  const startXRef = useRef(0);
+  const startWidthRef = useRef(0);
 
   // Sync widthRef with state changes
   useEffect(() => {
@@ -27,7 +29,8 @@ export const useResizable = (initialWidth = 500, storageKey?: string) => {
 
   const handleMouseMove = useCallback((mouseMoveEvent: MouseEvent) => {
     if (!isResizing.current) return;
-    const newWidth = window.innerWidth - mouseMoveEvent.clientX;
+    const deltaX = startXRef.current - mouseMoveEvent.clientX;
+    const newWidth = startWidthRef.current + deltaX;
     if (newWidth > 200 && newWidth < 1200) {
       widthRef.current = newWidth;
       if (animationFrameIdRef.current) {
@@ -59,12 +62,13 @@ export const useResizable = (initialWidth = 500, storageKey?: string) => {
   const startResizing = useCallback((mouseDownEvent: React.MouseEvent) => {
     mouseDownEvent.preventDefault();
     isResizing.current = true;
-    widthRef.current = width;
+    startXRef.current = mouseDownEvent.clientX;
+    startWidthRef.current = widthRef.current;
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
-  }, [handleMouseMove, handleMouseUp, width]);
+  }, [handleMouseMove, handleMouseUp]);
 
   useEffect(() => {
     return () => {

@@ -22,7 +22,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const fileTree = useWorkspaceStore((state) => state.fileTree);
   const setFileTree = useWorkspaceStore((state) => state.setFileTree);
   const openTab = useWorkspaceStore((state) => state.openTab);
-  const activeTabId = useWorkspaceStore((state) => state.activeTabId);
+  const editorGroups = useWorkspaceStore((state) => state.editorGroups);
+  const activeGroupId = useWorkspaceStore((state) => state.activeGroupId);
+  const activeGroup = editorGroups.find((g) => g.id === activeGroupId);
+  const activeTabId = activeGroup ? activeGroup.activeTabId : null;
 
   const gitStatus = useWorkspaceStore((state) => state.gitStatus);
 

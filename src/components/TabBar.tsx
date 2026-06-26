@@ -1,14 +1,24 @@
 import React, { useState, useEffect, useRef } from "react";
-import { X, Cpu, Settings, GitCommit, ChevronDown, FolderOpen } from "lucide-react";
+import { X, Cpu, Settings, GitCommit, ChevronDown, FolderOpen, Columns } from "lucide-react";
 import { useWorkspaceStore } from "../store";
 import { FileIcon } from "../services/fileTypeService";
 import { AxiomIcon } from "./AxiomIcon";
 
-export const TabBar: React.FC = () => {
-  const openTabs = useWorkspaceStore((state) => state.openTabs);
-  const activeTabId = useWorkspaceStore((state) => state.activeTabId);
+interface TabBarProps {
+  groupId: string;
+}
+
+export const TabBar: React.FC<TabBarProps> = ({ groupId }) => {
+  const group = useWorkspaceStore((state) => state.editorGroups.find((g) => g.id === groupId));
+  const openTabs = group ? group.openTabs : [];
+  const activeTabId = group ? group.activeTabId : null;
+
   const setActiveTabId = useWorkspaceStore((state) => state.setActiveTabId);
   const closeTab = useWorkspaceStore((state) => state.closeTab);
+  const splitTab = useWorkspaceStore((state) => state.splitTab);
+  const moveTab = useWorkspaceStore((state) => state.moveTab);
+  const activeGroupId = useWorkspaceStore((state) => state.activeGroupId);
+  const setActiveGroupId = useWorkspaceStore((state) => state.setActiveGroupId);
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const tabsContainerRef = useRef<HTMLDivElement>(null);
@@ -30,29 +40,63 @@ export const TabBar: React.FC = () => {
   }, [activeTabId]);
 
   return (
-    <div className="flex items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-header)] h-9 select-none z-20 relative flex-shrink-0 w-full">
+    <div
+      onClick={() => {
+        if (activeGroupId !== groupId) {
+          setActiveGroupId(groupId);
+        }
+      }}
+      className={`flex items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-header)] h-9 select-none z-20 relative flex-shrink-0 w-full ${
+        activeGroupId === groupId ? "shadow-[inset_0_-1px_0_var(--accent-color)]" : ""
+      }`}
+    >
       {/* Scrollable Tab Container */}
       <div
         ref={tabsContainerRef}
         className="flex-1 flex items-stretch h-full overflow-x-auto scrollbar-none scroll-smooth min-w-0"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          const tabId = e.dataTransfer.getData("text/plain");
+          const fromGroupId = e.dataTransfer.getData("from-group-id");
+          if (tabId && fromGroupId && fromGroupId !== groupId) {
+            moveTab(tabId, fromGroupId, groupId);
+          }
+        }}
       >
         {openTabs.map((tab) => {
           const isActive = tab.id === activeTabId;
           const activeTabStyles = tab.type === "canvas"
             ? "bg-[var(--bg-canvas)] border-b-[var(--bg-canvas)] text-[var(--text-light)] font-semibold"
             : "bg-[var(--bg-editor)] border-b-[var(--bg-editor)] text-[var(--text-light)] font-semibold";
+          const isFocusedGroup = activeGroupId === groupId;
 
           return (
             <div
               key={tab.id}
               data-tab-id={tab.id}
-              onClick={() => setActiveTabId(tab.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveTabId(tab.id, groupId);
+                setActiveGroupId(groupId);
+              }}
+              draggable={tab.type !== "canvas"}
+              onDragStart={(e) => {
+                e.dataTransfer.setData("text/plain", tab.id);
+                e.dataTransfer.setData("from-group-id", groupId);
+              }}
               className={`group flex items-center space-x-2 px-4.5 h-[calc(100%+1px)] -mb-[1px] border-r border-[var(--border-color)] text-[11px] font-mono cursor-pointer select-none transition-all flex-shrink-0 rounded-t-xl relative z-10 ${
                 isActive
                   ? `${activeTabStyles} border-b`
                   : "bg-[var(--bg-header)] text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/20 border-b border-b-transparent"
               }`}
             >
+              {/* Top Accent Line for Active Tab of Active Group */}
+              {isActive && (
+                <div className={`absolute top-0 left-0 right-0 h-[2px] rounded-t-xl ${
+                  isFocusedGroup ? "bg-[var(--accent-color)]" : "bg-[var(--border-color)]"
+                }`} />
+              )}
+
               {tab.type === "canvas" && (
                 <AxiomIcon
                   size={11}
@@ -134,15 +178,28 @@ export const TabBar: React.FC = () => {
               <span className="truncate max-w-[120px]">{tab.title}</span>
 
               {tab.id !== "canvas" && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    closeTab(tab.id);
-                  }}
-                  className="p-0.5 rounded-sm hover:bg-[var(--border-color)]/80 text-[var(--text-muted)] hover:text-[var(--text-light)] opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
-                >
-                  <X size={10} />
-                </button>
+                <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      splitTab(tab.id, groupId);
+                    }}
+                    className="p-0.5 rounded-sm hover:bg-[var(--border-color)]/80 text-[var(--text-muted)] hover:text-[var(--text-light)]"
+                    title="Split editor"
+                  >
+                    <Columns size={10} />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      closeTab(tab.id, groupId);
+                    }}
+                    className="p-0.5 rounded-sm hover:bg-[var(--border-color)]/80 text-[var(--text-muted)] hover:text-[var(--text-light)]"
+                    title="Close tab"
+                  >
+                    <X size={10} />
+                  </button>
+                </div>
               )}
             </div>
           );
@@ -152,7 +209,10 @@ export const TabBar: React.FC = () => {
       {/* Tab Switcher Dropdown */}
       <div className="relative flex items-center h-full px-2 border-l border-[var(--border-color)] bg-[var(--bg-header)] z-30 flex-shrink-0">
         <button
-          onClick={() => setDropdownOpen(!dropdownOpen)}
+          onClick={(e) => {
+            e.stopPropagation();
+            setDropdownOpen(!dropdownOpen);
+          }}
           className="p-1 rounded hover:bg-[var(--accent-bg)]/50 text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer"
           title="Open Editors"
         >
@@ -176,7 +236,7 @@ export const TabBar: React.FC = () => {
                   <div
                     key={tab.id}
                     onClick={() => {
-                      setActiveTabId(tab.id);
+                      setActiveTabId(tab.id, groupId);
                       setDropdownOpen(false);
                     }}
                     className={`group flex items-center justify-between px-3 py-1.5 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] cursor-pointer transition-colors ${
@@ -203,7 +263,7 @@ export const TabBar: React.FC = () => {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          closeTab(tab.id);
+                          closeTab(tab.id, groupId);
                           if (openTabs.length <= 1) {
                             setDropdownOpen(false);
                           }

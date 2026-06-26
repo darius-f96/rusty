@@ -15,9 +15,10 @@ loader.init().then((monaco) => {
 
 interface FileTabProps {
   tab: any;
+  groupId: string;
 }
 
-export const FileTab: React.FC<FileTabProps> = ({ tab }) => {
+export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
   const [fileContent, setFileContent] = useState("");
   const [loading, setLoading] = useState(true);
   const [showBlame, setShowBlame] = useState(false);
@@ -26,10 +27,12 @@ export const FileTab: React.FC<FileTabProps> = ({ tab }) => {
   const saveTimeoutRef = useRef<any>(null);
   const editorRef = useRef<any>(null);
 
-  const activeTabId = useWorkspaceStore((state) => state.activeTabId);
+  const editorGroups = useWorkspaceStore((state) => state.editorGroups);
   const rootPath = useWorkspaceStore((state) => state.rootPath);
   const openTab = useWorkspaceStore((state) => state.openTab);
-  const isActive = activeTabId === tab.id;
+  
+  const targetGroup = editorGroups.find((g) => g.id === groupId);
+  const isActive = targetGroup ? targetGroup.activeTabId === tab.id : false;
 
   // Load Git blame details
   useEffect(() => {

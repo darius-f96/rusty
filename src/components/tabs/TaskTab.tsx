@@ -11,16 +11,19 @@ const EMPTY_ARRAY: any[] = [];
 interface TaskTabProps {
   tab: any;
   onExecuteNode: (nodeId: string, customPrompt?: string) => void;
+  groupId: string;
 }
 
-export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode }) => {
+export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, groupId }) => {
   const nodes = useWorkspaceStore((state) => state.nodes);
-  const activeTabId = useWorkspaceStore((state) => state.activeTabId);
+  const editorGroups = useWorkspaceStore((state) => state.editorGroups);
   const customProviders = useWorkspaceStore((state) => state.customProviders);
   const activeModel = useWorkspaceStore((state) => state.activeModel);
   const updateTaskNode = useWorkspaceStore((state) => state.updateTaskNode);
   const chatHistory = useWorkspaceStore((state) => state.globalChatHistory[taskNodeId] || EMPTY_ARRAY);
-  const isActive = activeTabId === tab.id;
+  
+  const targetGroup = editorGroups.find((g) => g.id === groupId);
+  const isActive = targetGroup ? targetGroup.activeTabId === tab.id : false;
 
   const taskNodeId = tab.key;
   const taskNode = nodes.find((n) => n.id === taskNodeId);

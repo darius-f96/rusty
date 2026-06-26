@@ -51,6 +51,12 @@ export interface Tab {
   commitHash?: string;
 }
 
+export interface EditorGroup {
+  id: string;
+  openTabs: Tab[];
+  activeTabId: string | null;
+}
+
 export interface GlobalChatMessage {
   role: "user" | "assistant" | "system";
   content: string;
@@ -113,11 +119,16 @@ export interface WorkspaceState {
   clearDevLogs: () => void;
   setShowDevConsole: (show: boolean) => void;
 
-  openTabs: Tab[];
-  activeTabId: string | null;
-  openTab: (tab: Tab) => void;
-  closeTab: (id: string) => void;
-  setActiveTabId: (id: string | null) => void;
+  editorGroups: EditorGroup[];
+  activeGroupId: string;
+  groupSizes: number[];
+  openTab: (tab: Tab, groupId?: string) => void;
+  closeTab: (id: string, groupId?: string) => void;
+  setActiveTabId: (id: string | null, groupId?: string) => void;
+  splitTab: (id: string, fromGroupId: string) => void;
+  moveTab: (id: string, fromGroupId: string, toGroupId: string) => void;
+  setGroupSizes: (sizes: number[]) => void;
+  setActiveGroupId: (id: string) => void;
   
   setPathExpanded: (path: string, expanded: boolean) => void;
   togglePathExpanded: (path: string) => void;
@@ -181,10 +192,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   gitStatus: null,
   devLogs: [],
   showDevConsole: false,
-  openTabs: [
-    { id: "canvas", type: "canvas", title: "Axiom", key: "canvas" }
+  editorGroups: [
+    { id: "group_0", openTabs: [{ id: "canvas", type: "canvas" as const, title: "Axiom", key: "canvas" }], activeTabId: "canvas" }
   ],
-  activeTabId: "canvas",
+  activeGroupId: "group_0",
+  groupSizes: [1.0],
   activeThemeId: localStorage.getItem("selected_theme") || "dark",
   setActiveThemeId: (themeId) => {
     const t = themes[themeId] || themes.dark;
@@ -215,8 +227,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     }
     set({
       rootPath: path,
-      openTabs: [{ id: "canvas", type: "canvas", title: "Axiom", key: "canvas" }],
-      activeTabId: "canvas",
+      editorGroups: [
+        { id: "group_0", openTabs: [{ id: "canvas", type: "canvas" as const, title: "Axiom", key: "canvas" }], activeTabId: "canvas" }
+      ],
+      activeGroupId: "group_0",
+      groupSizes: [1.0],
       expandedPaths: {},
       nodes: [],
       edges: [],
@@ -480,21 +495,201 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   clearDevLogs: () => set({ devLogs: [] }),
   setShowDevConsole: (show) => set({ showDevConsole: show }),
 
-  openTab: (tab) => set((state) => {
-    const exists = state.openTabs.some((t) => t.id === tab.id);
-    const newTabs = exists ? state.openTabs : [...state.openTabs, tab];
-    return { openTabs: newTabs, activeTabId: tab.id };
-  }),
-  closeTab: (id) => set((state) => {
-    if (id === "canvas") return {};
-    const remainingTabs = state.openTabs.filter((t) => t.id !== id);
-    let nextActiveTabId = state.activeTabId;
-    if (state.activeTabId === id) {
-      nextActiveTabId = remainingTabs.length > 0 ? remainingTabs[remainingTabs.length - 1].id : null;
+  openTab: (tab, groupId) => set((state) => {
+    const targetGroupId = groupId || state.activeGroupId;
+    const exists = state.editorGroups.some((g) => g.id === targetGroupId);
+    
+    let newGroups = state.editorGroups.map((group) => {
+      if (group.id === targetGroupId) {
+        const hasTab = group.openTabs.some((t) => t.id === tab.id);
+        const newTabs = hasTab ? group.openTabs : [...group.openTabs, tab];
+        return { ...group, openTabs: newTabs, activeTabId: tab.id };
+      }
+      return group;
+    });
+
+    if (!exists || newGroups.length === 0) {
+      const newGroup = {
+        id: targetGroupId || `group_${Date.now()}`,
+        openTabs: [tab],
+        activeTabId: tab.id
+      };
+      newGroups = [newGroup];
+      return {
+        editorGroups: newGroups,
+        activeGroupId: newGroup.id,
+        groupSizes: [1.0]
+      };
     }
-    return { openTabs: remainingTabs, activeTabId: nextActiveTabId };
+
+    return {
+      editorGroups: newGroups,
+      activeGroupId: targetGroupId
+    };
   }),
-  setActiveTabId: (id) => set({ activeTabId: id }),
+  closeTab: (id, groupId) => set((state) => {
+    const targetGroup = state.editorGroups.find(
+      (g) => groupId ? g.id === groupId : g.openTabs.some((t) => t.id === id)
+    );
+    if (!targetGroup) return {};
+
+    if (id === "canvas" && state.editorGroups.length === 1 && targetGroup.openTabs.length === 1) {
+      return {};
+    }
+
+    const groupIndex = state.editorGroups.indexOf(targetGroup);
+    const remainingTabs = targetGroup.openTabs.filter((t) => t.id !== id);
+
+    if (remainingTabs.length > 0) {
+      let nextActiveTabId = targetGroup.activeTabId;
+      if (targetGroup.activeTabId === id) {
+        nextActiveTabId = remainingTabs[remainingTabs.length - 1].id;
+      }
+      const updatedGroups = state.editorGroups.map((g) =>
+        g.id === targetGroup.id ? { ...g, openTabs: remainingTabs, activeTabId: nextActiveTabId } : g
+      );
+      return { editorGroups: updatedGroups };
+    } else {
+      if (state.editorGroups.length === 1) {
+        const fallbackGroup = {
+          id: targetGroup.id,
+          openTabs: [{ id: "canvas", type: "canvas" as const, title: "Axiom", key: "canvas" }],
+          activeTabId: "canvas"
+        };
+        return {
+          editorGroups: [fallbackGroup],
+          activeGroupId: fallbackGroup.id,
+          groupSizes: [1.0]
+        };
+      } else {
+        const updatedGroups = state.editorGroups.filter((g) => g.id !== targetGroup.id);
+        const oldSize = state.groupSizes[groupIndex];
+        const newSizes = [...state.groupSizes];
+        newSizes.splice(groupIndex, 1);
+        
+        const neighborIndex = groupIndex > 0 ? groupIndex - 1 : 0;
+        newSizes[neighborIndex] = (newSizes[neighborIndex] || 0) + oldSize;
+
+        let nextActiveGroupId = state.activeGroupId;
+        if (state.activeGroupId === targetGroup.id) {
+          nextActiveGroupId = updatedGroups[neighborIndex].id;
+        }
+
+        return {
+          editorGroups: updatedGroups,
+          groupSizes: newSizes,
+          activeGroupId: nextActiveGroupId
+        };
+      }
+    }
+  }),
+  setActiveTabId: (id, groupId) => set((state) => {
+    const targetGroupId = groupId || state.activeGroupId;
+    const updatedGroups = state.editorGroups.map((g) => {
+      if (g.id === targetGroupId) {
+        return { ...g, activeTabId: id };
+      }
+      return g;
+    });
+    return {
+      editorGroups: updatedGroups,
+      activeGroupId: targetGroupId
+    };
+  }),
+  splitTab: (id, fromGroupId) => set((state) => {
+    const fromGroupIndex = state.editorGroups.findIndex((g) => g.id === fromGroupId);
+    if (fromGroupIndex === -1) return {};
+    
+    const fromGroup = state.editorGroups[fromGroupIndex];
+    const tabToSplit = fromGroup.openTabs.find((t) => t.id === id);
+    if (!tabToSplit) return {};
+
+    const newGroupId = `group_${Date.now()}`;
+    const newGroup = {
+      id: newGroupId,
+      openTabs: [tabToSplit],
+      activeTabId: tabToSplit.id
+    };
+
+    const updatedGroups = [...state.editorGroups];
+    updatedGroups.splice(fromGroupIndex + 1, 0, newGroup);
+
+    const oldSize = state.groupSizes[fromGroupIndex];
+    const newSizes = [...state.groupSizes];
+    newSizes[fromGroupIndex] = oldSize / 2;
+    newSizes.splice(fromGroupIndex + 1, 0, oldSize / 2);
+
+    return {
+      editorGroups: updatedGroups,
+      groupSizes: newSizes,
+      activeGroupId: newGroupId
+    };
+  }),
+  moveTab: (id, fromGroupId, toGroupId) => set((state) => {
+    if (fromGroupId === toGroupId) return {};
+
+    const fromGroupIndex = state.editorGroups.findIndex((g) => g.id === fromGroupId);
+    const toGroupIndex = state.editorGroups.findIndex((g) => g.id === toGroupId);
+    if (fromGroupIndex === -1 || toGroupIndex === -1) return {};
+
+    const fromGroup = state.editorGroups[fromGroupIndex];
+    const tabToMove = fromGroup.openTabs.find((t) => t.id === id);
+    if (!tabToMove) return {};
+
+    const remainingTabs = fromGroup.openTabs.filter((t) => t.id !== id);
+    let updatedGroups = [...state.editorGroups];
+    let newSizes = [...state.groupSizes];
+    let nextActiveGroupId = state.activeGroupId;
+
+    if (remainingTabs.length > 0) {
+      let nextActiveTabId = fromGroup.activeTabId;
+      if (fromGroup.activeTabId === id) {
+        nextActiveTabId = remainingTabs[remainingTabs.length - 1].id;
+      }
+      updatedGroups[fromGroupIndex] = {
+        ...fromGroup,
+        openTabs: remainingTabs,
+        activeTabId: nextActiveTabId
+      };
+    } else {
+      if (state.editorGroups.length === 1) {
+        // Should not happen as we have a valid toGroup
+      } else {
+        updatedGroups.splice(fromGroupIndex, 1);
+        const oldSize = state.groupSizes[fromGroupIndex];
+        newSizes.splice(fromGroupIndex, 1);
+        
+        const neighborIndex = fromGroupIndex > 0 ? fromGroupIndex - 1 : 0;
+        newSizes[neighborIndex] = (newSizes[neighborIndex] || 0) + oldSize;
+
+        if (state.activeGroupId === fromGroupId) {
+          nextActiveGroupId = updatedGroups[neighborIndex].id;
+        }
+      }
+    }
+
+    const targetToGroupIndex = updatedGroups.findIndex((g) => g.id === toGroupId);
+    if (targetToGroupIndex !== -1) {
+      const targetGroup = updatedGroups[targetToGroupIndex];
+      const hasTab = targetGroup.openTabs.some((t) => t.id === id);
+      const newTabs = hasTab ? targetGroup.openTabs : [...targetGroup.openTabs, tabToMove];
+      
+      updatedGroups[targetToGroupIndex] = {
+        ...targetGroup,
+        openTabs: newTabs,
+        activeTabId: id
+      };
+      nextActiveGroupId = toGroupId;
+    }
+
+    return {
+      editorGroups: updatedGroups,
+      groupSizes: newSizes,
+      activeGroupId: nextActiveGroupId
+    };
+  }),
+  setGroupSizes: (sizes) => set({ groupSizes: sizes }),
+  setActiveGroupId: (id) => set({ activeGroupId: id }),
   setPathExpanded: (path, expanded) => set((state) => ({
     expandedPaths: { ...state.expandedPaths, [path]: expanded }
   })),

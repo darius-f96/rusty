@@ -6,12 +6,15 @@ import { getFileTypeDetails } from "../../services/fileTypeService";
 
 interface GitDiffTabProps {
   tab: any;
+  groupId: string;
 }
 
-export const GitDiffTab: React.FC<GitDiffTabProps> = ({ tab }) => {
+export const GitDiffTab: React.FC<GitDiffTabProps> = ({ tab, groupId }) => {
   const rootPath = useWorkspaceStore((state) => state.rootPath);
-  const activeTabId = useWorkspaceStore((state) => state.activeTabId);
-  const isActive = activeTabId === tab.id;
+  const editorGroups = useWorkspaceStore((state) => state.editorGroups);
+  
+  const targetGroup = editorGroups.find((g) => g.id === groupId);
+  const isActive = targetGroup ? targetGroup.activeTabId === tab.id : false;
 
   const [gitOriginalCode, setGitOriginalCode] = useState("");
   const [gitModifiedCode, setGitModifiedCode] = useState("");
