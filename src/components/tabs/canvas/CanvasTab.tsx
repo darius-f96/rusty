@@ -10,6 +10,7 @@ import {
   Globe,
   GitMerge,
   Save,
+  Settings,
   X
 } from "lucide-react";
 import { useWorkspaceStore } from "../../../store";
@@ -194,6 +195,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
   );
 
   const [nodeMenuOpen, setNodeMenuOpen] = useState(false);
+  const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -217,6 +219,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
     const handleGlobalClick = () => {
       setContextMenu(null);
       setNodeMenuOpen(false);
+      setActionMenuOpen(false);
     };
     window.addEventListener("click", handleGlobalClick);
     return () => window.removeEventListener("click", handleGlobalClick);
@@ -370,58 +373,132 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
           onDragOver={onDragOver}
           onDrop={onDrop}
         >
-          {/* Top Right Dropdown */}
-          <div className="absolute top-4 right-4 z-10 flex flex-col items-end">
-            <button
-              id="add-node-dropdown-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                setNodeMenuOpen(!nodeMenuOpen);
-              }}
-              className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] hover:bg-[var(--bg-header)] text-[var(--text-light)] text-xs font-mono font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition-all shadow-md hover:border-[var(--border-active)] cursor-pointer nodrag"
-            >
-              <Plus size={14} className="text-[var(--accent-color)]" />
-              <span>Add Node</span>
-              <ChevronDown size={12} className="text-[var(--text-muted)]" />
-            </button>
-            {nodeMenuOpen && (
-              <div className="mt-1 w-44 bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-lg shadow-xl py-1 z-20 font-mono text-xs border border-[var(--border-color)]">
-                <button
-                  onClick={() => {
-                    const center = getCanvasCenter();
-                    addTaskNode(center.x - 75, center.y - 30, tab.id);
-                    setNodeMenuOpen(false);
-                  }}
-                  className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
-                >
-                  <CheckSquare size={13} className="text-[var(--accent-color)]" />
-                  <span>Create Task Node</span>
-                </button>
-                <button
-                  onClick={() => {
-                    const center = getCanvasCenter();
-                    addContextNode(center.x - 75, center.y - 30, undefined, tab.id);
-                    setNodeMenuOpen(false);
-                  }}
-                  className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
-                >
-                  <Folder size={13} className="text-emerald-400" />
-                  <span>Create Context Node</span>
-                </button>
-                <div className="border-t border-[var(--border-color)] my-1" />
-                <button
-                  onClick={() => {
-                    const center = getCanvasCenter();
-                    addGlobalChatNode(center.x - 75, center.y - 30, tab.id);
-                    setNodeMenuOpen(false);
-                  }}
-                  className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
-                >
-                  <Globe size={13} className="text-violet-400" />
-                  <span>Create Global Explorer</span>
-                </button>
-              </div>
-            )}
+          {/* Top Right Dropdowns */}
+          <div className="absolute top-4 right-4 z-10 flex items-center space-x-2">
+            {/* Add Node Dropdown */}
+            <div className="relative">
+              <button
+                id="add-node-dropdown-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setNodeMenuOpen(!nodeMenuOpen);
+                  setActionMenuOpen(false);
+                }}
+                className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] hover:bg-[var(--bg-header)] text-[var(--text-light)] text-xs font-mono font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition-all shadow-md hover:border-[var(--border-active)] cursor-pointer nodrag"
+              >
+                <Plus size={14} className="text-[var(--accent-color)]" />
+                <span>Add Node</span>
+                <ChevronDown size={12} className="text-[var(--text-muted)]" />
+              </button>
+              {nodeMenuOpen && (
+                <div className="absolute right-0 mt-1 w-44 bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-lg shadow-xl py-1 z-20 font-mono text-xs border border-[var(--border-color)]">
+                  <button
+                    onClick={() => {
+                      const center = getCanvasCenter();
+                      addTaskNode(center.x - 75, center.y - 30, tab.id);
+                      setNodeMenuOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
+                  >
+                    <CheckSquare size={13} className="text-[var(--accent-color)]" />
+                    <span>Create Task Node</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      const center = getCanvasCenter();
+                      addContextNode(center.x - 75, center.y - 30, undefined, tab.id);
+                      setNodeMenuOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
+                  >
+                    <Folder size={13} className="text-emerald-400" />
+                    <span>Create Context Node</span>
+                  </button>
+                  <div className="border-t border-[var(--border-color)] my-1" />
+                  <button
+                    onClick={() => {
+                      const center = getCanvasCenter();
+                      addGlobalChatNode(center.x - 75, center.y - 30, tab.id);
+                      setNodeMenuOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
+                  >
+                    <Globe size={13} className="text-violet-400" />
+                    <span>Create Global Explorer</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Pipeline Actions Dropdown */}
+            <div className="relative">
+              <button
+                id="pipeline-actions-dropdown-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActionMenuOpen(!actionMenuOpen);
+                  setNodeMenuOpen(false);
+                }}
+                className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] hover:bg-[var(--bg-header)] text-[var(--text-light)] text-xs font-mono font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition-all shadow-md hover:border-[var(--border-active)] cursor-pointer nodrag"
+              >
+                <Settings size={14} className="text-violet-400" />
+                <span>Action</span>
+                <ChevronDown size={12} className="text-[var(--text-muted)]" />
+              </button>
+              {actionMenuOpen && (
+                <div className="absolute right-0 mt-1 w-48 bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-lg shadow-xl py-1 z-20 font-mono text-xs border border-[var(--border-color)]">
+                  <button
+                    onClick={() => {
+                      handleReconciliateGraph();
+                      setActionMenuOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
+                  >
+                    <GitMerge size={13} className="text-violet-400" />
+                    <span>Reconciliate Graph</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleSavePipeline();
+                      setActionMenuOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
+                  >
+                    <Save size={13} className="text-emerald-400" />
+                    <span>Save Pipeline</span>
+                  </button>
+                  <div className="border-t border-[var(--border-color)] my-1" />
+                  <button
+                    onClick={() => {
+                      if (allWiresReconciled && !isPipelineApplied) {
+                        handleApplyChanges();
+                        setActionMenuOpen(false);
+                      }
+                    }}
+                    disabled={!allWiresReconciled || isPipelineApplied}
+                    className={`w-full text-left px-3 py-2 flex items-center space-x-2 transition-colors ${
+                      isPipelineApplied
+                        ? "text-emerald-400 cursor-not-allowed opacity-90"
+                        : allWiresReconciled
+                        ? "hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] cursor-pointer"
+                        : "text-[var(--text-muted)] cursor-not-allowed opacity-50"
+                    }`}
+                  >
+                    {isPipelineApplied ? (
+                      <>
+                        <CheckSquare size={13} className="text-emerald-400" />
+                        <span>Pipeline Applied</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckSquare size={13} className="text-[var(--accent-color)]" />
+                        <span>Apply Pipeline</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Bottom Left Controls */}
@@ -432,46 +509,6 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
             >
               <Maximize size={13} className="text-[var(--accent-color)]" />
               <span>Center</span>
-            </button>
-
-            <button
-              onClick={handleReconciliateGraph}
-              className="bg-[var(--bg-sidebar)]/80 border border-[var(--border-color)] hover:bg-[var(--bg-header)] text-[var(--text-normal)] text-xs font-mono font-bold px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer hover:border-violet-500/50"
-            >
-              <GitMerge size={13} className="text-violet-400" />
-              <span>Reconciliate Graph</span>
-            </button>
-
-            <button
-              onClick={handleSavePipeline}
-              className="bg-[var(--bg-sidebar)]/80 border border-[var(--border-color)] hover:bg-[var(--bg-header)] text-[var(--text-normal)] text-xs font-mono font-bold px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer hover:border-emerald-500/50"
-            >
-              <Save size={13} className="text-emerald-400" />
-              <span>Save Pipeline</span>
-            </button>
-
-            <button
-              onClick={handleApplyChanges}
-              disabled={!allWiresReconciled || isPipelineApplied}
-              className={`text-white text-xs font-mono font-bold px-3.5 py-1.5 rounded-lg flex items-center space-x-1.5 transition-all shadow-lg cursor-pointer ${
-                isPipelineApplied
-                  ? "bg-emerald-600 hover:bg-emerald-600 cursor-not-allowed opacity-90"
-                  : allWiresReconciled
-                  ? "bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/85 glow-btn"
-                  : "bg-[var(--bg-sidebar)] text-[var(--text-muted)] cursor-not-allowed opacity-60"
-              }`}
-            >
-              {isPipelineApplied ? (
-                <>
-                  <CheckSquare size={13} className="text-white" />
-                  <span>Pipeline Applied</span>
-                </>
-              ) : (
-                <>
-                  <CheckSquare size={13} />
-                  <span>Apply Pipeline</span>
-                </>
-              )}
             </button>
           </div>
 

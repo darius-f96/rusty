@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import { FolderOpen, Files, Cpu, Settings, GitBranch, ChevronLeft, Plus, FolderPlus, FoldHorizontal, RefreshCw } from "lucide-react";
 import { useWorkspaceStore } from "../store";
 import { FileTree } from "./FileTree";
@@ -11,6 +11,12 @@ interface SidebarProps {
   setSidebarWidth: (width: number) => void;
   onSidebarMouseDown: (e: React.MouseEvent) => void;
   containerRef?: React.RefObject<HTMLDivElement | null>;
+  isExplorerOpen: boolean;
+  setIsExplorerOpen: (open: boolean) => void;
+  sidebarView: "explorer" | "git";
+  setSidebarView: (view: "explorer" | "git") => void;
+  lastWidth: number;
+  setLastWidth: (width: number) => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -18,6 +24,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setSidebarWidth,
   onSidebarMouseDown,
   containerRef,
+  isExplorerOpen,
+  setIsExplorerOpen,
+  sidebarView,
+  setSidebarView,
+  lastWidth,
+  setLastWidth,
 }) => {
   const fileTree = useWorkspaceStore((state) => state.fileTree);
   const setFileTree = useWorkspaceStore((state) => state.setFileTree);
@@ -30,10 +42,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const isActiveTabCanvas = activeTab?.type === "canvas";
 
   const gitStatus = useWorkspaceStore((state) => state.gitStatus);
-
-  const [isExplorerOpen, setIsExplorerOpen] = useState(true);
-  const [sidebarView, setSidebarView] = useState<"explorer" | "git">("explorer");
-  const [lastWidth, setLastWidth] = useState(320);
 
   const handleOpenWorkspace = () => {
     openTab({
@@ -151,11 +159,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <div
       ref={containerRef}
-      className="flex h-full z-10 relative bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-[20px] overflow-hidden shadow-lg flex-shrink-0 side-pane"
+      className="flex h-full z-10 relative bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-[20px] shadow-lg flex-shrink-0 side-pane"
       style={{ width: `${isExplorerOpen ? sidebarWidth : 56}px` }}
     >
       {/* 1. Left Icon Dock (Activity Bar) */}
-      <div className="w-14 bg-black/15 flex flex-col items-center py-4 justify-between h-full border-r border-[var(--border-color)] flex-shrink-0">
+      <div className={`w-14 bg-black/15 flex flex-col items-center py-4 justify-between h-full border-r border-[var(--border-color)] flex-shrink-0 rounded-l-[19px] relative z-20 ${!isExplorerOpen ? "rounded-r-[19px]" : ""}`}>
         <div className="flex flex-col items-center space-y-4 w-full">
           {/* Open Workspace Action */}
           <button
@@ -165,7 +173,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
                 : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
             }`}
-            title="Open Workspace"
           >
             <FolderOpen size={20} />
             <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-zinc-950 text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-zinc-800 whitespace-nowrap">
@@ -181,11 +188,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
                 : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
             }`}
-            title="Files"
           >
             <Files size={20} />
             <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-zinc-950 text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-zinc-800 whitespace-nowrap">
-              Files
+              Files (⌘1)
             </span>
           </button>
 
@@ -197,7 +203,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
                 : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
             }`}
-            title="Source Control"
           >
             <GitBranch size={20} />
             {totalChanges > 0 && (
@@ -217,7 +222,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
               ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
               : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
               }`}
-            title="Open Axiom"
           >
             <AxiomIcon size={20} />
             <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-zinc-950 text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-zinc-800 whitespace-nowrap">
@@ -232,7 +236,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
               ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
               : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
               }`}
-            title="LLM Integrations"
           >
             <Cpu size={20} />
             <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-zinc-950 text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-zinc-800 whitespace-nowrap">
@@ -248,7 +251,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
             : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
             }`}
-          title="General Settings"
         >
           <Settings size={20} />
           <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-zinc-950 text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-zinc-800 whitespace-nowrap">
@@ -259,7 +261,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* 2. Sidebar View Panel Container */}
       {isExplorerOpen && (
-        <div className="flex-1 flex flex-col h-full min-w-0">
+        <div className="flex-1 flex flex-col h-full min-w-0 rounded-r-[19px] overflow-hidden">
           {sidebarView === "explorer" ? (
             <>
               {/* Dynamic Explorer Sidebar Tree */}

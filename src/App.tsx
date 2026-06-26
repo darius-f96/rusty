@@ -23,6 +23,24 @@ function App() {
     }
     return 320;
   });
+
+  const [isSidebarExplorerOpen, setIsSidebarExplorerOpen] = useState(true);
+  const [sidebarView, setSidebarView] = useState<"explorer" | "git">("explorer");
+  const [lastSidebarWidth, setLastSidebarWidth] = useState(320);
+
+  const toggleExplorer = useCallback(() => {
+    if (!isSidebarExplorerOpen) {
+      setSidebarView("explorer");
+      setSidebarWidth(lastSidebarWidth);
+      setIsSidebarExplorerOpen(true);
+    } else if (sidebarView === "explorer") {
+      setLastSidebarWidth(sidebarWidth);
+      setSidebarWidth(56);
+      setIsSidebarExplorerOpen(false);
+    } else {
+      setSidebarView("explorer");
+    }
+  }, [isSidebarExplorerOpen, sidebarView, sidebarWidth, lastSidebarWidth]);
   const isSidebarDraggingRef = useRef(false);
   const sidebarWidthRef = useRef(sidebarWidth);
   const sidebarElementRef = useRef<HTMLDivElement>(null);
@@ -143,7 +161,7 @@ function App() {
     }
   }, [devLogs, showDevConsole]);
 
-  // Global Keyboard Shortcuts (Cmd+W or Ctrl+W to close active tab)
+  // Global Keyboard Shortcuts (Cmd+W or Ctrl+W to close active tab, Cmd+1 to toggle sidebar)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "w") {
@@ -161,6 +179,10 @@ function App() {
         e.preventDefault();
         e.stopPropagation();
         setSearchOpen(true);
+      } else if ((e.metaKey || e.ctrlKey) && (e.key === "1" || e.code === "Digit1")) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleExplorer();
       }
     };
 
@@ -168,7 +190,7 @@ function App() {
     return () => {
       window.removeEventListener("keydown", handleKeyDown, true);
     };
-  }, []);
+  }, [toggleExplorer]);
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-[var(--bg-app)] text-[var(--text-light)] font-sans">
@@ -176,13 +198,19 @@ function App() {
       <Header onSearchOpen={() => setSearchOpen(true)} />
 
       {/* 2. Workspace Cards Content Area */}
-      <div className="flex-1 flex min-h-0 w-full p-4 pt-2 gap-4 overflow-hidden">
+      <div className="flex-1 flex min-h-0 w-full p-3 pt-1 gap-3 overflow-hidden">
         {/* Sidebar with explorer and icon dock */}
         <Sidebar
           sidebarWidth={sidebarWidth}
           setSidebarWidth={setSidebarWidth}
           onSidebarMouseDown={handleSidebarMouseDown}
           containerRef={sidebarElementRef}
+          isExplorerOpen={isSidebarExplorerOpen}
+          setIsExplorerOpen={setIsSidebarExplorerOpen}
+          sidebarView={sidebarView}
+          setSidebarView={setSidebarView}
+          lastWidth={lastSidebarWidth}
+          setLastWidth={setLastSidebarWidth}
         />
 
         {/* Main Workspace Card Panel */}
