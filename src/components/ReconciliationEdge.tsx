@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useContext } from "react";
 import {
   BaseEdge,
   getBezierPath,
@@ -6,6 +6,7 @@ import {
   type EdgeProps,
 } from "@xyflow/react";
 import { useWorkspaceStore } from "../store";
+import { CanvasTabContext } from "./tabs/canvas/CanvasTabContext";
 
 export const ReconciliationEdge: React.FC<EdgeProps> = ({
   id,
@@ -18,8 +19,9 @@ export const ReconciliationEdge: React.FC<EdgeProps> = ({
   style = {},
   markerEnd,
 }) => {
+  const { tabId } = useContext(CanvasTabContext);
   const status = useWorkspaceStore(
-    (state) => state.edgeReconciliationStatus[id] || "idle"
+    (state) => (state.canvasContexts[tabId] || { edgeReconciliationStatus: {} }).edgeReconciliationStatus[id] || "idle"
   );
   const setSelectedEdgeId = useWorkspaceStore((state) => state.setSelectedEdgeId);
   const setSelectedNodeId = useWorkspaceStore((state) => state.setSelectedNodeId);

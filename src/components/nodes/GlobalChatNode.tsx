@@ -1,13 +1,15 @@
-import React, { useState, useRef, useEffect, memo } from "react";
+import React, { useState, useRef, useEffect, memo, useContext } from "react";
 import { Globe, Pencil, Check, Trash2, Sparkles, X, Loader2 } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
 import { processResponse } from "../../services/responseProcessingService";
+import { CanvasTabContext } from "../tabs/canvas/CanvasTabContext";
 
 export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) => {
+  const { tabId } = useContext(CanvasTabContext);
   const updateNode = useWorkspaceStore((state) => state.updateTaskNode);
   const deleteNode = useWorkspaceStore((state) => state.deleteNode);
   const globalContextSummary = useWorkspaceStore((state) => state.globalContextSummary);
-  const nodeStatus = useWorkspaceStore((state) => state.nodeStatus[id] || "idle");
+  const nodeStatus = useWorkspaceStore((state) => (state.canvasContexts[tabId] || { nodeStatus: {} }).nodeStatus[id] || "idle");
 
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(data.name || "Global Explorer");

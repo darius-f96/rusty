@@ -79,7 +79,7 @@ export const TabBar: React.FC<TabBarProps> = ({ groupId }) => {
                 setActiveTabId(tab.id, groupId);
                 setActiveGroupId(groupId);
               }}
-              draggable={tab.type !== "canvas"}
+              draggable
               onDragStart={(e) => {
                 e.dataTransfer.setData("text/plain", tab.id);
                 e.dataTransfer.setData("from-group-id", groupId);
@@ -177,30 +177,28 @@ export const TabBar: React.FC<TabBarProps> = ({ groupId }) => {
 
               <span className="truncate max-w-[120px]">{tab.title}</span>
 
-              {tab.id !== "canvas" && (
-                <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      splitTab(tab.id, groupId);
-                    }}
-                    className="p-0.5 rounded-sm hover:bg-[var(--border-color)]/80 text-[var(--text-muted)] hover:text-[var(--text-light)]"
-                    title="Split editor"
-                  >
-                    <Columns size={10} />
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      closeTab(tab.id, groupId);
-                    }}
-                    className="p-0.5 rounded-sm hover:bg-[var(--border-color)]/80 text-[var(--text-muted)] hover:text-[var(--text-light)]"
-                    title="Close tab"
-                  >
-                    <X size={10} />
-                  </button>
-                </div>
-              )}
+              <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    splitTab(tab.id, groupId);
+                  }}
+                  className="p-0.5 rounded-sm hover:bg-[var(--border-color)]/80 text-[var(--text-muted)] hover:text-[var(--text-light)]"
+                  title="Split editor"
+                >
+                  <Columns size={10} />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeTab(tab.id, groupId);
+                  }}
+                  className="p-0.5 rounded-sm hover:bg-[var(--border-color)]/80 text-[var(--text-muted)] hover:text-[var(--text-light)]"
+                  title="Close tab"
+                >
+                  <X size={10} />
+                </button>
+              </div>
             </div>
           );
         })}
@@ -259,20 +257,18 @@ export const TabBar: React.FC<TabBarProps> = ({ groupId }) => {
                       <span className="truncate">{tab.title}</span>
                     </div>
 
-                    {tab.id !== "canvas" && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          closeTab(tab.id, groupId);
-                          if (openTabs.length <= 1) {
-                            setDropdownOpen(false);
-                          }
-                        }}
-                        className="p-0.5 rounded-sm hover:bg-[var(--border-color)] text-[var(--text-muted)] hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <X size={10} />
-                      </button>
-                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        closeTab(tab.id, groupId);
+                        if (openTabs.length <= 1) {
+                          setDropdownOpen(false);
+                        }
+                      }}
+                      className="p-0.5 rounded-sm hover:bg-[var(--border-color)] text-[var(--text-muted)] hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X size={10} />
+                    </button>
                   </div>
                 );
               })}

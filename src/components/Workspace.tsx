@@ -2,7 +2,7 @@ import React, { useRef } from "react";
 import { useWorkspaceStore } from "../store";
 import { invoke } from "@tauri-apps/api/core";
 import { TabBar } from "./TabBar";
-import { CanvasTab } from "./tabs/CanvasTab";
+import { CanvasTab } from "./tabs/canvas/CanvasTab";
 import { FileTab } from "./tabs/FileTab";
 import { TaskTab } from "./tabs/TaskTab";
 import { GitDiffTab } from "./tabs/GitDiffTab";
@@ -13,8 +13,6 @@ import { WorkspaceTab } from "./tabs/WorkspaceTab";
 
 export const Workspace: React.FC = () => {
   const rootPath = useWorkspaceStore((state) => state.rootPath);
-  const nodes = useWorkspaceStore((state) => state.nodes);
-  const edges = useWorkspaceStore((state) => state.edges);
   const editorGroups = useWorkspaceStore((state) => state.editorGroups);
   const groupSizes = useWorkspaceStore((state) => state.groupSizes);
   const setGroupSizes = useWorkspaceStore((state) => state.setGroupSizes);
@@ -69,12 +67,38 @@ export const Workspace: React.FC = () => {
 
   // WebSocket execution runner
   const executeNode = (nodeId: string, customPrompt?: string) => {
-    const node = nodes.find((n) => n.id === nodeId);
+    const storeState = useWorkspaceStore.getState();
+    
+    // Find the canvas context containing this node
+    let targetTabId = "";
+    let node: any = null;
+    if (storeState.canvasContexts) {
+      for (const tId in storeState.canvasContexts) {
+        const ctx = storeState.canvasContexts[tId];
+        const found = ctx.nodes.find((n) => n.id === nodeId);
+        if (found) {
+          targetTabId = tId;
+          node = found;
+          break;
+        }
+      }
+    }
+    
+    // Fallback to top-level if not found
+    if (!node) {
+      node = storeState.nodes.find((n) => n.id === nodeId);
+    }
+    
     if (!node || node.type !== "taskNode") return;
 
-    const activeModel = useWorkspaceStore.getState().activeModel;
-    const customProviders = useWorkspaceStore.getState().customProviders;
-    const activeCustomProviderId = useWorkspaceStore.getState().activeCustomProviderId;
+    // Resolve context using targetTabId
+    const tabCtx = targetTabId ? storeState.canvasContexts[targetTabId] : null;
+    const currentNodes = tabCtx ? tabCtx.nodes : storeState.nodes;
+    const currentEdges = tabCtx ? tabCtx.edges : storeState.edges;
+
+    const activeModel = storeState.activeModel;
+    const customProviders = storeState.customProviders;
+    const activeCustomProviderId = storeState.activeCustomProviderId;
 
     const nodeModel = (node.data as any).model || activeModel;
 
@@ -87,9 +111,9 @@ export const Workspace: React.FC = () => {
       provider = customProviders.find((p) => p.id === activeCustomProviderId);
     }
 
-    const connectedEdges = edges.filter((edge) => edge.target === nodeId);
+    const connectedEdges = currentEdges.filter((edge) => edge.target === nodeId);
     const inputFiles = connectedEdges
-      .map((edge) => nodes.find((n) => n.id === edge.source))
+      .map((edge) => currentNodes.find((n) => n.id === edge.source))
       .filter((n): n is Exclude<typeof n, undefined> => n !== undefined && n.type === "contextNode" && !!n.data.path)
       .map((n) => ({
         path: n.data.path as string,
@@ -99,7 +123,7 @@ export const Workspace: React.FC = () => {
 
     // Gather text descriptions from connected context nodes
     const contextDescriptions = connectedEdges
-      .map((edge) => nodes.find((n) => n.id === edge.source))
+      .map((edge) => currentNodes.find((n) => n.id === edge.source))
       .filter((n): n is Exclude<typeof n, undefined> => n !== undefined && n.type === "contextNode")
       .map((n) => {
         const parts: string[] = [];
@@ -315,7 +339,7 @@ export const Workspace: React.FC = () => {
           className={`${isActive ? "w-full h-full" : "absolute -left-[99999px] top-0 w-full h-full"} ${bgClass} overflow-hidden`}
         >
           {tab.type === "canvas" && (
-            <CanvasTab onExecuteNode={executeNode} />
+            <CanvasTab tab={tab} onExecuteNode={executeNode} />
           )}
           {tab.type === "file" && (
             <FileTab tab={tab} groupId={groupId} />

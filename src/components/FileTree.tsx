@@ -180,7 +180,19 @@ const FileTreeNode: React.FC<{ node: any }> = ({ node }) => {
     e.dataTransfer.effectAllowed = "move";
   };
 
-  const handleDoubleClick = () => {
+  const handleDoubleClick = async () => {
+    if (node.path.includes("/.axiom/canvas/") && node.path.endsWith(".json")) {
+      try {
+        const { canvasFileService } = await import("./tabs/canvas/services/canvasFileService");
+        const parsedData = await canvasFileService.loadCanvasFromFile(node.path);
+        useWorkspaceStore.getState().loadCanvasTab(parsedData);
+      } catch (err: any) {
+        console.error("Failed to load canvas from file:", err);
+        alert(`Failed to load canvas: ${err.message || err}`);
+      }
+      return;
+    }
+
     openTab({
       id: `file_${node.path.replace(/[^a-zA-Z0-9]/g, "_")}`,
       type: "file",

@@ -151,7 +151,7 @@ function App() {
         const state = useWorkspaceStore.getState();
         const activeGroup = state.editorGroups.find((g) => g.id === state.activeGroupId);
         const currentActive = activeGroup?.activeTabId;
-        if (currentActive && currentActive !== "canvas") {
+        if (currentActive) {
           state.closeTab(currentActive, state.activeGroupId);
           console.log(`Shortcut captured: Closed active tab ${currentActive}`);
         }

@@ -1,11 +1,13 @@
-import React, { useState, useRef, useEffect, memo } from "react";
+import React, { useState, useRef, useEffect, memo, useContext } from "react";
 import { Handle, Position } from "@xyflow/react";
 import { Sparkles, AlertCircle, CheckCircle2, Loader2, Pencil, Check, Trash2 } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
+import { CanvasTabContext } from "../tabs/canvas/CanvasTabContext";
 
 export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) => {
+  const { tabId } = useContext(CanvasTabContext);
   const updateTaskNode = useWorkspaceStore((state) => state.updateTaskNode);
-  const nodeStatus = useWorkspaceStore((state) => state.nodeStatus[id] || "idle");
+  const nodeStatus = useWorkspaceStore((state) => (state.canvasContexts[tabId] || { nodeStatus: {} }).nodeStatus[id] || "idle");
   const deleteNode = useWorkspaceStore((state) => state.deleteNode);
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(data.name || "AI Executor Node");

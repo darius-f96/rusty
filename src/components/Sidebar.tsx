@@ -26,6 +26,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const activeGroupId = useWorkspaceStore((state) => state.activeGroupId);
   const activeGroup = editorGroups.find((g) => g.id === activeGroupId);
   const activeTabId = activeGroup ? activeGroup.activeTabId : null;
+  const activeTab = activeGroup && activeGroup.openTabs.find((t) => t.id === activeTabId);
+  const isActiveTabCanvas = activeTab?.type === "canvas";
 
   const gitStatus = useWorkspaceStore((state) => state.gitStatus);
 
@@ -71,12 +73,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const handleAxiomClick = () => {
-    openTab({
-      id: "canvas",
-      type: "canvas",
-      title: "Axiom",
-      key: "canvas",
-    });
+    useWorkspaceStore.getState().createCanvasTab();
   };
 
   const handleLlmSetupClick = () => {
@@ -216,7 +213,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {/* Axiom Canvas */}
           <button
             onClick={handleAxiomClick}
-            className={`p-2.5 rounded-lg transition-all cursor-pointer relative group ${activeTabId === "canvas"
+            className={`p-2.5 rounded-lg transition-all cursor-pointer relative group ${isActiveTabCanvas
               ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
               : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
               }`}

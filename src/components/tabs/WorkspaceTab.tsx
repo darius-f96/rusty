@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { FolderOpen, History, Trash2, ArrowRight } from "lucide-react";
+import { FolderOpen, History, Trash2, ArrowRight, Plus } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
 
 export const WorkspaceTab: React.FC = () => {
@@ -90,22 +90,44 @@ export const WorkspaceTab: React.FC = () => {
         {/* Open Workspace Action Card */}
         <div className="md:col-span-1 space-y-4">
           <h3 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider font-mono">Actions</h3>
-          <div
-            onClick={handleOpenWorkspace}
-            className="group flex flex-col justify-between p-6 h-48 rounded-2xl bg-[var(--bg-sidebar)] border border-[var(--border-color)] hover:border-[var(--accent-color)] hover:shadow-xl cursor-pointer transition-all duration-300 relative overflow-hidden"
-          >
-            <div className="absolute top-0 right-0 w-24 h-24 bg-[var(--accent-color)]/5 rounded-bl-full pointer-events-none group-hover:bg-[var(--accent-color)]/10 transition-colors" />
-            <div className="w-10 h-10 rounded-xl bg-[var(--bg-app)] border border-[var(--border-color)] flex items-center justify-center text-[var(--accent-color)] group-hover:scale-110 transition-transform">
-              <FolderOpen size={20} />
-            </div>
-            <div>
-              <div className="text-sm font-bold text-[var(--text-light)] flex items-center gap-1.5 group-hover:text-[var(--accent-color)] transition-colors">
-                Open Workspace <ArrowRight size={14} className="opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
+          <div className="space-y-3">
+            <div
+              onClick={handleOpenWorkspace}
+              className="group flex flex-col justify-between p-6 h-48 rounded-2xl bg-[var(--bg-sidebar)] border border-[var(--border-color)] hover:border-[var(--accent-color)] hover:shadow-xl cursor-pointer transition-all duration-300 relative overflow-hidden"
+            >
+              <div className="absolute top-0 right-0 w-24 h-24 bg-[var(--accent-color)]/5 rounded-bl-full pointer-events-none group-hover:bg-[var(--accent-color)]/10 transition-colors" />
+              <div className="w-10 h-10 rounded-xl bg-[var(--bg-app)] border border-[var(--border-color)] flex items-center justify-center text-[var(--accent-color)] group-hover:scale-110 transition-transform">
+                <FolderOpen size={20} />
               </div>
-              <p className="text-[11px] text-[var(--text-muted)] mt-1.5 leading-relaxed font-mono">
-                Select a folder on your system to begin editing and orchestrating flows.
-              </p>
+              <div>
+                <div className="text-sm font-bold text-[var(--text-light)] flex items-center gap-1.5 group-hover:text-[var(--accent-color)] transition-colors">
+                  Open Workspace <ArrowRight size={14} className="opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
+                </div>
+                <p className="text-[11px] text-[var(--text-muted)] mt-1.5 leading-relaxed font-mono">
+                  Select a folder on your system to begin editing and orchestrating flows.
+                </p>
+              </div>
             </div>
+
+            {rootPath && (
+              <div
+                onClick={() => useWorkspaceStore.getState().createCanvasTab()}
+                className="group flex flex-col justify-between p-6 h-48 rounded-2xl bg-[var(--bg-sidebar)] border border-[var(--border-color)] hover:border-emerald-500 hover:shadow-xl cursor-pointer transition-all duration-300 relative overflow-hidden"
+              >
+                <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-bl-full pointer-events-none group-hover:bg-emerald-500/10 transition-colors" />
+                <div className="w-10 h-10 rounded-xl bg-[var(--bg-app)] border border-[var(--border-color)] flex items-center justify-center text-emerald-400 group-hover:scale-110 transition-transform">
+                  <Plus size={20} />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-[var(--text-light)] flex items-center gap-1.5 group-hover:text-emerald-400 transition-colors">
+                    New Pipeline <ArrowRight size={14} className="opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
+                  </div>
+                  <p className="text-[11px] text-[var(--text-muted)] mt-1.5 leading-relaxed font-mono">
+                    Create a new pipeline canvas tab to build and run AI tasks.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

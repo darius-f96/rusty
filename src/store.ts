@@ -63,6 +63,16 @@ export interface GlobalChatMessage {
   timestamp: string;
 }
 
+export interface CanvasContext {
+  nodes: Node[];
+  edges: Edge[];
+  nodeLogs: Record<string, string[]>;
+  nodeStatus: Record<string, "idle" | "running" | "success" | "error">;
+  globalChatHistory: Record<string, GlobalChatMessage[]>;
+  edgeReconciliationStatus: Record<string, "idle" | "unreconciled" | "reconciled">;
+  isPipelineApplied?: boolean;
+}
+
 export interface WorkspaceState {
   rootPath: string;
   nodes: Node[];
@@ -82,6 +92,14 @@ export interface WorkspaceState {
   selectedEdgeId: string | null;
   edgeReconciliationStatus: Record<string, "idle" | "unreconciled" | "reconciled">;
   
+  canvasContexts: Record<string, CanvasContext>;
+  onNodesChangeForTab: (tabId: string, changes: any[]) => void;
+  onEdgesChangeForTab: (tabId: string, changes: any[]) => void;
+  onConnectForTab: (tabId: string, connection: Connection) => void;
+  updateCanvasContext: (tabId: string, updates: Partial<CanvasContext>) => void;
+  loadCanvasTab: (data: any) => void;
+  createCanvasTab: (title?: string) => void;
+  
   activeThemeId: string;
   setActiveThemeId: (themeId: string) => void;
   
@@ -96,9 +114,9 @@ export interface WorkspaceState {
   onEdgesChange: OnEdgesChange;
   onConnect: (connection: Connection) => void;
   
-  addContextNode: (x: number, y: number, fileContext?: { path: string; name: string; isDir: boolean }) => void;
-  addTaskNode: (x: number, y: number) => void;
-  addGlobalChatNode: (x: number, y: number) => void;
+  addContextNode: (x: number, y: number, fileContext?: { path: string; name: string; isDir: boolean }, tabId?: string) => void;
+  addTaskNode: (x: number, y: number, tabId?: string) => void;
+  addGlobalChatNode: (x: number, y: number, tabId?: string) => void;
   updateTaskNode: (id: string, data: any) => void;
   deleteNode: (id: string) => void;
   addLog: (nodeId: string, message: string) => void;
@@ -133,14 +151,126 @@ export interface WorkspaceState {
   setPathExpanded: (path: string, expanded: boolean) => void;
   togglePathExpanded: (path: string) => void;
   collapseAllFolders: () => void;
-  addAndConnectContextNode: (x: number, y: number, taskId: string, taskHandleId: string) => void;
+  addAndConnectContextNode: (x: number, y: number, taskId: string, taskHandleId: string, tabId?: string) => void;
   getGlobalChatHistory: (nodeId: string) => GlobalChatMessage[];
   setSelectedEdgeId: (id: string | null) => void;
   setEdgeStatus: (edgeId: string, status: "idle" | "unreconciled" | "reconciled") => void;
   getSequenceEdges: () => Edge[];
+  updateTabTitle: (tabId: string, title: string) => void;
   saveSecureConfig: () => Promise<void>;
   loadSecureConfig: () => Promise<void>;
 }
+
+// Helper to find the active canvas tab ID from the editor groups
+const getActiveCanvasTabId = (state: WorkspaceState): string => {
+  const activeGroup = state.editorGroups.find((g) => g.id === state.activeGroupId);
+  if (activeGroup && activeGroup.activeTabId) {
+    const activeTab = activeGroup.openTabs.find((t) => t.id === activeGroup.activeTabId);
+    if (activeTab && activeTab.type === "canvas") {
+      return activeTab.id;
+    }
+  }
+  for (const group of state.editorGroups) {
+    const canvasTab = group.openTabs.find((t) => t.type === "canvas");
+    if (canvasTab) return canvasTab.id;
+  }
+  return "canvas";
+};
+
+// Helper to get or create tab context
+const getOrCreateContext = (state: WorkspaceState, tabId: string): CanvasContext => {
+  if (!state.canvasContexts) {
+    state.canvasContexts = {};
+  }
+  if (!state.canvasContexts[tabId]) {
+    state.canvasContexts[tabId] = {
+      nodes: [],
+      edges: [],
+      nodeLogs: {},
+      nodeStatus: {},
+      globalChatHistory: {},
+      edgeReconciliationStatus: {},
+      isPipelineApplied: false
+    };
+  }
+  return state.canvasContexts[tabId];
+};
+
+// Helper to find tabId containing a node
+const findTabIdByNodeId = (state: WorkspaceState, nodeId: string): string => {
+  if (state.canvasContexts) {
+    for (const tabId in state.canvasContexts) {
+      const ctx = state.canvasContexts[tabId];
+      if (ctx.nodes && ctx.nodes.some((n) => n.id === nodeId)) {
+        return tabId;
+      }
+    }
+  }
+  return getActiveCanvasTabId(state);
+};
+
+// Helper to find tabId containing an edge
+const findTabIdByEdgeId = (state: WorkspaceState, edgeId: string): string => {
+  if (state.canvasContexts) {
+    for (const tabId in state.canvasContexts) {
+      const ctx = state.canvasContexts[tabId];
+      if (ctx.edges && ctx.edges.some((e) => e.id === edgeId)) {
+        return tabId;
+      }
+    }
+  }
+  return getActiveCanvasTabId(state);
+};
+
+// Helper to update context and sync to top-level state
+const updateContextAndSync = (
+  state: WorkspaceState,
+  tabId: string,
+  updater: (ctx: CanvasContext) => Partial<CanvasContext>
+): Partial<WorkspaceState> => {
+  const ctx = getOrCreateContext(state, tabId);
+  const updates = updater(ctx);
+  
+  // Auto-reset applied status if graph structure is modified
+  const shouldResetApplied = 
+    ("nodes" in updates || "edges" in updates) && 
+    !("isPipelineApplied" in updates);
+
+  const newCanvasContexts = {
+    ...state.canvasContexts,
+    [tabId]: {
+      ...ctx,
+      ...updates,
+      ...(shouldResetApplied ? { isPipelineApplied: false } : {})
+    }
+  };
+  
+  const tempState = {
+    ...state,
+    canvasContexts: newCanvasContexts
+  };
+  
+  const activeTabId = getActiveCanvasTabId(tempState);
+  const activeCtx = newCanvasContexts[activeTabId] || {
+    nodes: [],
+    edges: [],
+    nodeLogs: {},
+    nodeStatus: {},
+    globalChatHistory: {},
+    edgeReconciliationStatus: {},
+    isPipelineApplied: false
+  };
+  
+  return {
+    canvasContexts: newCanvasContexts,
+    nodes: activeCtx.nodes,
+    edges: activeCtx.edges,
+    nodeLogs: activeCtx.nodeLogs,
+    nodeStatus: activeCtx.nodeStatus,
+    globalChatHistory: activeCtx.globalChatHistory,
+    edgeReconciliationStatus: activeCtx.edgeReconciliationStatus
+  };
+};
 
 export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   rootPath: "",
@@ -197,6 +327,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   ],
   activeGroupId: "group_0",
   groupSizes: [1.0],
+  canvasContexts: {
+    canvas: {
+      nodes: [],
+      edges: [],
+      nodeLogs: {},
+      nodeStatus: {},
+      globalChatHistory: {},
+      edgeReconciliationStatus: {},
+      isPipelineApplied: false
+    }
+  },
   activeThemeId: localStorage.getItem("selected_theme") || "dark",
   setActiveThemeId: (themeId) => {
     const t = themes[themeId] || themes.dark;
@@ -232,6 +373,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       ],
       activeGroupId: "group_0",
       groupSizes: [1.0],
+      canvasContexts: {
+        canvas: {
+          nodes: [],
+          edges: [],
+          nodeLogs: {},
+          nodeStatus: {},
+          globalChatHistory: {},
+          edgeReconciliationStatus: {},
+          isPipelineApplied: false
+        }
+      },
       expandedPaths: {},
       nodes: [],
       edges: [],
@@ -275,35 +427,197 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   setNodes: (nodes) => set({ nodes }),
   setEdges: (edges) => set({ edges }),
   
-  onNodesChange: (changes) => set((state) => ({
-    nodes: applyNodeChanges(changes, state.nodes),
-  })),
+  onNodesChange: (changes) => set((state) => {
+    const activeTabId = getActiveCanvasTabId(state);
+    return updateContextAndSync(state, activeTabId, (ctx) => ({
+      nodes: applyNodeChanges(changes, ctx.nodes)
+    }));
+  }),
   
-  onEdgesChange: (changes) => set((state) => ({
-    edges: applyEdgeChanges(changes, state.edges),
-  })),
+  onEdgesChange: (changes) => set((state) => {
+    const activeTabId = getActiveCanvasTabId(state);
+    return updateContextAndSync(state, activeTabId, (ctx) => ({
+      edges: applyEdgeChanges(changes, ctx.edges)
+    }));
+  }),
   
   onConnect: (connection) => set((state) => {
+    const activeTabId = getActiveCanvasTabId(state);
     const isContext = connection.source?.startsWith("context");
     const edgeStyle = isContext ? { stroke: "#10b981", strokeWidth: 2 } : undefined;
     const newEdge = {
       ...connection,
       style: edgeStyle
     };
+    return updateContextAndSync(state, activeTabId, (ctx) => ({
+      edges: addEdge(newEdge, ctx.edges)
+    }));
+  }),
+
+  onNodesChangeForTab: (tabId, changes) => set((state) => {
+    return updateContextAndSync(state, tabId, (ctx) => ({
+      nodes: applyNodeChanges(changes, ctx.nodes)
+    }));
+  }),
+
+  onEdgesChangeForTab: (tabId, changes) => set((state) => {
+    return updateContextAndSync(state, tabId, (ctx) => ({
+      edges: applyEdgeChanges(changes, ctx.edges)
+    }));
+  }),
+
+  onConnectForTab: (tabId, connection) => set((state) => {
+    const isContext = connection.source?.startsWith("context");
+    const edgeStyle = isContext ? { stroke: "#10b981", strokeWidth: 2 } : undefined;
+    const newEdge = {
+      ...connection,
+      style: edgeStyle
+    };
+    return updateContextAndSync(state, tabId, (ctx) => ({
+      edges: addEdge(newEdge, ctx.edges)
+    }));
+  }),
+
+  updateCanvasContext: (tabId, updates) => set((state) => {
+    return updateContextAndSync(state, tabId, () => updates);
+  }),
+
+  loadCanvasTab: (data) => set((state) => {
+    const tabId = data.id || `canvas_${Date.now()}`;
+    const title = data.title || "Untitled Pipeline";
+    const newTab = {
+      id: tabId,
+      type: "canvas" as const,
+      title: title,
+      key: `canvas_${tabId}`
+    };
+    
+    let tabExists = false;
+    let targetGroupId = state.activeGroupId;
+    
+    for (const group of state.editorGroups) {
+      if (group.openTabs.some((t) => t.id === tabId)) {
+        tabExists = true;
+        targetGroupId = group.id;
+        break;
+      }
+    }
+    
+    let newGroups = state.editorGroups;
+    if (!tabExists) {
+      newGroups = state.editorGroups.map((group) => {
+        if (group.id === targetGroupId) {
+          return {
+            ...group,
+            openTabs: [...group.openTabs, newTab],
+            activeTabId: tabId
+          };
+        }
+        return group;
+      });
+    } else {
+      newGroups = state.editorGroups.map((group) => {
+        if (group.id === targetGroupId) {
+          return {
+            ...group,
+            activeTabId: tabId
+          };
+        }
+        return group;
+      });
+    }
+    
+    const newCanvasContexts = {
+      ...state.canvasContexts,
+      [tabId]: {
+        nodes: data.nodes || [],
+        edges: data.edges || [],
+        nodeLogs: data.nodeLogs || {},
+        nodeStatus: data.nodeStatus || {},
+        globalChatHistory: data.globalChatHistory || {},
+        edgeReconciliationStatus: data.edgeReconciliationStatus || {},
+        isPipelineApplied: data.isPipelineApplied || false
+      }
+    };
+    
+    const tempState = {
+      ...state,
+      editorGroups: newGroups,
+      activeGroupId: targetGroupId,
+      canvasContexts: newCanvasContexts
+    };
+    const activeCtx = getOrCreateContext(tempState, tabId);
+    
     return {
-      edges: addEdge(newEdge, state.edges),
+      editorGroups: newGroups,
+      activeGroupId: targetGroupId,
+      canvasContexts: newCanvasContexts,
+      nodes: activeCtx.nodes,
+      edges: activeCtx.edges,
+      nodeLogs: activeCtx.nodeLogs,
+      nodeStatus: activeCtx.nodeStatus,
+      globalChatHistory: activeCtx.globalChatHistory,
+      edgeReconciliationStatus: activeCtx.edgeReconciliationStatus
     };
   }),
 
-  addContextNode: (x, y, fileContext) => set((state) => {
-    const id = `context_${Date.now()}`;
+  createCanvasTab: (title) => set((state) => {
+    const tabId = `canvas_${Date.now()}`;
+    const name = title || `Pipeline ${Object.keys(state.canvasContexts || {}).length + 1}`;
+    const newTab = {
+      id: tabId,
+      type: "canvas" as const,
+      title: name,
+      key: `canvas_${tabId}`
+    };
     
-    // Prevent overlapping nodes by shifting coordinates if another node is placed too close (within 60px)
+    const targetGroupId = state.activeGroupId;
+    const newGroups = state.editorGroups.map((group) => {
+      if (group.id === targetGroupId) {
+        return {
+          ...group,
+          openTabs: [...group.openTabs, newTab],
+          activeTabId: tabId
+        };
+      }
+      return group;
+    });
+    
+    const newCanvasContexts = {
+      ...state.canvasContexts,
+      [tabId]: {
+        nodes: [],
+        edges: [],
+        nodeLogs: {},
+        nodeStatus: {},
+        globalChatHistory: {},
+        edgeReconciliationStatus: {},
+        isPipelineApplied: false
+      }
+    };
+    
+    return {
+      editorGroups: newGroups,
+      canvasContexts: newCanvasContexts,
+      nodes: [],
+      edges: [],
+      nodeLogs: {},
+      nodeStatus: {},
+      globalChatHistory: {},
+      edgeReconciliationStatus: {}
+    };
+  }),
+
+  addContextNode: (x, y, fileContext, tabId) => set((state) => {
+    const targetTabId = tabId || getActiveCanvasTabId(state);
+    const id = `context_${Date.now()}`;
+    const targetCtx = getOrCreateContext(state, targetTabId);
+    
     let finalX = x;
     let finalY = y;
     let attempts = 0;
     while (
-      state.nodes.some(
+      targetCtx.nodes.some(
         (n) => Math.abs(n.position.x - finalX) < 60 && Math.abs(n.position.y - finalY) < 60
       ) &&
       attempts < 100
@@ -327,18 +641,21 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         isDir: fileContext?.isDir || false
       }
     };
-    return { nodes: [...state.nodes, newNode] };
+    return updateContextAndSync(state, targetTabId, (ctx) => ({
+      nodes: [...ctx.nodes, newNode]
+    }));
   }),
 
-  addTaskNode: (x, y) => set((state) => {
+  addTaskNode: (x, y, tabId) => set((state) => {
+    const targetTabId = tabId || getActiveCanvasTabId(state);
     const id = `task_${Date.now()}`;
+    const targetCtx = getOrCreateContext(state, targetTabId);
     
-    // Prevent overlapping nodes by shifting coordinates if another node is placed too close (within 60px)
     let finalX = x;
     let finalY = y;
     let attempts = 0;
     while (
-      state.nodes.some(
+      targetCtx.nodes.some(
         (n) => Math.abs(n.position.x - finalX) < 60 && Math.abs(n.position.y - finalY) < 60
       ) &&
       attempts < 100
@@ -360,18 +677,21 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         status: "idle"
       }
     };
-    return { nodes: [...state.nodes, newNode] };
+    return updateContextAndSync(state, targetTabId, (ctx) => ({
+      nodes: [...ctx.nodes, newNode]
+    }));
   }),
 
-  addGlobalChatNode: (x, y) => set((state) => {
+  addGlobalChatNode: (x, y, tabId) => set((state) => {
+    const targetTabId = tabId || getActiveCanvasTabId(state);
     const id = `global_chat_${Date.now()}`;
+    const targetCtx = getOrCreateContext(state, targetTabId);
 
-    // Prevent overlapping nodes
     let finalX = x;
     let finalY = y;
     let attempts = 0;
     while (
-      state.nodes.some(
+      targetCtx.nodes.some(
         (n) => Math.abs(n.position.x - finalX) < 60 && Math.abs(n.position.y - finalY) < 60
       ) &&
       attempts < 100
@@ -394,67 +714,93 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         height: 220
       }
     };
-    return { nodes: [...state.nodes, newNode] };
+    return updateContextAndSync(state, targetTabId, (ctx) => ({
+      nodes: [...ctx.nodes, newNode]
+    }));
   }),
 
-  updateTaskNode: (id, data) => set((state) => ({
-    nodes: state.nodes.map((node) => {
-      if (node.id === id) {
-        return { ...node, data: { ...node.data, ...data } };
-      }
-      return node;
-    })
-  })),
+  updateTaskNode: (id, data) => set((state) => {
+    const targetTabId = findTabIdByNodeId(state, id);
+    return updateContextAndSync(state, targetTabId, (ctx) => ({
+      nodes: ctx.nodes.map((node) => {
+        if (node.id === id) {
+          return { ...node, data: { ...node.data, ...data } };
+        }
+        return node;
+      })
+    }));
+  }),
 
   deleteNode: (id) => set((state) => {
-    const newNodes = state.nodes.filter((node) => node.id !== id);
-    const newEdges = state.edges.filter((edge) => edge.source !== id && edge.target !== id);
-    const newNodeLogs = { ...state.nodeLogs };
-    delete newNodeLogs[id];
-    const newNodeStatus = { ...state.nodeStatus };
-    delete newNodeStatus[id];
+    const targetTabId = findTabIdByNodeId(state, id);
+    const updates = updateContextAndSync(state, targetTabId, (ctx) => {
+      const newNodes = ctx.nodes.filter((node) => node.id !== id);
+      const newEdges = ctx.edges.filter((edge) => edge.source !== id && edge.target !== id);
+      const newNodeLogs = { ...ctx.nodeLogs };
+      delete newNodeLogs[id];
+      const newNodeStatus = { ...ctx.nodeStatus };
+      delete newNodeStatus[id];
+      return {
+        nodes: newNodes,
+        edges: newEdges,
+        nodeLogs: newNodeLogs,
+        nodeStatus: newNodeStatus
+      };
+    });
     return {
-      nodes: newNodes,
-      edges: newEdges,
-      nodeLogs: newNodeLogs,
-      nodeStatus: newNodeStatus,
+      ...updates,
       selectedNodeId: state.selectedNodeId === id ? null : state.selectedNodeId
     };
   }),
 
   addLog: (nodeId, message) => set((state) => {
-    const currentLogs = state.nodeLogs[nodeId] || [];
-    return {
-      nodeLogs: {
-        ...state.nodeLogs,
-        [nodeId]: [...currentLogs, `[${new Date().toLocaleTimeString()}] ${message}`]
-      }
-    };
+    const targetTabId = findTabIdByNodeId(state, nodeId);
+    return updateContextAndSync(state, targetTabId, (ctx) => {
+      const currentLogs = ctx.nodeLogs[nodeId] || [];
+      return {
+        nodeLogs: {
+          ...ctx.nodeLogs,
+          [nodeId]: [...currentLogs, `[${new Date().toLocaleTimeString()}] ${message}`]
+        }
+      };
+    });
   }),
 
-  clearLogs: (nodeId) => set((state) => ({
-    nodeLogs: { ...state.nodeLogs, [nodeId]: [] }
-  })),
+  clearLogs: (nodeId) => set((state) => {
+    const targetTabId = findTabIdByNodeId(state, nodeId);
+    return updateContextAndSync(state, targetTabId, (ctx) => ({
+      nodeLogs: { ...ctx.nodeLogs, [nodeId]: [] }
+    }));
+  }),
 
-  setNodeStatus: (nodeId, status) => set((state) => ({
-    nodeStatus: { ...state.nodeStatus, [nodeId]: status }
-  })),
+  setNodeStatus: (nodeId, status) => set((state) => {
+    const targetTabId = findTabIdByNodeId(state, nodeId);
+    return updateContextAndSync(state, targetTabId, (ctx) => ({
+      nodeStatus: { ...ctx.nodeStatus, [nodeId]: status }
+    }));
+  }),
 
   setGlobalContextSummary: (summary) => set({ globalContextSummary: summary }),
 
   addGlobalChatMessage: (nodeId, message) => set((state) => {
-    const history = state.globalChatHistory[nodeId] || [];
-    return {
-      globalChatHistory: {
-        ...state.globalChatHistory,
-        [nodeId]: [...history, message]
-      }
-    };
+    const targetTabId = findTabIdByNodeId(state, nodeId);
+    return updateContextAndSync(state, targetTabId, (ctx) => {
+      const history = ctx.globalChatHistory[nodeId] || [];
+      return {
+        globalChatHistory: {
+          ...ctx.globalChatHistory,
+          [nodeId]: [...history, message]
+        }
+      };
+    });
   }),
 
-  clearGlobalChatHistory: (nodeId) => set((state) => ({
-    globalChatHistory: { ...state.globalChatHistory, [nodeId]: [] }
-  })),
+  clearGlobalChatHistory: (nodeId) => set((state) => {
+    const targetTabId = findTabIdByNodeId(state, nodeId);
+    return updateContextAndSync(state, targetTabId, (ctx) => ({
+      globalChatHistory: { ...ctx.globalChatHistory, [nodeId]: [] }
+    }));
+  }),
 
   addCustomProvider: (provider) => set((state) => {
     const updated = [...state.customProviders.filter(p => p.id !== provider.id), provider];
@@ -515,30 +861,60 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         activeTabId: tab.id
       };
       newGroups = [newGroup];
-      return {
+      const tempState = {
+        ...state,
         editorGroups: newGroups,
         activeGroupId: newGroup.id,
         groupSizes: [1.0]
       };
+      const activeTabId = getActiveCanvasTabId(tempState);
+      const activeCtx = getOrCreateContext(tempState, activeTabId);
+      return {
+        editorGroups: newGroups,
+        activeGroupId: newGroup.id,
+        groupSizes: [1.0],
+        nodes: activeCtx.nodes,
+        edges: activeCtx.edges,
+        nodeLogs: activeCtx.nodeLogs,
+        nodeStatus: activeCtx.nodeStatus,
+        globalChatHistory: activeCtx.globalChatHistory,
+        edgeReconciliationStatus: activeCtx.edgeReconciliationStatus
+      };
     }
 
-    return {
+    const tempState = {
+      ...state,
       editorGroups: newGroups,
       activeGroupId: targetGroupId
     };
+    const activeTabId = getActiveCanvasTabId(tempState);
+    const activeCtx = getOrCreateContext(tempState, activeTabId);
+    return {
+      editorGroups: newGroups,
+      activeGroupId: targetGroupId,
+      nodes: activeCtx.nodes,
+      edges: activeCtx.edges,
+      nodeLogs: activeCtx.nodeLogs,
+      nodeStatus: activeCtx.nodeStatus,
+      globalChatHistory: activeCtx.globalChatHistory,
+      edgeReconciliationStatus: activeCtx.edgeReconciliationStatus
+    };
   }),
+
   closeTab: (id, groupId) => set((state) => {
     const targetGroup = state.editorGroups.find(
       (g) => groupId ? g.id === groupId : g.openTabs.some((t) => t.id === id)
     );
     if (!targetGroup) return {};
 
-    if (id === "canvas" && state.editorGroups.length === 1 && targetGroup.openTabs.length === 1) {
+    if (id === "workspace_select" && state.editorGroups.length === 1 && targetGroup.openTabs.length === 1) {
       return {};
     }
 
     const groupIndex = state.editorGroups.indexOf(targetGroup);
     const remainingTabs = targetGroup.openTabs.filter((t) => t.id !== id);
+
+    let nextState: Partial<WorkspaceState> = {};
 
     if (remainingTabs.length > 0) {
       let nextActiveTabId = targetGroup.activeTabId;
@@ -548,15 +924,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       const updatedGroups = state.editorGroups.map((g) =>
         g.id === targetGroup.id ? { ...g, openTabs: remainingTabs, activeTabId: nextActiveTabId } : g
       );
-      return { editorGroups: updatedGroups };
+      nextState = { editorGroups: updatedGroups };
     } else {
       if (state.editorGroups.length === 1) {
         const fallbackGroup = {
           id: targetGroup.id,
-          openTabs: [{ id: "canvas", type: "canvas" as const, title: "Axiom", key: "canvas" }],
-          activeTabId: "canvas"
+          openTabs: [{ id: "workspace_select", type: "workspace" as const, title: "Workspaces", key: "workspace" }],
+          activeTabId: "workspace_select"
         };
-        return {
+        nextState = {
           editorGroups: [fallbackGroup],
           activeGroupId: fallbackGroup.id,
           groupSizes: [1.0]
@@ -575,14 +951,32 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
           nextActiveGroupId = updatedGroups[neighborIndex].id;
         }
 
-        return {
+        nextState = {
           editorGroups: updatedGroups,
           groupSizes: newSizes,
           activeGroupId: nextActiveGroupId
         };
       }
     }
+
+    const tempState = {
+      ...state,
+      ...nextState
+    } as WorkspaceState;
+    const activeTabId = getActiveCanvasTabId(tempState);
+    const activeCtx = getOrCreateContext(tempState, activeTabId);
+
+    return {
+      ...nextState,
+      nodes: activeCtx.nodes,
+      edges: activeCtx.edges,
+      nodeLogs: activeCtx.nodeLogs,
+      nodeStatus: activeCtx.nodeStatus,
+      globalChatHistory: activeCtx.globalChatHistory,
+      edgeReconciliationStatus: activeCtx.edgeReconciliationStatus
+    };
   }),
+
   setActiveTabId: (id, groupId) => set((state) => {
     const targetGroupId = groupId || state.activeGroupId;
     const updatedGroups = state.editorGroups.map((g) => {
@@ -591,11 +985,28 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       }
       return g;
     });
-    return {
+    
+    const tempState = {
+      ...state,
       editorGroups: updatedGroups,
       activeGroupId: targetGroupId
     };
+    
+    const activeTabId = getActiveCanvasTabId(tempState);
+    const activeCtx = getOrCreateContext(tempState, activeTabId);
+    
+    return {
+      editorGroups: updatedGroups,
+      activeGroupId: targetGroupId,
+      nodes: activeCtx.nodes,
+      edges: activeCtx.edges,
+      nodeLogs: activeCtx.nodeLogs,
+      nodeStatus: activeCtx.nodeStatus,
+      globalChatHistory: activeCtx.globalChatHistory,
+      edgeReconciliationStatus: activeCtx.edgeReconciliationStatus
+    };
   }),
+
   splitTab: (id, fromGroupId) => set((state) => {
     const fromGroupIndex = state.editorGroups.findIndex((g) => g.id === fromGroupId);
     if (fromGroupIndex === -1) return {};
@@ -619,12 +1030,28 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     newSizes[fromGroupIndex] = oldSize / 2;
     newSizes.splice(fromGroupIndex + 1, 0, oldSize / 2);
 
-    return {
+    const tempState = {
+      ...state,
       editorGroups: updatedGroups,
       groupSizes: newSizes,
       activeGroupId: newGroupId
     };
+    const activeTabId = getActiveCanvasTabId(tempState);
+    const activeCtx = getOrCreateContext(tempState, activeTabId);
+
+    return {
+      editorGroups: updatedGroups,
+      groupSizes: newSizes,
+      activeGroupId: newGroupId,
+      nodes: activeCtx.nodes,
+      edges: activeCtx.edges,
+      nodeLogs: activeCtx.nodeLogs,
+      nodeStatus: activeCtx.nodeStatus,
+      globalChatHistory: activeCtx.globalChatHistory,
+      edgeReconciliationStatus: activeCtx.edgeReconciliationStatus
+    };
   }),
+
   moveTab: (id, fromGroupId, toGroupId) => set((state) => {
     if (fromGroupId === toGroupId) return {};
 
@@ -682,12 +1109,28 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       nextActiveGroupId = toGroupId;
     }
 
-    return {
+    const tempState = {
+      ...state,
       editorGroups: updatedGroups,
       groupSizes: newSizes,
       activeGroupId: nextActiveGroupId
     };
+    const activeTabId = getActiveCanvasTabId(tempState);
+    const activeCtx = getOrCreateContext(tempState, activeTabId);
+
+    return {
+      editorGroups: updatedGroups,
+      groupSizes: newSizes,
+      activeGroupId: nextActiveGroupId,
+      nodes: activeCtx.nodes,
+      edges: activeCtx.edges,
+      nodeLogs: activeCtx.nodeLogs,
+      nodeStatus: activeCtx.nodeStatus,
+      globalChatHistory: activeCtx.globalChatHistory,
+      edgeReconciliationStatus: activeCtx.edgeReconciliationStatus
+    };
   }),
+
   setGroupSizes: (sizes) => set({ groupSizes: sizes }),
   setActiveGroupId: (id) => set({ activeGroupId: id }),
   setPathExpanded: (path, expanded) => set((state) => ({
@@ -700,7 +1143,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     expandedPaths: {},
     collapseAllTrigger: Date.now()
   }),
-  addAndConnectContextNode: (x, y, taskId, taskHandleId) => set((state) => {
+
+  addAndConnectContextNode: (x, y, taskId, taskHandleId, tabId) => set((state) => {
+    const targetTabId = tabId || findTabIdByNodeId(state, taskId);
     const ctxId = `context_${Date.now()}`;
     const newContextNode = {
       id: ctxId,
@@ -725,24 +1170,52 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       style: { stroke: "#10b981", strokeWidth: 2 }
     };
 
-    return {
-      nodes: [...state.nodes, newContextNode],
-      edges: [...state.edges, newEdge]
-    };
+    return updateContextAndSync(state, targetTabId, (ctx) => ({
+      nodes: [...ctx.nodes, newContextNode],
+      edges: [...ctx.edges, newEdge]
+    }));
   }),
+
   getGlobalChatHistory: (nodeId): GlobalChatMessage[] => {
-    return useWorkspaceStore.getState().globalChatHistory[nodeId] || [];
+    const state = useWorkspaceStore.getState();
+    const targetTabId = findTabIdByNodeId(state, nodeId);
+    const ctx = state.canvasContexts[targetTabId];
+    return ctx ? (ctx.globalChatHistory[nodeId] || []) : [];
   },
+
   setSelectedEdgeId: (id) => set({ selectedEdgeId: id }),
-  setEdgeStatus: (edgeId, status) => set((state) => ({
-    edgeReconciliationStatus: { ...state.edgeReconciliationStatus, [edgeId]: status }
-  })),
+
+  setEdgeStatus: (edgeId, status) => set((state) => {
+    const targetTabId = findTabIdByEdgeId(state, edgeId);
+    return updateContextAndSync(state, targetTabId, (ctx) => ({
+      edgeReconciliationStatus: {
+        ...ctx.edgeReconciliationStatus,
+        [edgeId]: status
+      }
+    }));
+  }),
+
   getSequenceEdges: (): Edge[] => {
     const state = useWorkspaceStore.getState();
-    return state.edges.filter(
+    const activeTabId = getActiveCanvasTabId(state);
+    const ctx = state.canvasContexts[activeTabId] || { edges: [] };
+    return ctx.edges.filter(
       (e) => e.sourceHandle === "task-out" && e.targetHandle === "task-in"
     );
   },
+
+  updateTabTitle: (tabId, title) => set((state) => {
+    const updatedGroups = state.editorGroups.map((g) => {
+      const updatedTabs = g.openTabs.map((t) => {
+        if (t.id === tabId) {
+          return { ...t, title };
+        }
+        return t;
+      });
+      return { ...g, openTabs: updatedTabs };
+    });
+    return { editorGroups: updatedGroups };
+  }),
 
   saveSecureConfig: async () => {
     const state = useWorkspaceStore.getState();

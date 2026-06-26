@@ -1,14 +1,16 @@
-import React, { useState, useRef, useEffect, memo } from "react";
+import React, { useState, useRef, useEffect, memo, useContext } from "react";
 import { Handle, Position } from "@xyflow/react";
 import { Folder, Pencil, Check, X, Info, Trash2 } from "lucide-react";
 import { FileIcon } from "../../services/fileTypeService";
 import { useWorkspaceStore } from "../../store";
+import { CanvasTabContext } from "../tabs/canvas/CanvasTabContext";
 
 export const ContextNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) => {
+  const { tabId } = useContext(CanvasTabContext);
   const updateNode = useWorkspaceStore((state) => state.updateTaskNode); // Uses the store's update action
   const openTab = useWorkspaceStore((state) => state.openTab);
   const deleteNode = useWorkspaceStore((state) => state.deleteNode);
-  const edges = useWorkspaceStore((state) => state.edges);
+  const edges = useWorkspaceStore((state) => (state.canvasContexts[tabId] || { edges: [] }).edges);
   const [isEditing, setIsEditing] = useState(false);
 
   const activeEdges = edges.filter((e) => e.source === id);
