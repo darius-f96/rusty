@@ -185,10 +185,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     { id: "canvas", type: "canvas", title: "Axiom", key: "canvas" }
   ],
   activeTabId: "canvas",
-  activeThemeId: "dark",
+  activeThemeId: localStorage.getItem("selected_theme") || "dark",
   setActiveThemeId: (themeId) => {
     const t = themes[themeId] || themes.dark;
     applyThemeProperties(t);
+    localStorage.setItem("selected_theme", themeId);
     set({ activeThemeId: themeId });
     loader.init().then((monaco) => {
       defineMonacoTheme(monaco, t);
@@ -578,6 +579,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
 
       if (config.activeThemeId) {
         updates.activeThemeId = config.activeThemeId;
+        localStorage.setItem("selected_theme", config.activeThemeId);
         const themeId = config.activeThemeId;
         const { themes, applyThemeProperties, defineMonacoTheme } = await import("./theme");
         const t = themes[themeId] || themes.dark;
