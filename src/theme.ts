@@ -137,6 +137,29 @@ export const themes: Record<string, AppTheme> = {
       variables: "#F99157",
       types: "#A1C659"
     }
+  },
+  goldsrc: {
+    bgApp: "#1f241b",
+    bgSidebar: "#424c3b",
+    bgHeader: "#2f362a",
+    bgEditor: "#1f241b",
+    bgCanvas: "#2f362a",
+    border: "#364130",
+    borderActive: "#85917d",
+    accent: "#b9c900",
+    accentBg: "rgba(185, 201, 0, 0.15)",
+    textNormal: "#d4d4d4",
+    textMuted: "#686868",
+    textLight: "#ffffff",
+    syntax: {
+      comments: "#686868",
+      keywords: "#88a176",
+      strings: "#fbaa10",
+      numbers: "#e4c342",
+      functions: "#b9c900",
+      variables: "#eaffc6",
+      types: "#50ff00"
+    }
   }
 };
 

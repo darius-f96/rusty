@@ -15,6 +15,7 @@ export const SettingsTab: React.FC = () => {
     { id: "oneDark", name: "One Dark Pro" },
     { id: "sakura", name: "Sakura Blossom" },
     { id: "spaceDust", name: "Space Dust" },
+    { id: "goldsrc", name: "GoldSrc" },
   ];
 
   return (
