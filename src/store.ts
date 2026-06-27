@@ -120,6 +120,7 @@ export interface WorkspaceState {
   addTaskNode: (x: number, y: number, tabId?: string) => void;
   addGlobalChatNode: (x: number, y: number, tabId?: string) => void;
   addStickyNode: (x: number, y: number, tabId?: string, color?: string) => void;
+  addBoundaryNode: (x: number, y: number, tabId?: string) => void;
   updateTaskNode: (id: string, data: any) => void;
   deleteNode: (id: string) => void;
   addLog: (nodeId: string, message: string) => void;
@@ -758,6 +759,29 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     return updateContextAndSync(state, targetTabId, (ctx) => ({
       nodes: [...ctx.nodes, newNode],
       lastStickyColor: lastColor
+    }));
+  }),
+
+  addBoundaryNode: (x, y, tabId) => set((state) => {
+    const targetTabId = tabId || getActiveCanvasTabId(state);
+    const id = `boundary_${Date.now()}`;
+
+    const newNode: Node = {
+      id,
+      type: "boundaryNode",
+      position: { x, y },
+      selectable: false,
+      draggable: true,
+      zIndex: 0,
+      data: {
+        id,
+        name: "Boundary",
+        width: 300,
+        height: 200
+      }
+    };
+    return updateContextAndSync(state, targetTabId, (ctx) => ({
+      nodes: [...ctx.nodes, newNode]
     }));
   }),
 

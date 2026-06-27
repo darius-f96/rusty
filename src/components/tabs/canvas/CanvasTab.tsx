@@ -12,7 +12,8 @@ import {
   Save,
   Settings,
   X,
-  StickyNote
+  StickyNote,
+  Square
 } from "lucide-react";
 import { useWorkspaceStore } from "../../../store";
 import { SidePane } from "../../sidepane/SidePane";
@@ -22,6 +23,7 @@ import { TaskNode } from "../../nodes/TaskNode";
 import { GlobalChatNode } from "../../nodes/GlobalChatNode";
 import { ReconciliationEdge } from "../../ReconciliationEdge";
 import { StickyNode } from "../../nodes/sticky";
+import { BoundaryNode } from "../../nodes/boundary";
 import { invoke } from "@tauri-apps/api/core";
 import { CanvasTabContext } from "./CanvasTabContext";
 import { canvasFileService } from "./services/canvasFileService";
@@ -31,6 +33,7 @@ const nodeTypes = {
   taskNode: TaskNode,
   globalChatNode: GlobalChatNode,
   stickyNode: StickyNode,
+  boundaryNode: BoundaryNode,
 };
 
 const edgeTypes = {
@@ -59,6 +62,15 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
   const edgeReconciliationStatus = context.edgeReconciliationStatus || {};
   const isPipelineApplied = !!context.isPipelineApplied;
 
+  const flowNodes = useMemo(() => {
+    return nodes.map((n) => {
+      if (n.type === "boundaryNode") {
+        return { ...n, selectable: false, draggable: true, zIndex: 0 };
+      }
+      return { ...n, zIndex: n.zIndex ?? 10 };
+    });
+  }, [nodes]);
+
   const onNodesChange = useCallback((changes: any[]) => {
     useWorkspaceStore.getState().onNodesChangeForTab(tab.id, changes);
   }, [tab.id]);
@@ -77,6 +89,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
   const addTaskNode = useWorkspaceStore((state) => state.addTaskNode);
   const addGlobalChatNode = useWorkspaceStore((state) => state.addGlobalChatNode);
   const addStickyNode = useWorkspaceStore((state) => state.addStickyNode);
+  const addBoundaryNode = useWorkspaceStore((state) => state.addBoundaryNode);
   const selectedEdgeId = useWorkspaceStore((state) => state.selectedEdgeId);
   const setSelectedEdgeId = useWorkspaceStore((state) => state.setSelectedEdgeId);
   const setEdgeStatus = useWorkspaceStore((state) => state.setEdgeStatus);
@@ -230,9 +243,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
   }, []);
 
   const onNodeClick = (_event: React.MouseEvent, node: any) => {
-    if (node.type === "contextNode") {
-      setSelectedNodeId(null);
-    } else if (node.type === "stickyNode") {
+    if (node.type === "contextNode" || node.type === "stickyNode" || node.type === "boundaryNode") {
       setSelectedNodeId(null);
     } else {
       setSelectedNodeId(node.id);
@@ -260,8 +271,25 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
     [rfInstance]
   );
 
+  const onNodeContextMenu = useCallback(
+    (event: any, node: any) => {
+      if (node.type !== "boundaryNode") return;
+      event.preventDefault();
+      const bounds = document.getElementById("rf-canvas")?.getBoundingClientRect();
+      if (bounds && rfInstance) {
+        setContextMenu({
+          x: event.clientX - bounds.left,
+          y: event.clientY - bounds.top,
+          screenX: event.clientX,
+          screenY: event.clientY,
+        });
+      }
+    },
+    [rfInstance]
+  );
+
   const handleAddNodeFromContextMenu = useCallback(
-    (type: "task" | "context" | "sticky") => {
+    (type: "task" | "context" | "sticky" | "boundary") => {
       if (!contextMenu || !rfInstance) return;
       const flowPosition = rfInstance.screenToFlowPosition({
         x: contextMenu.screenX,
@@ -273,10 +301,12 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
         addContextNode(flowPosition.x - 75, flowPosition.y - 30, undefined, tab.id);
       } else if (type === "sticky") {
         addStickyNode(flowPosition.x - 100, flowPosition.y - 75, tab.id);
+      } else if (type === "boundary") {
+        addBoundaryNode(flowPosition.x - 150, flowPosition.y - 100, tab.id);
       }
       setContextMenu(null);
     },
-    [contextMenu, rfInstance, addTaskNode, addContextNode, addStickyNode, tab.id]
+    [contextMenu, rfInstance, addTaskNode, addContextNode, addStickyNode, addBoundaryNode, tab.id]
   );
 
   const onPaneDoubleClick = useCallback((event: React.MouseEvent) => {
@@ -433,6 +463,17 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
                     <StickyNote size={13} className="text-amber-400" />
                     <span>Create Sticky Note</span>
                   </button>
+                  <button
+                    onClick={() => {
+                      const center = getCanvasCenter();
+                      addBoundaryNode(center.x - 150, center.y - 100, tab.id);
+                      setNodeMenuOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
+                  >
+                    <Square size={13} className="text-violet-400" />
+                    <span>Create Boundary</span>
+                  </button>
                   <div className="border-t border-[var(--border-color)] my-1" />
                   <button
                     onClick={() => {
@@ -562,6 +603,13 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
                 <StickyNote size={13} className="text-amber-400" />
                 <span>Add Sticky Note</span>
               </button>
+              <button
+                onClick={() => handleAddNodeFromContextMenu("boundary")}
+                className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
+              >
+                <Square size={13} className="text-violet-400" />
+                <span>Add Boundary</span>
+              </button>
               <div className="border-t border-[var(--border-color)] my-1" />
               <button
                 onClick={() => {
@@ -589,7 +637,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
             onDrop={onDrop}
           >
             <ReactFlow
-              nodes={nodes}
+              nodes={flowNodes}
               edges={styledEdges}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
@@ -599,6 +647,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
               onNodeClick={onNodeClick}
               onPaneClick={onPaneClick}
               onPaneContextMenu={onPaneContextMenu}
+              onNodeContextMenu={onNodeContextMenu}
               onInit={setRfInstance}
               onDragOver={onDragOver}
               onDrop={onDrop}
@@ -610,6 +659,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
               minZoom={0.2}
               fitView
               fitViewOptions={{ maxZoom: 1.2 }}
+              elevateNodesOnSelect={false}
             >
               <Background color="#1f2937" gap={16} size={1} variant={BackgroundVariant.Dots} />
             </ReactFlow>
