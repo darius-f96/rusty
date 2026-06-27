@@ -44,12 +44,36 @@ export interface GitStatusResult {
 
 export interface Tab {
   id: string;
-  type: "canvas" | "file" | "task" | "settings" | "llm-setup" | "git-diff" | "git-history" | "workspace";
+  type: "canvas" | "file" | "task" | "settings" | "llm-setup" | "git-diff" | "git-history" | "workspace" | "agent";
   title: string;
   key: string;
   diffType?: "staged" | "unstaged" | "commit";
   commitHash?: string;
   line?: number;
+}
+
+export interface AgentMessage {
+  id: string;
+  role: "user" | "assistant" | "system" | "tool-result" | "console";
+  content: string;
+  timestamp: string;
+  toolCalls?: AgentToolCall[];
+  attachments?: { path: string; name: string }[];
+}
+
+export interface AgentToolCall {
+  id: string;
+  name: string;
+  arguments: Record<string, any>;
+  status: "pending" | "approved" | "denied" | "executed" | "error";
+  result?: string;
+}
+
+export interface AgentPermissionRequest {
+  id: string;
+  toolCall: AgentToolCall;
+  description: string;
+  timestamp: string;
 }
 
 export interface EditorGroup {
@@ -101,6 +125,17 @@ export interface WorkspaceState {
   updateCanvasContext: (tabId: string, updates: Partial<CanvasContext>) => void;
   loadCanvasTab: (data: any) => void;
   createCanvasTab: (title?: string) => void;
+  createAgentTab: (title?: string) => void;
+
+  agentChats: Record<string, AgentMessage[]>;
+  agentStreams: Record<string, string>;
+  agentPermissionRequests: Record<string, AgentPermissionRequest[]>;
+  addAgentMessage: (tabId: string, message: AgentMessage) => void;
+  updateAgentMessage: (tabId: string, messageId: string, content: string) => void;
+  updateAgentStream: (tabId: string, content: string) => void;
+  clearAgentStream: (tabId: string) => void;
+  addAgentPermissionRequest: (tabId: string, request: AgentPermissionRequest) => void;
+  resolveAgentPermission: (tabId: string, requestId: string, approved: boolean) => void;
   
   activeThemeId: string;
   setActiveThemeId: (themeId: string) => void;
@@ -610,6 +645,107 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       nodeStatus: {},
       globalChatHistory: {},
       edgeReconciliationStatus: {}
+    };
+  }),
+
+  createAgentTab: (title) => set((state) => {
+    const tabId = `agent_${Date.now()}`;
+    const name = title || `Agent ${Object.keys(state.agentChats || {}).length + 1}`;
+    const newTab = {
+      id: tabId,
+      type: "agent" as const,
+      title: name,
+      key: tabId
+    };
+
+    const targetGroupId = state.activeGroupId;
+    const newGroups = state.editorGroups.map((group) => {
+      if (group.id === targetGroupId) {
+        return {
+          ...group,
+          openTabs: [...group.openTabs, newTab],
+          activeTabId: tabId
+        };
+      }
+      return group;
+    });
+
+    const newAgentChats = {
+      ...state.agentChats,
+      [tabId]: []
+    };
+
+    return {
+      editorGroups: newGroups,
+      agentChats: newAgentChats
+    };
+  }),
+
+  agentChats: {},
+  agentStreams: {},
+  agentPermissionRequests: {},
+
+  addAgentMessage: (tabId, message) => set((state) => {
+    const currentMessages = state.agentChats[tabId] || [];
+    return {
+      agentChats: {
+        ...state.agentChats,
+        [tabId]: [...currentMessages, message]
+      }
+    };
+  }),
+
+  updateAgentMessage: (tabId, messageId, content) => set((state) => {
+    const currentMessages = state.agentChats[tabId] || [];
+    return {
+      agentChats: {
+        ...state.agentChats,
+        [tabId]: currentMessages.map((m) => m.id === messageId ? { ...m, content } : m)
+      }
+    };
+  }),
+
+  updateAgentStream: (tabId, content) => set((state) => {
+    return {
+      agentStreams: {
+        ...state.agentStreams,
+        [tabId]: content
+      }
+    };
+  }),
+
+  clearAgentStream: (tabId) => set((state) => {
+    const newStreams = { ...state.agentStreams };
+    delete newStreams[tabId];
+    return { agentStreams: newStreams };
+  }),
+
+  addAgentPermissionRequest: (tabId, request) => set((state) => {
+    const currentRequests = state.agentPermissionRequests[tabId] || [];
+    return {
+      agentPermissionRequests: {
+        ...state.agentPermissionRequests,
+        [tabId]: [...currentRequests, request]
+      }
+    };
+  }),
+
+  resolveAgentPermission: (tabId, requestId, approved) => set((state) => {
+    const currentRequests = state.agentPermissionRequests[tabId] || [];
+    const updatedRequests = currentRequests.map((req) => {
+      if (req.id === requestId) {
+        return {
+          ...req,
+          status: approved ? "approved" as const : "denied" as const
+        };
+      }
+      return req;
+    });
+    return {
+      agentPermissionRequests: {
+        ...state.agentPermissionRequests,
+        [tabId]: updatedRequests
+      }
     };
   }),
 

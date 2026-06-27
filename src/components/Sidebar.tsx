@@ -1,5 +1,5 @@
 import React from "react";
-import { FolderOpen, Files, Cpu, Settings, GitBranch, ChevronLeft, Plus, FolderPlus, FoldHorizontal, RefreshCw } from "lucide-react";
+import { FolderOpen, Files, Cpu, Settings, GitBranch, ChevronLeft, Plus, FolderPlus, FoldHorizontal, RefreshCw, Bot } from "lucide-react";
 import { useWorkspaceStore } from "../store";
 import { FileTree } from "./FileTree";
 import { invoke } from "@tauri-apps/api/core";
@@ -82,6 +82,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const handleAxiomClick = () => {
     useWorkspaceStore.getState().createCanvasTab();
+  };
+
+  const handleAgentClick = () => {
+    useWorkspaceStore.getState().createAgentTab();
   };
 
   const handleLlmSetupClick = () => {
@@ -226,6 +230,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <AxiomIcon size={20} />
             <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-zinc-950 text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-zinc-800 whitespace-nowrap">
               Axiom
+            </span>
+          </button>
+
+          {/* Agent Tab */}
+          <button
+            onClick={handleAgentClick}
+            className="p-2.5 rounded-lg transition-all cursor-pointer relative group text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
+            title="Agent Mode"
+          >
+            <Bot size={20} />
+            <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-zinc-950 text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-zinc-800 whitespace-nowrap">
+              Agent Mode
             </span>
           </button>
 

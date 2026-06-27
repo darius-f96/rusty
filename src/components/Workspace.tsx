@@ -10,6 +10,7 @@ import { LlmSetupTab } from "./tabs/LlmSetupTab";
 import { SettingsTab } from "./tabs/SettingsTab";
 import { GitHistoryTab } from "./tabs/GitHistoryTab";
 import { WorkspaceTab } from "./tabs/WorkspaceTab";
+import { AgentTab } from "./tabs/AgentTab";
 
 export const Workspace: React.FC = () => {
   const rootPath = useWorkspaceStore((state) => state.rootPath);
@@ -361,6 +362,9 @@ export const Workspace: React.FC = () => {
           )}
           {tab.type === "workspace" && (
             <WorkspaceTab />
+          )}
+          {tab.type === "agent" && (
+            <AgentTab tab={tab} groupId={groupId} />
           )}
         </div>
       );
