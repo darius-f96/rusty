@@ -37,13 +37,18 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
   const [pendingPermission, setPendingPermission] = useState<any>(null);
   const [collapsedConsoles, setCollapsedConsoles] = useState<Record<string, boolean>>({});
   const [modifiedFiles, setModifiedFiles] = useState<string[]>([]);
+  const [consoleUpdateCount, setConsoleUpdateCount] = useState(0);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const consoleContentRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const agentSocketRef = useRef<WebSocket | null>(null);
   const autocompleteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const consoleMessageIdRef = useRef<string | null>(null);
   const consoleBufferRef = useRef<string>("");
+  const isAtBottomRef = useRef(true);
+  const suppressScrollRef = useRef(false);
 
   const editorGroups = useWorkspaceStore((state) => state.editorGroups);
   const targetGroup = editorGroups.find((g) => g.id === groupId);
@@ -59,6 +64,34 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [agentChats, isActive]);
+
+  const scrollToBottom = () => {
+    if (messagesEndRef.current && isAtBottomRef.current && !suppressScrollRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+    if (consoleContentRef.current && consoleMessageIdRef.current) {
+      consoleContentRef.current.scrollTop = consoleContentRef.current.scrollHeight;
+    }
+  };
+
+  const handleScroll = () => {
+    if (!chatContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    isAtBottomRef.current = distanceFromBottom < 100;
+  };
+
+  useEffect(() => {
+    if (isActive && isStreaming) {
+      scrollToBottom();
+    }
+  }, [consoleUpdateCount, isActive, isStreaming]);
+
+  useEffect(() => {
+    if (isActive && !isStreaming) {
+      scrollToBottom();
+    }
+  }, [agentChats.length, isActive, isStreaming]);
 
   useEffect(() => {
     if (selectedModel !== activeModel) {
@@ -148,6 +181,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
           consoleBufferRef.current += msg.message + "\n";
           if (consoleMessageIdRef.current) {
             updateAgentMessage(tab.id, consoleMessageIdRef.current, consoleBufferRef.current);
+            setConsoleUpdateCount(c => c + 1);
           }
           return;
         }
@@ -475,7 +509,14 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
             {isThisStreaming && <Loader2 size={10} className="animate-spin text-[var(--accent-color)]" />}
           </button>
           {!isCollapsed && (
-            <div className="ml-4 mt-1 bg-black/40 border border-[var(--border-color)] rounded-lg p-3 max-h-56 overflow-y-auto">
+            <div
+              ref={(el) => {
+                if (isThisStreaming && el) {
+                  consoleContentRef.current = el;
+                }
+              }}
+              className="ml-4 mt-1 bg-black/40 border border-[var(--border-color)] rounded-lg p-3 max-h-56 overflow-y-auto"
+            >
               <pre className="whitespace-pre-wrap text-[11px] font-mono text-zinc-400 leading-relaxed">
                 {msg.content || "// No output yet..."}
               </pre>
@@ -614,7 +655,11 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
       )}
 
       {/* Chat area - centered, slim */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden">
+      <div
+        ref={chatContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto overflow-x-hidden"
+      >
         <div className="max-w-3xl mx-auto px-6 py-6">
           {agentChats.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center text-[var(--text-muted)] py-24">

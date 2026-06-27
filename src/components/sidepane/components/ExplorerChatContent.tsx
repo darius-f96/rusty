@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef, useEffect } from "react";
 import { Settings, X, Globe, Send, Sparkles } from "lucide-react";
 import { CustomSelect } from "../../CustomSelect";
 import { useWorkspaceStore } from "../../../store";
@@ -43,6 +43,26 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
     (state) => state.globalChatHistory[selectedNode?.id || ""] || EMPTY_ARRAY
   );
   const updateNode = useWorkspaceStore((state) => state.updateTaskNode);
+
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+  const isAtBottomRef = useRef(true);
+
+  useEffect(() => {
+    if (!selectedNode?.id) return;
+    const savedPos = localStorage.getItem(`scroll_pos_${selectedNode.id}`);
+    if (savedPos && chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = parseInt(savedPos, 10);
+    }
+  }, [selectedNode?.id]);
+
+  const handleScroll = () => {
+    if (!chatScrollRef.current || !selectedNode?.id) return;
+    const { scrollTop } = chatScrollRef.current;
+    localStorage.setItem(`scroll_pos_${selectedNode.id}`, String(scrollTop));
+    const { scrollHeight, clientHeight } = chatScrollRef.current;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    isAtBottomRef.current = distanceFromBottom < 100;
+  };
 
   return (
     <div className="flex flex-col h-full bg-[var(--bg-app)]">
@@ -114,7 +134,11 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
       )}
 
       {/* Explorer Chat History */}
-      <div className="flex-1 p-4 space-y-4 overflow-y-auto text-xs">
+      <div
+        ref={chatScrollRef}
+        onScroll={handleScroll}
+        className="flex-1 p-4 space-y-4 overflow-y-auto text-xs"
+      >
         {globalChatHistory.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center text-[var(--text-muted)] space-y-2 select-none">
             <Globe size={32} className="text-violet-400 mb-2 animate-pulse" />

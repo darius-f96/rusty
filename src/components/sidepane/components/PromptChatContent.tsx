@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Play } from "lucide-react";
 import { useWorkspaceStore } from "../../../store";
 import { processResponse } from "../../../services/responseProcessingService";
@@ -21,9 +21,32 @@ export const PromptChatContent: React.FC<PromptChatContentProps> = ({
     (state) => state.globalChatHistory[selectedNode?.id || ""] || EMPTY_ARRAY
   );
 
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+  const isAtBottomRef = useRef(true);
+
+  useEffect(() => {
+    if (!selectedNode?.id) return;
+    const savedPos = localStorage.getItem(`scroll_pos_${selectedNode.id}`);
+    if (savedPos && chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = parseInt(savedPos, 10);
+    }
+  }, [selectedNode?.id]);
+
+  const handleScroll = () => {
+    if (!chatScrollRef.current || !selectedNode?.id) return;
+    const { scrollTop, scrollHeight, clientHeight } = chatScrollRef.current;
+    localStorage.setItem(`scroll_pos_${selectedNode.id}`, String(scrollTop));
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    isAtBottomRef.current = distanceFromBottom < 100;
+  };
+
   return (
     <div className="flex flex-col h-full bg-[var(--bg-app)]">
-      <div className="flex-1 p-4 space-y-4 overflow-y-auto text-xs">
+      <div
+        ref={chatScrollRef}
+        onScroll={handleScroll}
+        className="flex-1 p-4 space-y-4 overflow-y-auto text-xs"
+      >
         <div className="flex flex-col bg-[var(--bg-sidebar)]/60 border border-[var(--border-color)]/80 rounded-xl p-3 w-full space-y-1 text-left">
           <span className="font-mono text-[9px] uppercase font-bold text-violet-400">System Agent</span>
           <span className="leading-relaxed">
