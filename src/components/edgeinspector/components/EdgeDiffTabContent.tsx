@@ -5,9 +5,11 @@
  * of files that were modified by the source task.
  */
 
-import React from "react";
+import React, { useState, useRef, useCallback } from "react";
 import { DiffEditor } from "@monaco-editor/react";
 import { CustomSelect } from "../../CustomSelect";
+import { invoke } from "@tauri-apps/api/core";
+import { Save, RotateCcw } from "lucide-react";
 
 interface EdgeDiffTabContentProps {
   sourceModifiedFiles: string[];
@@ -46,10 +48,50 @@ export const EdgeDiffTabContent: React.FC<EdgeDiffTabContentProps> = ({
   originalCode,
   modifiedCode
 }) => {
+  const [editedCode, setEditedCode] = useState<string>("");
+  const [isDirty, setIsDirty] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const diffEditorRef = useRef<any>(null);
+
   const fileOptions = sourceModifiedFiles.map((file) => ({
     id: file,
     name: file.split("/").pop() || file,
   }));
+
+  const handleEditorMount = useCallback((editor: any) => {
+    diffEditorRef.current = editor;
+    const modifiedEditor = editor.getModifiedEditor();
+    modifiedEditor.updateOptions({ readOnly: false });
+    modifiedEditor.onDidChangeModelContent(() => {
+      const newContent = modifiedEditor.getValue();
+      setEditedCode(newContent);
+      setIsDirty(newContent !== modifiedCode);
+    });
+  }, [modifiedCode]);
+
+  const handleSave = async () => {
+    if (!diffFile || !isDirty) return;
+    setIsSaving(true);
+    try {
+      await invoke("write_file_vfs", { path: diffFile, content: editedCode });
+      setIsDirty(false);
+    } catch (err) {
+      console.error("Failed to save file:", err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleReset = () => {
+    if (diffEditorRef.current) {
+      const modifiedEditor = diffEditorRef.current.getModifiedEditor();
+      modifiedEditor.setValue(modifiedCode);
+      setEditedCode(modifiedCode);
+      setIsDirty(false);
+    }
+  };
+
+  const displayCode = isDirty ? editedCode : modifiedCode;
 
   return (
     <div className="flex flex-col h-full w-full">
@@ -68,6 +110,33 @@ export const EdgeDiffTabContent: React.FC<EdgeDiffTabContentProps> = ({
         </div>
       )}
 
+      {/* Edit controls */}
+      {diffFile && (
+        <div className="px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/50 flex items-center justify-end space-x-2 flex-shrink-0">
+          <span className="text-[10px] text-[var(--text-muted)] font-mono mr-auto">
+            {isDirty ? "Modified (unsaved)" : "Editable"}
+          </span>
+          <button
+            onClick={handleReset}
+            disabled={!isDirty || isSaving}
+            className="flex items-center space-x-1 px-2 py-1 text-[10px] font-mono text-[var(--text-muted)] hover:text-[var(--text-light)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            title="Reset changes"
+          >
+            <RotateCcw size={11} />
+            <span>Reset</span>
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!isDirty || isSaving}
+            className="flex items-center space-x-1 px-2 py-1 text-[10px] font-mono bg-emerald-600/80 hover:bg-emerald-600 disabled:bg-[var(--bg-sidebar)] disabled:text-[var(--text-muted)] text-white rounded transition-colors"
+            title="Save changes to VFS"
+          >
+            <Save size={11} />
+            <span>{isSaving ? "Saving..." : "Save"}</span>
+          </button>
+        </div>
+      )}
+
       <div className="flex-1 min-h-0 relative">
         {diffFile ? (
           <div className="w-full h-full">
@@ -76,9 +145,10 @@ export const EdgeDiffTabContent: React.FC<EdgeDiffTabContentProps> = ({
               language={getEditorLanguage(diffFile)}
               theme="axiom-custom-theme"
               original={originalCode}
-              modified={modifiedCode}
+              modified={displayCode}
+              onMount={handleEditorMount}
               options={{
-                readOnly: true,
+                readOnly: false,
                 minimap: { enabled: false },
                 scrollBeyondLastLine: false,
                 lineNumbers: "on",
