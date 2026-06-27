@@ -11,7 +11,8 @@ import {
   GitMerge,
   Save,
   Settings,
-  X
+  X,
+  StickyNote
 } from "lucide-react";
 import { useWorkspaceStore } from "../../../store";
 import { SidePane } from "../../sidepane/SidePane";
@@ -20,6 +21,7 @@ import { ContextNode } from "../../nodes/ContextNode";
 import { TaskNode } from "../../nodes/TaskNode";
 import { GlobalChatNode } from "../../nodes/GlobalChatNode";
 import { ReconciliationEdge } from "../../ReconciliationEdge";
+import { StickyNode } from "../../nodes/sticky";
 import { invoke } from "@tauri-apps/api/core";
 import { CanvasTabContext } from "./CanvasTabContext";
 import { canvasFileService } from "./services/canvasFileService";
@@ -28,6 +30,7 @@ const nodeTypes = {
   contextNode: ContextNode,
   taskNode: TaskNode,
   globalChatNode: GlobalChatNode,
+  stickyNode: StickyNode,
 };
 
 const edgeTypes = {
@@ -73,6 +76,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
   const addContextNode = useWorkspaceStore((state) => state.addContextNode);
   const addTaskNode = useWorkspaceStore((state) => state.addTaskNode);
   const addGlobalChatNode = useWorkspaceStore((state) => state.addGlobalChatNode);
+  const addStickyNode = useWorkspaceStore((state) => state.addStickyNode);
   const selectedEdgeId = useWorkspaceStore((state) => state.selectedEdgeId);
   const setSelectedEdgeId = useWorkspaceStore((state) => state.setSelectedEdgeId);
   const setEdgeStatus = useWorkspaceStore((state) => state.setEdgeStatus);
@@ -226,10 +230,12 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
   }, []);
 
   const onNodeClick = (_event: React.MouseEvent, node: any) => {
-    if (node.type !== "contextNode") {
-      setSelectedNodeId(node.id);
-    } else {
+    if (node.type === "contextNode") {
       setSelectedNodeId(null);
+    } else if (node.type === "stickyNode") {
+      setSelectedNodeId(null);
+    } else {
+      setSelectedNodeId(node.id);
     }
   };
 
@@ -255,7 +261,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
   );
 
   const handleAddNodeFromContextMenu = useCallback(
-    (type: "task" | "context") => {
+    (type: "task" | "context" | "sticky") => {
       if (!contextMenu || !rfInstance) return;
       const flowPosition = rfInstance.screenToFlowPosition({
         x: contextMenu.screenX,
@@ -263,12 +269,14 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
       });
       if (type === "task") {
         addTaskNode(flowPosition.x - 75, flowPosition.y - 30, tab.id);
-      } else {
+      } else if (type === "context") {
         addContextNode(flowPosition.x - 75, flowPosition.y - 30, undefined, tab.id);
+      } else if (type === "sticky") {
+        addStickyNode(flowPosition.x - 100, flowPosition.y - 75, tab.id);
       }
       setContextMenu(null);
     },
-    [contextMenu, rfInstance, addTaskNode, addContextNode, tab.id]
+    [contextMenu, rfInstance, addTaskNode, addContextNode, addStickyNode, tab.id]
   );
 
   const onPaneDoubleClick = useCallback((event: React.MouseEvent) => {
@@ -414,6 +422,17 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
                     <Folder size={13} className="text-emerald-400" />
                     <span>Create Context Node</span>
                   </button>
+                  <button
+                    onClick={() => {
+                      const center = getCanvasCenter();
+                      addStickyNode(center.x - 100, center.y - 75, tab.id);
+                      setNodeMenuOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
+                  >
+                    <StickyNote size={13} className="text-amber-400" />
+                    <span>Create Sticky Note</span>
+                  </button>
                   <div className="border-t border-[var(--border-color)] my-1" />
                   <button
                     onClick={() => {
@@ -535,6 +554,13 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
               >
                 <Folder size={13} className="text-emerald-400" />
                 <span>Add Context Node</span>
+              </button>
+              <button
+                onClick={() => handleAddNodeFromContextMenu("sticky")}
+                className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
+              >
+                <StickyNote size={13} className="text-amber-400" />
+                <span>Add Sticky Note</span>
               </button>
               <div className="border-t border-[var(--border-color)] my-1" />
               <button

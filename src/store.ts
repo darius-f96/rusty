@@ -72,6 +72,7 @@ export interface CanvasContext {
   globalChatHistory: Record<string, GlobalChatMessage[]>;
   edgeReconciliationStatus: Record<string, "idle" | "unreconciled" | "reconciled">;
   isPipelineApplied?: boolean;
+  lastStickyColor?: string;
 }
 
 export interface WorkspaceState {
@@ -118,6 +119,7 @@ export interface WorkspaceState {
   addContextNode: (x: number, y: number, fileContext?: { path: string; name: string; isDir: boolean }, tabId?: string) => void;
   addTaskNode: (x: number, y: number, tabId?: string) => void;
   addGlobalChatNode: (x: number, y: number, tabId?: string) => void;
+  addStickyNode: (x: number, y: number, tabId?: string, color?: string) => void;
   updateTaskNode: (id: string, data: any) => void;
   deleteNode: (id: string) => void;
   addLog: (nodeId: string, message: string) => void;
@@ -717,6 +719,45 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     };
     return updateContextAndSync(state, targetTabId, (ctx) => ({
       nodes: [...ctx.nodes, newNode]
+    }));
+  }),
+
+  addStickyNode: (x, y, tabId, color) => set((state) => {
+    const targetTabId = tabId || getActiveCanvasTabId(state);
+    const id = `sticky_${Date.now()}`;
+    const targetCtx = getOrCreateContext(state, targetTabId);
+
+    const lastColor = color || targetCtx.lastStickyColor || "yellow";
+
+    let finalX = x;
+    let finalY = y;
+    let attempts = 0;
+    while (
+      targetCtx.nodes.some(
+        (n) => Math.abs(n.position.x - finalX) < 60 && Math.abs(n.position.y - finalY) < 60
+      ) &&
+      attempts < 100
+    ) {
+      finalX += 50;
+      finalY += 50;
+      attempts++;
+    }
+
+    const newNode: Node = {
+      id,
+      type: "stickyNode",
+      position: { x: finalX, y: finalY },
+      data: {
+        id,
+        color: lastColor,
+        content: "",
+        width: 200,
+        height: 150
+      }
+    };
+    return updateContextAndSync(state, targetTabId, (ctx) => ({
+      nodes: [...ctx.nodes, newNode],
+      lastStickyColor: lastColor
     }));
   }),
 
