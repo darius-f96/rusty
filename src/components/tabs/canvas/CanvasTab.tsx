@@ -65,7 +65,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
   const flowNodes = useMemo(() => {
     return nodes.map((n) => {
       if (n.type === "boundaryNode") {
-        return { ...n, selectable: false, draggable: true, zIndex: 0 };
+        return { ...n, selectable: false, draggable: false, zIndex: 0 };
       }
       return { ...n, zIndex: n.zIndex ?? 10 };
     });

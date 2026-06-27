@@ -1,21 +1,37 @@
-import React, { memo, useState, useRef, useEffect } from "react";
+import React, { memo, useState, useRef, useEffect, useContext } from "react";
 import { Trash2, GripHorizontal } from "lucide-react";
 import { useWorkspaceStore } from "../../../store";
+import { CanvasTabContext } from "../../tabs/canvas/CanvasTabContext";
 
 export const BoundaryNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) => {
+  const { tabId } = useContext(CanvasTabContext);
   const updateNode = useWorkspaceStore((state) => state.updateTaskNode);
+  const updateNodePosition = useWorkspaceStore((state) => state.updateNodePosition);
   const deleteNode = useWorkspaceStore((state) => state.deleteNode);
+  const nodePosition = useWorkspaceStore((state) => {
+    const ctx = state.canvasContexts[tabId];
+    if (!ctx) return { x: 0, y: 0 };
+    const n = ctx.nodes.find((nd) => nd.id === id);
+    return n ? n.position : { x: 0, y: 0 };
+  });
 
   const [name, setName] = useState(data.name || "Boundary");
   const [isEditingName, setIsEditingName] = useState(false);
 
   const isResizingRef = useRef(false);
+  const isDraggingRef = useRef(false);
   const startDimensions = useRef({ width: 0, height: 0, x: 0, y: 0 });
+  const startDragPos = useRef({ x: 0, y: 0, nodeX: 0, nodeY: 0 });
   const dataRef = useRef(data);
+  const posRef = useRef(nodePosition);
 
   useEffect(() => {
     dataRef.current = data;
   }, [data]);
+
+  useEffect(() => {
+    posRef.current = nodePosition;
+  }, [nodePosition]);
 
   const handleNameSave = () => {
     setIsEditingName(false);
@@ -58,10 +74,41 @@ export const BoundaryNode: React.FC<{ id: string; data: any }> = memo(({ id, dat
     document.removeEventListener("mouseup", handleResizeMouseUp);
   };
 
+  const handleDragMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    isDraggingRef.current = true;
+    startDragPos.current = {
+      x: e.clientX,
+      y: e.clientY,
+      nodeX: posRef.current.x,
+      nodeY: posRef.current.y
+    };
+    document.addEventListener("mousemove", handleDragMouseMove);
+    document.addEventListener("mouseup", handleDragMouseUp);
+  };
+
+  const handleDragMouseMove = (e: MouseEvent) => {
+    if (!isDraggingRef.current) return;
+    const deltaX = e.clientX - startDragPos.current.x;
+    const deltaY = e.clientY - startDragPos.current.y;
+    const newX = startDragPos.current.nodeX + deltaX;
+    const newY = startDragPos.current.nodeY + deltaY;
+    updateNodePosition(id, newX, newY);
+  };
+
+  const handleDragMouseUp = () => {
+    isDraggingRef.current = false;
+    document.removeEventListener("mousemove", handleDragMouseMove);
+    document.removeEventListener("mouseup", handleDragMouseUp);
+  };
+
   useEffect(() => {
     return () => {
       document.removeEventListener("mousemove", handleResizeMouseMove);
       document.removeEventListener("mouseup", handleResizeMouseUp);
+      document.removeEventListener("mousemove", handleDragMouseMove);
+      document.removeEventListener("mouseup", handleDragMouseUp);
     };
   }, []);
 
@@ -75,7 +122,7 @@ export const BoundaryNode: React.FC<{ id: string; data: any }> = memo(({ id, dat
 
   return (
     <div
-      className="relative select-none"
+      className="relative select-none nodrag nopan"
       style={{
         width,
         height,
@@ -103,7 +150,7 @@ export const BoundaryNode: React.FC<{ id: string; data: any }> = memo(({ id, dat
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
-            className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded px-1.5 py-0.5 font-sans text-xs text-[var(--text-light)] focus:outline-none focus:border-[var(--border-active)] w-32"
+            className="nodrag nopan bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded px-1.5 py-0.5 font-sans text-xs text-[var(--text-light)] focus:outline-none focus:border-[var(--border-active)] w-32"
             autoFocus
           />
         ) : (
@@ -111,7 +158,7 @@ export const BoundaryNode: React.FC<{ id: string; data: any }> = memo(({ id, dat
             onDoubleClick={handleNameDoubleClick}
             onPointerDown={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
-            className="nodrag font-sans text-[10px] font-semibold text-[var(--text-muted)] bg-[var(--bg-sidebar)]/80 px-1.5 py-0.5 rounded border border-transparent hover:border-[var(--border-color)] cursor-pointer truncate max-w-[150px]"
+            className="nodrag nopan font-sans text-[10px] font-semibold text-[var(--text-muted)] bg-[var(--bg-sidebar)]/80 px-1.5 py-0.5 rounded border border-transparent hover:border-[var(--border-color)] cursor-pointer truncate max-w-[150px]"
             title="Double-click to rename"
           >
             {name}
@@ -125,21 +172,23 @@ export const BoundaryNode: React.FC<{ id: string; data: any }> = memo(({ id, dat
         style={{ pointerEvents: "none" }}
       />
 
-      {/* Drag bar at top edge - this is the only part of the body that captures events for moving */}
+      {/* Drag bar at top edge - the only part that moves the boundary */}
       <div
-        className="absolute top-0 left-0 right-0 h-5 flex items-center justify-center cursor-move rounded-t-lg hover:bg-violet-500/20 transition-colors group"
+        className="nodrag nopan absolute top-0 left-0 right-0 h-5 flex items-center justify-center cursor-move rounded-t-lg hover:bg-violet-500/20 transition-colors group"
         style={{ pointerEvents: "auto" }}
+        onMouseDown={handleDragMouseDown}
+        onPointerDown={(e) => e.stopPropagation()}
         title="Drag to move boundary"
       >
         <GripHorizontal
           size={14}
-          className="text-violet-400/40 group-hover:text-violet-400/80 transition-colors"
+          className="text-violet-400/40 group-hover:text-violet-400/80 transition-colors pointer-events-none"
         />
       </div>
 
       {/* Corner resize handles */}
       <div
-        className="nodrag resize-handle absolute -top-1.5 -left-1.5 w-4 h-4 cursor-nw-resize flex items-center justify-center"
+        className="nodrag nopan resize-handle absolute -top-1.5 -left-1.5 w-4 h-4 cursor-nw-resize flex items-center justify-center"
         onMouseDown={handleResizeMouseDown}
         onPointerDown={(e) => e.stopPropagation()}
         style={{ pointerEvents: "auto" }}
@@ -147,7 +196,7 @@ export const BoundaryNode: React.FC<{ id: string; data: any }> = memo(({ id, dat
         <div className="w-2.5 h-2.5 bg-violet-300/80 rounded-sm border border-violet-500 shadow-sm hover:bg-violet-200 transition-colors" />
       </div>
       <div
-        className="nodrag resize-handle absolute -top-1.5 -right-1.5 w-4 h-4 cursor-ne-resize flex items-center justify-center"
+        className="nodrag nopan resize-handle absolute -top-1.5 -right-1.5 w-4 h-4 cursor-ne-resize flex items-center justify-center"
         onMouseDown={handleResizeMouseDown}
         onPointerDown={(e) => e.stopPropagation()}
         style={{ pointerEvents: "auto" }}
@@ -155,7 +204,7 @@ export const BoundaryNode: React.FC<{ id: string; data: any }> = memo(({ id, dat
         <div className="w-2.5 h-2.5 bg-violet-300/80 rounded-sm border border-violet-500 shadow-sm hover:bg-violet-200 transition-colors" />
       </div>
       <div
-        className="nodrag resize-handle absolute -bottom-1.5 -left-1.5 w-4 h-4 cursor-sw-resize flex items-center justify-center"
+        className="nodrag nopan resize-handle absolute -bottom-1.5 -left-1.5 w-4 h-4 cursor-sw-resize flex items-center justify-center"
         onMouseDown={handleResizeMouseDown}
         onPointerDown={(e) => e.stopPropagation()}
         style={{ pointerEvents: "auto" }}
@@ -163,7 +212,7 @@ export const BoundaryNode: React.FC<{ id: string; data: any }> = memo(({ id, dat
         <div className="w-2.5 h-2.5 bg-violet-300/80 rounded-sm border border-violet-500 shadow-sm hover:bg-violet-200 transition-colors" />
       </div>
       <div
-        className="nodrag resize-handle absolute -bottom-1.5 -right-1.5 w-4 h-4 cursor-se-resize flex items-center justify-center"
+        className="nodrag nopan resize-handle absolute -bottom-1.5 -right-1.5 w-4 h-4 cursor-se-resize flex items-center justify-center"
         onMouseDown={handleResizeMouseDown}
         onPointerDown={(e) => e.stopPropagation()}
         style={{ pointerEvents: "auto" }}
@@ -176,7 +225,7 @@ export const BoundaryNode: React.FC<{ id: string; data: any }> = memo(({ id, dat
         onClick={handleDelete}
         onPointerDown={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
-        className="nodrag absolute -top-2.5 -right-2.5 w-5 h-5 bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-full flex items-center justify-center text-[var(--text-muted)] hover:text-rose-400 hover:border-rose-400 transition-colors shadow-md z-30 cursor-pointer"
+        className="nodrag nopan absolute -top-2.5 -right-2.5 w-5 h-5 bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-full flex items-center justify-center text-[var(--text-muted)] hover:text-rose-400 hover:border-rose-400 transition-colors shadow-md z-30 cursor-pointer"
         style={{ pointerEvents: "auto" }}
         title="Delete boundary"
       >

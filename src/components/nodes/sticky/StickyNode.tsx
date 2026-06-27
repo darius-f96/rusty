@@ -1,11 +1,14 @@
-import React, { memo, useState, useRef, useEffect } from "react";
+import React, { memo, useState, useRef, useEffect, useContext } from "react";
 import { Trash2 } from "lucide-react";
 import { useWorkspaceStore } from "../../../store";
 import { STICKY_COLORS, getNextColor } from "./stickyColors";
+import { CanvasTabContext } from "../../tabs/canvas/CanvasTabContext";
 
 export const StickyNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) => {
+  const { tabId } = useContext(CanvasTabContext);
   const updateNode = useWorkspaceStore((state) => state.updateTaskNode);
   const deleteNode = useWorkspaceStore((state) => state.deleteNode);
+  const updateCanvasContext = useWorkspaceStore((state) => state.updateCanvasContext);
 
   const initialColor = STICKY_COLORS.find((c) => c.name === data.color) || STICKY_COLORS[0];
   const [color, setColor] = useState(initialColor);
@@ -22,6 +25,7 @@ export const StickyNode: React.FC<{ id: string; data: any }> = memo(({ id, data 
     const nextColor = getNextColor(color.name);
     setColor(nextColor);
     updateNode(id, { color: nextColor.name });
+    updateCanvasContext(tabId, { lastStickyColor: nextColor.name });
   };
 
   const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {

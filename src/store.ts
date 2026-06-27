@@ -122,6 +122,7 @@ export interface WorkspaceState {
   addStickyNode: (x: number, y: number, tabId?: string, color?: string) => void;
   addBoundaryNode: (x: number, y: number, tabId?: string) => void;
   updateTaskNode: (id: string, data: any) => void;
+  updateNodePosition: (id: string, x: number, y: number) => void;
   deleteNode: (id: string) => void;
   addLog: (nodeId: string, message: string) => void;
   clearLogs: (nodeId: string) => void;
@@ -771,7 +772,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       type: "boundaryNode",
       position: { x, y },
       selectable: false,
-      draggable: true,
+      draggable: false,
       zIndex: 0,
       data: {
         id,
@@ -791,6 +792,18 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       nodes: ctx.nodes.map((node) => {
         if (node.id === id) {
           return { ...node, data: { ...node.data, ...data } };
+        }
+        return node;
+      })
+    }));
+  }),
+
+  updateNodePosition: (id, x, y) => set((state) => {
+    const targetTabId = findTabIdByNodeId(state, id);
+    return updateContextAndSync(state, targetTabId, (ctx) => ({
+      nodes: ctx.nodes.map((node) => {
+        if (node.id === id) {
+          return { ...node, position: { x, y } };
         }
         return node;
       })
