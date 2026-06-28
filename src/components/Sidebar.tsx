@@ -1,5 +1,5 @@
 import React from "react";
-import { FolderOpen, Files, Cpu, Settings, GitBranch, ChevronLeft, Plus, FolderPlus, FoldHorizontal, RefreshCw, Bot, Wand2 } from "lucide-react";
+import { FolderOpen, Files, Cpu, Settings, GitBranch, ChevronLeft, FoldHorizontal, RefreshCw, Bot, Wand2 } from "lucide-react";
 import { useWorkspaceStore } from "../store";
 import { FileTree } from "./FileTree";
 import { invoke } from "@tauri-apps/api/core";
@@ -113,36 +113,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       title: "Skills",
       key: "skills",
     });
-  };
-
-  const handleCreateRootFile = async () => {
-    const rootPath = useWorkspaceStore.getState().rootPath;
-    if (!rootPath) return;
-    const fileName = window.prompt("Enter name for new file at root:");
-    if (!fileName || !fileName.trim()) return;
-    try {
-      await invoke("create_file", { path: `${rootPath}/${fileName.trim()}` });
-      const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
-      setFileTree(tree);
-      useWorkspaceStore.getState().loadGitStatus();
-    } catch (err) {
-      alert(`Create file failed: ${err}`);
-    }
-  };
-
-  const handleCreateRootFolder = async () => {
-    const rootPath = useWorkspaceStore.getState().rootPath;
-    if (!rootPath) return;
-    const folderName = window.prompt("Enter name for new folder at root:");
-    if (!folderName || !folderName.trim()) return;
-    try {
-      await invoke("create_directory", { path: `${rootPath}/${folderName.trim()}` });
-      const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
-      setFileTree(tree);
-      useWorkspaceStore.getState().loadGitStatus();
-    } catch (err) {
-      alert(`Create folder failed: ${err}`);
-    }
   };
 
   const handleCollapseAllFolders = () => {
@@ -305,23 +275,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <>
               {/* Dynamic Explorer Sidebar Tree */}
               <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 min-w-0">
-                <div className="flex items-center justify-between mb-3 text-zinc-400 border-b border-[var(--border-color)]/30 pb-2">
+                <div className="sticky top-0 z-10 flex items-center justify-between mb-3 text-zinc-400 border-b border-[var(--border-color)]/30 pb-2 bg-[var(--bg-sidebar)]">
                   <span className="text-[10px] uppercase tracking-wider font-mono font-bold">Project Explorer</span>
                   <div className="flex items-center space-x-2">
-                    <button
-                      onClick={handleCreateRootFile}
-                      className="p-1 rounded hover:bg-[var(--accent-bg)]/25 text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer"
-                      title="New File"
-                    >
-                      <Plus size={12} />
-                    </button>
-                    <button
-                      onClick={handleCreateRootFolder}
-                      className="p-1 rounded hover:bg-[var(--accent-bg)]/25 text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer"
-                      title="New Folder"
-                    >
-                      <FolderPlus size={12} />
-                    </button>
                     <button
                       onClick={handleRefreshExplorer}
                       className="p-1 rounded hover:bg-[var(--accent-bg)]/25 text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer"
