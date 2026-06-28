@@ -341,8 +341,9 @@ export const Workspace: React.FC = () => {
       const isActive = tab.id === activeId;
       const isCanvas = tab.type === "canvas";
 
-      // Optimize rendering: unmount non-active file/task/diff tabs
-      if (!isActive && !isCanvas) return null;
+      // Optimize rendering: unmount non-active file/task/diff tabs (but keep git-history and git-diff mounted to preserve state)
+      const keepMounted = isCanvas || tab.type === "git-history" || tab.type === "git-diff";
+      if (!isActive && !keepMounted) return null;
 
       const bgClass = isCanvas ? "bg-[var(--bg-canvas)]" : "bg-[var(--bg-editor)]";
       return (
