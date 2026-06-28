@@ -1,5 +1,5 @@
 import React from "react";
-import { FolderOpen, Files, Cpu, Settings, GitBranch, ChevronLeft, FoldHorizontal, RefreshCw, Bot, Wand2 } from "lucide-react";
+import { FolderOpen, Files, Cpu, Settings, GitBranch, ChevronLeft, FoldHorizontal, RefreshCw, Bot, Wand2, Plug } from "lucide-react";
 import { useWorkspaceStore } from "../store";
 import { FileTree } from "./FileTree";
 import { invoke } from "@tauri-apps/api/core";
@@ -112,6 +112,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
       type: "skills",
       title: "Skills",
       key: "skills",
+    });
+  };
+
+  const handleMcpIntegrationClick = () => {
+    openTab({
+      id: "mcp-integration",
+      type: "mcp-integration",
+      title: "MCP Integration",
+      key: "mcp-integration",
     });
   };
 
@@ -247,8 +256,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
               }`}
           >
             <Wand2 size={20} />
-            <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-zinc-950 text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-zinc-800 whitespace-nowrap">
+            <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-zinc-950 text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border-zinc-800 whitespace-nowrap">
               Skills
+            </span>
+          </button>
+
+          {/* MCP Integration */}
+          <button
+            onClick={handleMcpIntegrationClick}
+            className={`p-2.5 rounded-lg transition-all cursor-pointer relative group ${activeTabId === "mcp-integration"
+              ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
+              : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
+              }`}
+          >
+            <Plug size={20} />
+            <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-zinc-950 text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border-zinc-800 whitespace-nowrap">
+              MCP Integration
             </span>
           </button>
         </div>

@@ -12,6 +12,7 @@ import { GitHistoryTab } from "./tabs/GitHistoryTab";
 import { WorkspaceTab } from "./tabs/WorkspaceTab";
 import { AgentTab } from "./tabs/AgentTab";
 import { SkillsTab } from "./tabs/SkillsTab";
+import { McpIntegrationTab } from "./mcp/McpIntegrationTab";
 
 export const Workspace: React.FC = () => {
   const rootPath = useWorkspaceStore((state) => state.rootPath);
@@ -368,6 +369,9 @@ export const Workspace: React.FC = () => {
           )}
           {tab.type === "skills" && (
             <SkillsTab />
+          )}
+          {tab.type === "mcp-integration" && (
+            <McpIntegrationTab />
           )}
           {tab.type === "settings" && (
             <SettingsTab />

@@ -1,0 +1,106 @@
+# MCP Integration
+
+`McpIntegrationModal` is a self-contained form for adding/editing a single MCP
+(Model Context Protocol) server entry. It is rendered inside `McpIntegrationTab`,
+which manages the full collection and persists it to `localStorage` under
+`axiom_mcp_config`.
+
+## Files
+
+- `types.ts` — `McpServerConfig`, `McpConfigFile`, and form helper types.
+- `McpIntegrationModal.tsx` — the configuration form (react-hook-form).
+- `McpIntegrationModal.module.css` — scoped styles.
+- `McpIntegrationTab.tsx` — host that lists servers and opens the modal.
+
+## Component interface
+
+```ts
+interface McpIntegrationModalProps {
+  initialConfig?: McpServerConfig; // populated when editing an existing server
+  existingNames?: string[];         // for uniqueness validation
+  onSave: (config: McpServerConfig) => void;
+  onCancel: () => void;
+}
+```
+
+`onSave` yields a **single** validated `McpServerConfig`. Your app is responsible
+for assembling the persisted schema:
+
+```ts
+interface McpConfigFile {
+  mcpServers: Record<string, McpServerConfig>;
+}
+```
+
+## Wiring `onSave` into your config store
+
+The default host persists to `localStorage`. To persist into the app's Zustand
+store (or any backend), replace the `handleSave` in `McpIntegrationTab` with a
+store action, e.g.:
+
+```tsx
+import { useWorkspaceStore } from "../../store";
+
+const addMcpServer = useWorkspaceStore((s) => s.addMcpServer);
+
+const handleSave = (cfg: McpServerConfig) => {
+  addMcpServer(cfg);            // store merges it into { mcpServers: { [cfg.name]: cfg } }
+  setEditing(null);
+};
+```
+
+Add the store slice + persistence (next to `saveSecureConfig`):
+
+```ts
+// in store.ts
+mcpServers: {} as Record<string, McpServerConfig>,
+addMcpServer: (cfg) => set((state) => ({
+  mcpServers: { ...state.mcpServers, [cfg.name]: cfg },
+})),
+removeMcpServer: (name) => set((state) => {
+  const next = { ...state.mcpServers };
+  delete next[name];
+  return { mcpServers: next };
+}),
+```
+
+And include it in the secure config blob so it is saved/loaded with the rest of
+the workspace:
+
+```ts
+// saveSecureConfig
+await SecureStorageService.saveSecureData("axiom_secure_config", {
+  ...,
+  mcpServers: state.mcpServers,
+});
+
+// loadSecureConfig
+if (config.mcpServers) updates.mcpServers = config.mcpServers;
+```
+
+Then pass `existingNames={Object.keys(mcpServers)}` so the uniqueness check is
+driven by the real store instead of local state.
+
+## Validation rules (enforced by react-hook-form)
+
+- `name` — required, `/^[a-z0-9-_]+$/`, unique among `existingNames`.
+- `url` — required when transport ≠ stdio, must be a valid `http(s)`/`ws(s)` URL.
+- `command` — required when transport = stdio.
+- Auth fields — required based on selected auth type
+  (`apiKey`: header + value · `bearer`: token · `oauth2`: clientId, clientSecret,
+  tokenUrl, grantType).
+
+## Secrets
+
+`apiKey` value, bearer `token`, and `clientSecret` use `type="password"` inputs
+and are stored verbatim. Use `${ENV_VAR}` references so the real secret is
+resolved from the runtime environment by the backend — they are never logged or
+re-displayed in plaintext after entry.
+
+## Test connection
+
+- `sse` / `http` — `fetch(url, { mode: "no-cors" })` with an abortable timeout.
+- `websocket` — URL validity check (browsers cannot probe `ws://`).
+- `stdio` — simulated `--version` spawn (real spawn is backend-only).
+
+Result is shown inline; no `alert()` is used.
