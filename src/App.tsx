@@ -4,6 +4,7 @@ import { Header } from "./components/Header";
 import { Workspace } from "./components/Workspace";
 import { useWorkspaceStore } from "./store";
 import { SearchPalette } from "./components/SearchPalette";
+import { AlertModal } from "./components/AlertModal";
 
 function App() {
   const devLogs = useWorkspaceStore((state) => state.devLogs);
@@ -169,9 +170,49 @@ function App() {
   }, [devLogs, showDevConsole]);
 
   // Global Keyboard Shortcuts (Cmd+W or Ctrl+W to close active tab, Cmd+1 to toggle sidebar)
+  // Also blocks reload (Cmd/Ctrl+R, F5) and devtools (F12, Cmd/Ctrl+Shift+I/J/C, Cmd/Ctrl+Alt+I)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "w") {
+      const mod = e.metaKey || e.ctrlKey;
+      const key = e.key.toLowerCase();
+
+      // Reload (hard + soft)
+      if (mod && key === "r") {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      if (e.key === "F5") {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+
+      // DevTools shortcuts
+      if (e.key === "F12") {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      if (mod && e.shiftKey && (key === "i" || key === "j" || key === "c")) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      if (mod && e.altKey && key === "i") {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+
+      // View-source (Cmd/Ctrl+U)
+      if (mod && key === "u") {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+
+      if (mod && key === "w") {
         e.preventDefault();
         e.stopPropagation();
 
@@ -182,20 +223,28 @@ function App() {
           state.closeTab(currentActive, state.activeGroupId);
           console.log(`Shortcut captured: Closed active tab ${currentActive}`);
         }
-      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      } else if (mod && key === "k") {
         e.preventDefault();
         e.stopPropagation();
         setSearchOpen(true);
-      } else if ((e.metaKey || e.ctrlKey) && (e.key === "1" || e.code === "Digit1")) {
+      } else if (mod && (e.key === "1" || e.code === "Digit1")) {
         e.preventDefault();
         e.stopPropagation();
         toggleExplorer();
       }
     };
 
+    // Disable the right-click context menu across the entire application so the
+    // user cannot access "Reload", "Inspect Element", or view the UI's HTML.
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+
     window.addEventListener("keydown", handleKeyDown, true);
+    window.addEventListener("contextmenu", handleContextMenu);
     return () => {
       window.removeEventListener("keydown", handleKeyDown, true);
+      window.removeEventListener("contextmenu", handleContextMenu);
     };
   }, [toggleExplorer]);
 
@@ -292,6 +341,8 @@ function App() {
       {searchOpen && (
         <SearchPalette onClose={() => setSearchOpen(false)} />
       )}
+      {/* Global alert modal (replaces native alert()) */}
+      <AlertModal />
     </div>
   );
 }

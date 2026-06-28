@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { GitBranch, Plus, Minus, RotateCcw, Check, AlertCircle, ArrowUp, ArrowDown, GitCommit, ChevronDown, GitMerge, GitPullRequest } from "lucide-react";
+import { GitBranch, Plus, Minus, RotateCcw, Check, AlertCircle, ArrowUp, ArrowDown, GitCommit, ChevronDown, GitMerge, GitPullRequest, Trash2 } from "lucide-react";
 import { useWorkspaceStore } from "../store";
 import { invoke } from "@tauri-apps/api/core";
 import { CustomSelect } from "./CustomSelect";
 import { BranchDialog } from "./BranchDialog";
+import { notify } from "../notificationStore";
 
 export const SourceControl: React.FC = () => {
   const rootPath = useWorkspaceStore((state) => state.rootPath);
@@ -25,10 +26,11 @@ export const SourceControl: React.FC = () => {
   const [isPushing, setIsPushing] = useState(false);
   const [isPulling, setIsPulling] = useState(false);
   const [initLoading, setInitLoading] = useState(false);
-  const [branches, setBranches] = useState<string[]>([]);
+  const [localBranches, setLocalBranches] = useState<string[]>([]);
+  const [remoteBranches, setRemoteBranches] = useState<string[]>([]);
   const [isHistoryExpanded, setIsHistoryExpanded] = useState(true);
   const [historyCommits, setHistoryCommits] = useState<any[]>([]);
-  const [branchDialog, setBranchDialog] = useState<"create" | "merge" | "rebase" | null>(null);
+  const [branchDialog, setBranchDialog] = useState<"create" | "merge" | "rebase" | "delete" | null>(null);
   const lastRename = useWorkspaceStore((state) => state.lastRename);
   const setLastRename = useWorkspaceStore((state) => state.setLastRename);
 
@@ -44,12 +46,19 @@ export const SourceControl: React.FC = () => {
     }
   };
 
-  // Load local branches list
+  // Load local + remote branches. Best-effort fetch/prune first so the origin
+  // branch list stays in sync (e.g. remote branches that were deleted are pruned).
   const fetchBranches = async () => {
     if (rootPath) {
       try {
-        const list: string[] = await invoke("git_get_branches", { rootDir: rootPath });
-        setBranches(list);
+        try {
+          await invoke("git_fetch", { rootDir: rootPath });
+        } catch (err) {
+          console.warn("git_fetch skipped (no remote or offline):", err);
+        }
+        const res: { local: string[]; remote: string[] } = await invoke("git_get_all_branches", { rootDir: rootPath });
+        setLocalBranches(res.local || []);
+        setRemoteBranches(res.remote || []);
       } catch (err) {
         console.error("Failed to load branches:", err);
       }
@@ -86,7 +95,7 @@ export const SourceControl: React.FC = () => {
       await fetchHistory();
     } catch (err: any) {
       console.error("Failed to initialize git repository:", err);
-      alert(`Error initializing Git: ${err}`);
+      notify("Error", `Error initializing Git: ${err}`, "error");
     } finally {
       setInitLoading(false);
     }
@@ -120,7 +129,7 @@ export const SourceControl: React.FC = () => {
     if (!commitMsg.trim() || isCommitting || !gitStatus) return;
 
     if (gitStatus.staged.length === 0) {
-      alert("Please stage your changes before committing.");
+      notify("Nothing to commit", "Please stage your changes before committing.", "info");
       return;
     }
 
@@ -133,7 +142,7 @@ export const SourceControl: React.FC = () => {
       await fetchHistory();
     } catch (err: any) {
       console.error("Failed to commit git changes:", err);
-      alert(`Commit failed: ${err}`);
+      notify("Commit failed", `Commit failed: ${err}`, "error");
     } finally {
       setIsCommitting(false);
     }
@@ -151,10 +160,10 @@ export const SourceControl: React.FC = () => {
       // Reload file structure as files might have changed on disk
       const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
       useWorkspaceStore.getState().setFileTree(tree);
-      alert("Successfully pulled changes from remote.");
+      notify("Pull complete", "Successfully pulled changes from remote.", "success");
     } catch (err: any) {
       console.error("Pull failed:", err);
-      alert(`Pull failed: ${err}`);
+      notify("Pull failed", `Pull failed: ${err}`, "error");
     } finally {
       setIsPulling(false);
     }
@@ -169,10 +178,10 @@ export const SourceControl: React.FC = () => {
       await invoke("git_push", { rootDir: rootPath, branchName: gitStatus.currentBranch });
       await loadGitStatus();
       await fetchHistory();
-      alert("Successfully pushed changes to remote.");
+      notify("Push complete", "Successfully pushed changes to remote.", "success");
     } catch (err: any) {
       console.error("Push failed:", err);
-      alert(`Push failed: ${err}`);
+      notify("Push failed", `Push failed: ${err}`, "error");
     } finally {
       setIsPushing(false);
     }
@@ -235,14 +244,16 @@ export const SourceControl: React.FC = () => {
       // Reload workspace directory tree structure
       const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
       useWorkspaceStore.getState().setFileTree(tree);
-      alert("All unstaged changes have been discarded.");
+      notify("Discard complete", "All unstaged changes have been discarded.", "success");
     } catch (err: any) {
       console.error("Failed to discard all changes:", err);
-      alert(`Discard failed: ${err}`);
+      notify("Discard failed", `Discard failed: ${err}`, "error");
     }
   };
 
-  // Handles checking out another local branch
+  // Handles checking out another branch. Accepts a local name ("feature") or a
+  // remote-tracking ref ("origin/feature"). The backend wires up origin tracking
+  // for remote refs so push/pull work on the resulting local branch.
   const handleSwitchBranch = async (branchName: string) => {
     if (!rootPath) return;
     try {
@@ -254,10 +265,11 @@ export const SourceControl: React.FC = () => {
       // Reload workspace directory tree structure
       const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
       useWorkspaceStore.getState().setFileTree(tree);
-      alert(`Switched to branch: ${branchName}`);
+      const localName = branchName.startsWith("origin/") ? branchName.substring("origin/".length) : branchName;
+      notify("Branch switched", `Switched to branch: ${localName}`, "success");
     } catch (err: any) {
       console.error("Failed to switch branch:", err);
-      alert(`Failed to switch branch: ${err}`);
+      notify("Switch failed", `Failed to switch branch: ${err}`, "error");
     }
   };
 
@@ -274,7 +286,28 @@ export const SourceControl: React.FC = () => {
       }
       setBranchDialog(null);
     } catch (err: any) {
-      alert(`Failed to create branch: ${err}`);
+      notify("Error", `Failed to create branch: ${err}`, "error");
+    }
+  };
+
+  // Delete a local branch (force via -D when `force` is true) or, when an
+  // origin/... branch is selected, push-delete it from the remote.
+  const handleDeleteBranch = async (branchName: string, force: boolean) => {
+    if (!rootPath) return;
+    try {
+      if (branchName.startsWith("origin/")) {
+        await invoke("git_delete_remote_branch", { rootDir: rootPath, branchName });
+      } else {
+        await invoke("git_delete_branch", { rootDir: rootPath, branchName, force });
+      }
+      await fetchBranches();
+      await loadGitStatus();
+      await fetchHistory();
+      setBranchDialog(null);
+      notify("Branch deleted", `Deleted branch: ${branchName}`, "success");
+    } catch (err: any) {
+      console.error("Failed to delete branch:", err);
+      notify("Delete failed", `Failed to delete branch: ${err}`, "error");
     }
   };
 
@@ -288,14 +321,14 @@ export const SourceControl: React.FC = () => {
       const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
       useWorkspaceStore.getState().setFileTree(tree);
       setBranchDialog(null);
-      alert(result || `Merged ${branchName} into current branch.`);
+      notify("Merge complete", String(result) || `Merged ${branchName} into current branch.`, "success");
     } catch (err: any) {
       // Check if it's a merge conflict
       const errMsg = String(err);
       if (errMsg.includes("conflict") || errMsg.includes("CONFLICT")) {
-        alert(`Merge conflicts detected. Resolve them and commit, or run "Abort merge" from the branch menu.`);
+        notify("Merge conflicts", `Merge conflicts detected. Resolve them and commit, or run "Abort merge" from the branch menu.`, "danger");
       } else {
-        alert(`Merge failed: ${err}`);
+        notify("Merge failed", `Merge failed: ${err}`, "error");
       }
       setBranchDialog(null);
     }
@@ -311,13 +344,13 @@ export const SourceControl: React.FC = () => {
       const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
       useWorkspaceStore.getState().setFileTree(tree);
       setBranchDialog(null);
-      alert(result || `Rebased current branch onto ${branchName}.`);
+      notify("Rebase complete", String(result) || `Rebased current branch onto ${branchName}.`, "success");
     } catch (err: any) {
       const errMsg = String(err);
       if (errMsg.includes("conflict") || errMsg.includes("CONFLICT")) {
-        alert(`Rebase conflicts detected. Resolve them and continue, or run "Abort rebase" from the branch menu.`);
+        notify("Rebase conflicts", `Rebase conflicts detected. Resolve them and continue, or run "Abort rebase" from the branch menu.`, "danger");
       } else {
-        alert(`Rebase failed: ${err}`);
+        notify("Rebase failed", `Rebase failed: ${err}`, "error");
       }
       setBranchDialog(null);
     }
@@ -336,9 +369,9 @@ export const SourceControl: React.FC = () => {
       await fetchHistory();
       const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
       useWorkspaceStore.getState().setFileTree(tree);
-      alert("Aborted pending operation.");
+      notify("Aborted", "Aborted pending operation.", "success");
     } catch (err: any) {
-      alert(`Abort failed: ${err}`);
+      notify("Abort failed", `Abort failed: ${err}`, "error");
     }
   };
 
@@ -354,9 +387,9 @@ export const SourceControl: React.FC = () => {
       const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
       useWorkspaceStore.getState().setFileTree(tree);
       setLastRename(null);
-      alert("Move/rename has been undone.");
+      notify("Undo complete", "Move/rename has been undone.", "success");
     } catch (err: any) {
-      alert(`Undo failed: ${err}`);
+      notify("Undo failed", `Undo failed: ${err}`, "error");
     }
   };
 
@@ -475,6 +508,14 @@ export const SourceControl: React.FC = () => {
             </button>
             <button
               type="button"
+              onClick={() => setBranchDialog("delete")}
+              className="p-1 rounded hover:bg-rose-500/10 text-[var(--text-muted)] hover:text-rose-400 transition-colors cursor-pointer"
+              title="Delete Branch"
+            >
+              <Trash2 size={12} />
+            </button>
+            <button
+              type="button"
               onClick={handleAbortPending}
               className="p-1 rounded hover:bg-rose-500/10 text-[var(--text-muted)] hover:text-rose-400 transition-colors cursor-pointer"
               title="Abort Merge/Rebase"
@@ -486,8 +527,12 @@ export const SourceControl: React.FC = () => {
               <CustomSelect
                 value={gitStatus.currentBranch}
                 onChange={handleSwitchBranch}
-                options={branches.map((b) => ({ id: b, name: b }))}
+                groups={[
+                  { label: "Local", options: localBranches.map((b) => ({ id: b, name: b })) },
+                  { label: "Origin", options: remoteBranches.map((b) => ({ id: b, name: b })) },
+                ]}
                 buttonClassName="bg-transparent border-none text-[var(--accent-color)] font-mono text-[10px] focus:outline-none cursor-pointer outline-none font-bold p-0 flex items-center justify-between w-full"
+                dropdownClassName="min-w-[280px] w-max max-w-[min(90vw,560px)]"
                 className="flex-1"
               />
             </div>
@@ -770,11 +815,13 @@ export const SourceControl: React.FC = () => {
         <BranchDialog
           mode={branchDialog}
           currentBranch={gitStatus.currentBranch}
-          branches={branches}
+          localBranches={localBranches}
+          remoteBranches={remoteBranches}
           onConfirm={(name, extra) => {
             if (branchDialog === "create") handleCreateBranch(name, extra || false);
             else if (branchDialog === "merge") handleMergeBranch(name);
             else if (branchDialog === "rebase") handleRebaseBranch(name);
+            else if (branchDialog === "delete") handleDeleteBranch(name, extra || false);
           }}
           onCancel={() => setBranchDialog(null)}
         />

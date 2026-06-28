@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
-import { Send, MessageSquare, Shield, FileText, Loader2, ChevronRight, Terminal, Bot, CheckCircle2, FolderGit2 } from "lucide-react";
-import { useWorkspaceStore } from "../../store";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { Send, MessageSquare, Shield, FileText, Loader2, ChevronRight, Terminal, Bot, CheckCircle2, FolderGit2, History, Trash2, Plus, RefreshCw, PanelLeftClose, PanelLeft } from "lucide-react";
+import { useWorkspaceStore, AgentMessage } from "../../store";
 import { CustomSelect } from "../CustomSelect";
 import { searchService } from "../../services/searchService";
 import { processResponse } from "../../services/responseProcessingService";
@@ -16,6 +16,14 @@ interface FileReference {
   name: string;
 }
 
+interface SavedChat {
+  path: string;
+  name: string;
+  savedAt: string;
+  preview: string;
+  messageCount: number;
+}
+
 export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
   const customProviders = useWorkspaceStore((state) => state.customProviders);
   const activeModel = useWorkspaceStore((state) => state.activeModel);
@@ -23,6 +31,8 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
   const agentChats = useWorkspaceStore((state) => state.agentChats[tab.id] || []);
   const addAgentMessage = useWorkspaceStore((state) => state.addAgentMessage);
   const updateAgentMessage = useWorkspaceStore((state) => state.updateAgentMessage);
+  const setAgentMessages = useWorkspaceStore((state) => state.setAgentMessages);
+  const clearAgentMessages = useWorkspaceStore((state) => state.clearAgentMessages);
   const rootPath = useWorkspaceStore((state) => state.rootPath);
   const openTab = useWorkspaceStore((state) => state.openTab);
   const setFileTree = useWorkspaceStore((state) => state.setFileTree);
@@ -42,6 +52,12 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
   const [collapsedConsoles, setCollapsedConsoles] = useState<Record<string, boolean>>({});
   const [modifiedFiles, setModifiedFiles] = useState<string[]>([]);
   const [consoleUpdateCount, setConsoleUpdateCount] = useState(0);
+
+  // Chat history panel state
+  const [showHistory, setShowHistory] = useState(true);
+  const [chatHistory, setChatHistory] = useState<SavedChat[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [activeChatPath, setActiveChatPath] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -120,6 +136,95 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
     };
   }, []);
 
+  // ── Chat History ──────────────────────────────────────────────
+  const loadChatHistory = useCallback(async () => {
+    if (!rootPath) return;
+    setLoadingHistory(true);
+    try {
+      const chatsDir = `${rootPath}/.axio/chats`;
+      const tree = await invoke<any[]>("get_directory_structure", { rootDir: chatsDir });
+      const chatFiles = (tree || []).filter((f: any) => f.name.endsWith(".json"));
+
+      const loaded: SavedChat[] = [];
+      for (const file of chatFiles) {
+        try {
+          const content = await invoke<string>("read_file_disk", { path: file.path });
+          const parsed = JSON.parse(content);
+          const messages: AgentMessage[] = parsed.messages || [];
+          const firstUser = messages.find((m) => m.role === "user");
+          const preview = firstUser
+            ? firstUser.content.replace(/@([^\s@]+)/g, "$1").slice(0, 80)
+            : "(empty conversation)";
+          loaded.push({
+            path: file.path,
+            name: file.name,
+            savedAt: parsed.savedAt || "",
+            preview,
+            messageCount: messages.length,
+          });
+        } catch (e) {
+          console.error(`Failed to read chat ${file.path}:`, e);
+        }
+      }
+      // Sort newest first
+      loaded.sort((a, b) => (b.savedAt || "").localeCompare(a.savedAt || ""));
+      setChatHistory(loaded);
+    } catch (e) {
+      // .axio/chats may not exist yet
+      setChatHistory([]);
+    } finally {
+      setLoadingHistory(false);
+    }
+  }, [rootPath]);
+
+  useEffect(() => {
+    loadChatHistory();
+  }, [loadChatHistory]);
+
+  const handleLoadChat = async (chat: SavedChat) => {
+    if (isStreaming) return;
+    try {
+      const content = await invoke<string>("read_file_disk", { path: chat.path });
+      const parsed = JSON.parse(content);
+      const messages: AgentMessage[] = parsed.messages || [];
+      setAgentMessages(tab.id, messages);
+      setActiveChatPath(chat.path);
+      savedChatPathRef.current = chat.path;
+      setModifiedFiles([]);
+    } catch (e) {
+      console.error("Failed to load chat:", e);
+    }
+  };
+
+  const handleNewChat = () => {
+    if (isStreaming) return;
+    clearAgentMessages(tab.id);
+    setActiveChatPath(null);
+    savedChatPathRef.current = null;
+    setModifiedFiles([]);
+  };
+
+  const handleDeleteChat = async (e: React.MouseEvent, chat: SavedChat) => {
+    e.stopPropagation();
+    try {
+      await invoke("delete_file_or_dir", { path: chat.path });
+      setChatHistory((prev) => prev.filter((c) => c.path !== chat.path));
+      if (activeChatPath === chat.path) {
+        setActiveChatPath(null);
+        savedChatPathRef.current = null;
+      }
+    } catch (err) {
+      console.error("Failed to delete chat:", err);
+    }
+  };
+
+  // Refresh history after a message is saved
+  const refreshHistoryAfterSave = () => {
+    if (rootPath) {
+      setTimeout(() => loadChatHistory(), 200);
+    }
+  };
+
   const handleSendMessage = () => {
     if (!message.trim() || isStreaming) return;
 
@@ -147,6 +252,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
     consoleMessageIdRef.current = consoleMessageId;
     consoleBufferRef.current = "";
     saveChatHistory(true);
+    refreshHistoryAfterSave();
 
     const messageToSend = message;
     setMessage("");
@@ -277,6 +383,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
           setIsStreaming(false);
           socket.close();
           saveChatHistory(true);
+          refreshHistoryAfterSave();
         }
 
         if (msg.type === "permission_request" && msg.tabId === tab.id) {
@@ -654,10 +761,105 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
   };
 
   return (
-    <div className="w-full h-full flex flex-col bg-[var(--bg-app)] text-[var(--text-normal)] font-sans relative">
+    <div className="w-full h-full flex bg-[var(--bg-app)] text-[var(--text-normal)] font-sans relative">
+      {/* Chat History Sidebar */}
+      {showHistory && (
+        <div className="w-64 flex-shrink-0 border-r border-[var(--border-color)] bg-[var(--bg-sidebar)]/40 flex flex-col h-full overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)] flex-shrink-0">
+            <div className="flex items-center space-x-1.5 text-[var(--text-muted)]">
+              <History size={13} />
+              <span className="text-[10px] font-mono uppercase tracking-wider font-bold">Chats</span>
+              <span className="text-[9px] font-mono text-[var(--text-muted)]">({chatHistory.length})</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <button
+                onClick={loadChatHistory}
+                disabled={loadingHistory}
+                className="p-1 rounded hover:bg-[var(--accent-bg)] text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer"
+                title="Refresh"
+              >
+                <RefreshCw size={11} className={loadingHistory ? "animate-spin" : ""} />
+              </button>
+              <button
+                onClick={handleNewChat}
+                disabled={isStreaming}
+                className="p-1 rounded hover:bg-[var(--accent-bg)] text-[var(--text-muted)] hover:text-[var(--accent-color)] transition-colors cursor-pointer disabled:opacity-40"
+                title="New chat"
+              >
+                <Plus size={12} />
+              </button>
+              <button
+                onClick={() => setShowHistory(false)}
+                className="p-1 rounded hover:bg-[var(--accent-bg)] text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer"
+                title="Hide history"
+              >
+                <PanelLeftClose size={12} />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto py-1">
+            {chatHistory.length === 0 ? (
+              <div className="px-3 py-6 text-center text-[10px] font-mono text-[var(--text-muted)] leading-relaxed">
+                {loadingHistory ? "Loading..." : "No saved chats yet.\nStart a conversation to see it here."}
+              </div>
+            ) : (
+              chatHistory.map((chat) => {
+                const isActive = activeChatPath === chat.path;
+                const date = chat.savedAt ? new Date(chat.savedAt) : null;
+                const dateLabel = date
+                  ? date.toLocaleDateString() === new Date().toLocaleDateString()
+                    ? date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                    : date.toLocaleDateString([], { month: "short", day: "numeric" })
+                  : "";
+                return (
+                  <div
+                    key={chat.path}
+                    onClick={() => handleLoadChat(chat)}
+                    className={`group mx-1.5 my-0.5 px-2.5 py-2 rounded-lg cursor-pointer transition-all border ${
+                      isActive
+                        ? "border-[var(--accent-color)] bg-[var(--accent-bg)]/30"
+                        : "border-transparent hover:bg-[var(--bg-app)]/50 hover:border-[var(--border-color)]"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-[9px] font-mono text-[var(--text-muted)]">{dateLabel}</span>
+                      <div className="flex items-center space-x-1">
+                        <span className="text-[8px] font-mono text-[var(--text-muted)]">{chat.messageCount} msgs</span>
+                        <button
+                          onClick={(e) => handleDeleteChat(e, chat)}
+                          className="opacity-0 group-hover:opacity-100 text-rose-400/60 hover:text-rose-400 transition-all p-0.5"
+                          title="Delete chat"
+                        >
+                          <Trash2 size={10} />
+                        </button>
+                      </div>
+                    </div>
+                    <p className={`text-[11px] font-sans leading-snug line-clamp-2 ${isActive ? "text-[var(--text-light)]" : "text-[var(--text-normal)]"}`}>
+                      {chat.preview}
+                    </p>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Main chat column */}
+      <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/50 flex-shrink-0">
         <div className="flex items-center space-x-3">
+          {!showHistory && (
+            <button
+              onClick={() => setShowHistory(true)}
+              className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)] transition-colors cursor-pointer"
+              title="Show chat history"
+            >
+              <PanelLeft size={16} />
+            </button>
+          )}
           <CustomSelect
             value={selectedModel}
             onChange={setSelectedModel}
@@ -786,6 +988,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
 
       {/* Permission modal */}
       {renderPermissionModal()}
+      </div>
     </div>
   );
 };

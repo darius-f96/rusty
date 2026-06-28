@@ -150,6 +150,8 @@ export interface WorkspaceState {
   agentPermissionRequests: Record<string, AgentPermissionRequest[]>;
   addAgentMessage: (tabId: string, message: AgentMessage) => void;
   updateAgentMessage: (tabId: string, messageId: string, content: string) => void;
+  setAgentMessages: (tabId: string, messages: AgentMessage[]) => void;
+  clearAgentMessages: (tabId: string) => void;
   updateAgentStream: (tabId: string, content: string) => void;
   clearAgentStream: (tabId: string) => void;
   addAgentPermissionRequest: (tabId: string, request: AgentPermissionRequest) => void;
@@ -807,6 +809,20 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       }
     };
   }),
+
+  setAgentMessages: (tabId, messages) => set((state) => ({
+    agentChats: {
+      ...state.agentChats,
+      [tabId]: messages
+    }
+  })),
+
+  clearAgentMessages: (tabId) => set((state) => ({
+    agentChats: {
+      ...state.agentChats,
+      [tabId]: []
+    }
+  })),
 
   updateAgentStream: (tabId, content) => set((state) => {
     return {

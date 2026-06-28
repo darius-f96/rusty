@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { createPortal } from "react-dom";
-import { Folder, FolderOpen, ChevronDown, ChevronRight, Move, X, Check } from "lucide-react";
+import { Folder, FolderOpen, ChevronDown, ChevronRight, Move, Check } from "lucide-react";
+import { Modal } from "./Modal";
 
 interface MoveDialogProps {
   node: { name: string; path: string; is_dir: boolean };
@@ -138,23 +138,32 @@ export const MoveDialog: React.FC<MoveDialogProps> = ({ node, fileTree, onMove, 
     return "…" + path.substring(path.length - maxLen + 1);
   };
 
-  return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onCancel} />
-      <div className="relative bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-xl shadow-2xl w-[520px] max-h-[80vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border-color)]">
-          <div className="flex items-center space-x-2">
-            <Move size={16} className="text-[var(--accent-color)]" />
-            <span className="text-sm font-bold text-[var(--text-light)]">Move {node.is_dir ? "Folder" : "File"}</span>
-          </div>
-          <button onClick={onCancel} className="text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors">
-            <X size={16} />
+  return (
+    <Modal
+      title={`Move ${node.is_dir ? "Folder" : "File"}`}
+      icon={Move}
+      onClose={onCancel}
+      width="w-[520px]"
+      scrollable
+      footer={
+        <div className="flex items-center justify-end space-x-2 px-5 py-3 border-t border-[var(--border-color)]">
+          <button
+            onClick={onCancel}
+            className="px-4 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:text-[var(--text-light)] rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleMove}
+            disabled={!destPath.trim()}
+            className="flex items-center space-x-1.5 px-4 py-1.5 bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 disabled:opacity-40 text-white text-xs font-bold rounded-lg transition-colors"
+          >
+            <Check size={13} />
+            <span>Move</span>
           </button>
         </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-hidden flex flex-col p-5 space-y-4">
+      }
+    >
           {/* Current path info */}
           <div className="text-[10px] font-mono text-[var(--text-muted)] truncate" title={node.path}>
             <span className="opacity-60">Current: </span>
@@ -176,7 +185,6 @@ export const MoveDialog: React.FC<MoveDialogProps> = ({ node, fileTree, onMove, 
                 onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleMove();
-                  if (e.key === "Escape") onCancel();
                 }}
                 placeholder="Type a path or select from tree below..."
                 className="w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-xs font-mono text-[var(--text-light)] focus:border-[var(--accent-color)] focus:outline-none"
@@ -199,7 +207,7 @@ export const MoveDialog: React.FC<MoveDialogProps> = ({ node, fileTree, onMove, 
           </div>
 
           {/* Folder tree */}
-          <div className="flex-1 overflow-y-auto bg-[var(--bg-app)]/50 border border-[var(--border-color)] rounded-lg p-2 min-h-[120px] max-h-[240px]" ref={treeScrollRef}>
+          <div className="overflow-y-auto bg-[var(--bg-app)]/50 border border-[var(--border-color)] rounded-lg p-2 min-h-[120px] max-h-[240px]" ref={treeScrollRef}>
             <div className="text-[10px] text-[var(--text-muted)] uppercase font-bold mb-2 px-1">Browse folders</div>
             {renderFolderTree(fileTree)}
           </div>
@@ -213,27 +221,6 @@ export const MoveDialog: React.FC<MoveDialogProps> = ({ node, fileTree, onMove, 
               </span>
             </div>
           )}
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-end space-x-2 px-5 py-3 border-t border-[var(--border-color)]">
-          <button
-            onClick={onCancel}
-            className="px-4 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:text-[var(--text-light)] rounded-lg transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleMove}
-            disabled={!destPath.trim()}
-            className="flex items-center space-x-1.5 px-4 py-1.5 bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 disabled:opacity-40 text-white text-xs font-bold rounded-lg transition-colors"
-          >
-            <Check size={13} />
-            <span>Move</span>
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body
+    </Modal>
   );
 };

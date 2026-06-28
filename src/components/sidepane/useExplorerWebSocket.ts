@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useWorkspaceStore } from "../../store";
 import { invoke } from "@tauri-apps/api/core";
+import { notify } from "../../notificationStore";
 
 export const useExplorerWebSocket = (selectedNode: any) => {
   const selectedNodeId = selectedNode?.id || null;
@@ -195,7 +196,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
     if (!selectedNodeId) return;
     const chatHistory = useWorkspaceStore.getState().globalChatHistory[selectedNodeId] || [];
     if (chatHistory.length === 0) {
-      alert("No conversation to summarize.");
+      notify("Summarize", "No conversation to summarize.", "info");
       return;
     }
     if (nodeStatus === "running" || isSummarizing) return;

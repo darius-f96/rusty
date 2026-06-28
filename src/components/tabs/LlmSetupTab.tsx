@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useWorkspaceStore, CustomProvider } from "../../store";
 import { Cpu, Key, Globe, Plus, ShieldCheck, Save, Layers, Lock, Unlock, HelpCircle as HelpIcon, RefreshCw } from "lucide-react";
 import { CustomSelect } from "../CustomSelect";
+import { notify } from "../../notificationStore";
 
 export const LlmSetupTab: React.FC = () => {
   const customProviders = useWorkspaceStore((state) => state.customProviders);
@@ -77,27 +78,27 @@ export const LlmSetupTab: React.FC = () => {
             if (mapped.length > 0) {
               updateProviderSettings(activeCustomProviderId, { models: mapped });
               setActiveModel(mapped[0].id);
-              alert(`Configuration saved successfully! Auto-loaded ${mapped.length} models for ${selectedProvider?.name}.`);
+              notify("Saved", `Configuration saved successfully! Auto-loaded ${mapped.length} models for ${selectedProvider?.name}.`, "success");
               return;
             }
           }
         }
-        alert(`Configuration saved for ${selectedProvider?.name}! (Model fetching failed, please double check connection details)`);
+        notify("Saved", `Configuration saved for ${selectedProvider?.name}! (Model fetching failed, please double check connection details)`, "info");
       } catch (err) {
         console.error("Auto-fetch error:", err);
-        alert(`Configuration saved for ${selectedProvider?.name}, but model auto-fetch encountered an error.`);
+        notify("Saved with error", `Configuration saved for ${selectedProvider?.name}, but model auto-fetch encountered an error.`, "error");
       } finally {
         setFetchingModels(false);
       }
     } else {
-      alert(`Connection settings updated for ${selectedProvider?.name}!`);
+      notify("Updated", `Connection settings updated for ${selectedProvider?.name}!`, "success");
     }
   };
 
   const handleFetchModels = async () => {
     if (!activeCustomProviderId) return;
     if (!apiKey) {
-      alert("Please provide an API Authorization Key first.");
+      notify("API key required", "Please provide an API Authorization Key first.", "info");
       return;
     }
 
@@ -142,16 +143,16 @@ export const LlmSetupTab: React.FC = () => {
         if (mapped.length > 0) {
           updateProviderSettings(activeCustomProviderId, { models: mapped });
           setActiveModel(mapped[0].id);
-          alert(`Successfully fetched and loaded ${mapped.length} models for ${selectedProvider?.name}!`);
+          notify("Models loaded", `Successfully fetched and loaded ${mapped.length} models for ${selectedProvider?.name}!`, "success");
         } else {
-          alert("No models found in the provider response.");
+          notify("No models", "No models found in the provider response.", "info");
         }
       } else {
         throw new Error("Invalid response format.");
       }
     } catch (err: any) {
       console.error(`[LlmSetup] Fetch models error:`, err.message);
-      alert(`Failed to fetch models: ${err.message}`);
+      notify("Fetch failed", `Failed to fetch models: ${err.message}`, "error");
     } finally {
       setFetchingModels(false);
     }
@@ -190,7 +191,7 @@ export const LlmSetupTab: React.FC = () => {
       setActiveModel(modelsList[0].id);
     }
     
-    alert(`LLM Provider ${provName} registered successfully!`);
+    notify("Provider added", `LLM Provider ${provName} registered successfully!`, "success");
     setProvId("");
     setProvName("");
     setShowAddCustom(false);

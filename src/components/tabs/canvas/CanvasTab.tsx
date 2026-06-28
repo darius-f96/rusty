@@ -17,6 +17,7 @@ import {
   Plug
 } from "lucide-react";
 import { useWorkspaceStore } from "../../../store";
+import { notify } from "../../../notificationStore";
 import { SidePane } from "../../sidepane/SidePane";
 import { EdgeInspectorPane } from "../../edgeinspector/EdgeInspectorPane";
 import { ContextNode } from "../../nodes/ContextNode";
@@ -129,7 +130,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
       (e) => e.sourceHandle === "task-out" && e.targetHandle === "task-in"
     );
     if (sequenceEdges.length === 0) {
-      alert("No task-to-task connections to reconciliate.");
+      notify("Reconcile", "No task-to-task connections to reconciliate.", "info");
       return;
     }
     sequenceEdges.forEach((edge) => {
@@ -336,14 +337,14 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
       await invoke("apply_vfs_to_disk");
       // Set applied status to true
       useWorkspaceStore.getState().updateCanvasContext(tab.id, { isPipelineApplied: true });
-      alert("Success: In-memory shadow VFS layout flushed to local storage disk.");
+      notify("Applied", "In-memory shadow VFS layout flushed to local storage disk.", "success");
       if (rootPath) {
         const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
         useWorkspaceStore.getState().setFileTree(tree);
         await useWorkspaceStore.getState().loadGitStatus();
       }
     } catch (e: any) {
-      alert(`Error applying VFS: ${e}`);
+      notify("Error", `Error applying VFS: ${e}`, "error");
     }
   };
 
@@ -354,15 +355,15 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
   const confirmSavePipeline = async () => {
     try {
       if (!saveTitle.trim()) {
-        alert("Please enter a valid title");
+        notify("Invalid input", "Please enter a valid title", "info");
         return;
       }
       const filePath = await canvasFileService.saveCanvas(tab.id, saveTitle);
       useWorkspaceStore.getState().updateTabTitle(tab.id, saveTitle);
       setShowSaveModal(false);
-      alert(`Pipeline saved to: ${filePath}`);
+      notify("Saved", `Pipeline saved to: ${filePath}`, "success");
     } catch (e: any) {
-      alert(`Error saving pipeline: ${e.message || e}`);
+      notify("Save failed", `Error saving pipeline: ${e.message || e}`, "error");
     }
   };
 

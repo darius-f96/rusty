@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { FolderOpen, History, Trash2, ArrowRight, Plus } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
+import { notify } from "../../notificationStore";
 
 export const WorkspaceTab: React.FC = () => {
   const rootPath = useWorkspaceStore((state) => state.rootPath);
@@ -72,7 +73,7 @@ export const WorkspaceTab: React.FC = () => {
       updateRecents(path);
     } catch (err) {
       console.error("Failed to load workspace folder:", err);
-      alert(`Failed to load workspace directory: ${err}`);
+      notify("Error", `Failed to load workspace directory: ${err}`, "error");
     }
   };
 

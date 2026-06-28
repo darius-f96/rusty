@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useWorkspaceStore } from "../store";
 import { RotateCcw, ArrowUp, ArrowDown, Copy, Check, GitCommit, GitBranch, Tag, User, Calendar, ExternalLink } from "lucide-react";
+import { notify } from "../notificationStore";
 
 interface GitCommitInfo {
   hash: string;
@@ -88,10 +89,10 @@ export const GitHistoryTabContent: React.FC<{ tab?: any }> = ({ tab }) => {
       // Reload workspace directory tree structure
       const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
       useWorkspaceStore.getState().setFileTree(tree);
-      alert("Commit reverted successfully.");
+      notify("Revert complete", "Commit reverted successfully.", "success");
     } catch (err: any) {
       console.error("Revert failed:", err);
-      alert(`Revert failed: ${err}`);
+      notify("Revert failed", `Revert failed: ${err}`, "error");
     }
   };
 
@@ -108,10 +109,10 @@ export const GitHistoryTabContent: React.FC<{ tab?: any }> = ({ tab }) => {
       // Reload workspace directory tree structure
       const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
       useWorkspaceStore.getState().setFileTree(tree);
-      alert("Branch reset successfully.");
+      notify("Reset complete", "Branch reset successfully.", "success");
     } catch (err: any) {
       console.error("Reset failed:", err);
-      alert(`Reset failed: ${err}`);
+      notify("Reset failed", `Reset failed: ${err}`, "error");
     }
   };
 
@@ -158,10 +159,10 @@ export const GitHistoryTabContent: React.FC<{ tab?: any }> = ({ tab }) => {
       console.log(`Git Graph: Pushing branch "${gitStatus.currentBranch}"...`);
       await invoke("git_push", { rootDir: rootPath, branchName: gitStatus.currentBranch });
       await handleRefresh();
-      alert("Successfully pushed commits to remote upstream.");
+      notify("Push complete", "Successfully pushed commits to remote upstream.", "success");
     } catch (err: any) {
       console.error("Push failed:", err);
-      alert(`Push failed: ${err}`);
+      notify("Push failed", `Push failed: ${err}`, "error");
     } finally {
       setIsPushing(false);
     }
@@ -178,10 +179,10 @@ export const GitHistoryTabContent: React.FC<{ tab?: any }> = ({ tab }) => {
       // Reload workspace directory tree structure
       const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
       useWorkspaceStore.getState().setFileTree(tree);
-      alert("Successfully pulled changes from remote.");
+      notify("Pull complete", "Successfully pulled changes from remote.", "success");
     } catch (err: any) {
       console.error("Pull failed:", err);
-      alert(`Pull failed: ${err}`);
+      notify("Pull failed", `Pull failed: ${err}`, "error");
     } finally {
       setIsPulling(false);
     }

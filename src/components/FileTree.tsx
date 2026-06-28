@@ -19,6 +19,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { MoveDialog } from "./MoveDialog";
 import { CreateDialog } from "./CreateDialog";
+import { notify } from "../notificationStore";
 
 interface FileEntry {
   name: string;
@@ -123,7 +124,7 @@ export const FileTree: React.FC<FileTreeProps> = ({ entries }) => {
       await refreshTree();
     } catch (err: any) {
       console.error("Failed to move file to root:", err);
-      alert(`Move failed: ${err}`);
+      notify("Move failed", `Move failed: ${err}`, "error");
     }
   };
 
@@ -157,7 +158,7 @@ export const FileTree: React.FC<FileTreeProps> = ({ entries }) => {
       state.setLastRename({ originalPath, newPath: destPath });
       state.loadGitStatus();
     } catch (err: any) {
-      alert(`Move failed: ${err}`);
+      notify("Move failed", `Move failed: ${err}`, "error");
     }
     setMoveDialogNode(null);
   };
@@ -171,7 +172,7 @@ export const FileTree: React.FC<FileTreeProps> = ({ entries }) => {
       const state = useWorkspaceStore.getState();
       state.closeTab(`file_${node.path.replace(/[^a-zA-Z0-9]/g, "_")}`);
     } catch (err: any) {
-      alert(`Delete failed: ${err}`);
+      notify("Delete failed", `Delete failed: ${err}`, "error");
     }
   };
 
@@ -179,7 +180,7 @@ export const FileTree: React.FC<FileTreeProps> = ({ entries }) => {
     try {
       await revealItemInDir(node.path);
     } catch (err: any) {
-      alert(`Failed to open in Finder: ${err}`);
+      notify("Error", `Failed to open in Finder: ${err}`, "error");
     }
   };
 
@@ -208,7 +209,7 @@ export const FileTree: React.FC<FileTreeProps> = ({ entries }) => {
       const state = useWorkspaceStore.getState();
       state.setPathExpanded(dir, true);
     } catch (err: any) {
-      alert(`Create ${type} failed: ${err}`);
+      notify("Create failed", `Create ${type} failed: ${err}`, "error");
     }
     setCreateDialog(null);
   };
@@ -401,7 +402,7 @@ const FileTreeNode: React.FC<{
         const parsedData = await canvasFileService.loadCanvasFromFile(node.path);
         useWorkspaceStore.getState().loadCanvasTab(parsedData);
       } catch (err: any) {
-        alert(`Failed to load canvas: ${err.message || err}`);
+        notify("Canvas error", `Failed to load canvas: ${err.message || err}`, "error");
       }
       return;
     }
@@ -430,7 +431,7 @@ const FileTreeNode: React.FC<{
       state.setLastRename({ originalPath: node.path, newPath });
       state.loadGitStatus();
     } catch (err: any) {
-      alert(`Rename failed: ${err}`);
+      notify("Rename failed", `Rename failed: ${err}`, "error");
     }
     onRenameComplete();
   };
@@ -461,7 +462,7 @@ const FileTreeNode: React.FC<{
       await refreshTree();
       setPathExpanded(node.path, true);
     } catch (err: any) {
-      alert(`Move failed: ${err}`);
+      notify("Move failed", `Move failed: ${err}`, "error");
     }
   };
 

@@ -374,11 +374,105 @@ pub async fn git_get_branches(root_dir: String) -> Result<Vec<String>, String> {
     Ok(branches)
 }
 
+/// Grouped branch listing: local branches and remote-tracking branches separately.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct BranchesResult {
+    /// Local branch short names (e.g., "main", "feature-xyz").
+    pub local: Vec<String>,
+    /// Remote-tracking branch short names (e.g., "origin/main", "origin/feature-xyz").
+    pub remote: Vec<String>,
+}
+
+/// Retrieves both local and remote-tracking branches in one call.
+#[tauri::command]
+pub async fn git_get_all_branches(root_dir: String) -> Result<BranchesResult, String> {
+    // Local branches
+    let local_output = Command::new("git")
+        .args(&["branch", "--format=%(refname:short)"])
+        .current_dir(&root_dir)
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if !local_output.status.success() {
+        return Err(String::from_utf8_lossy(&local_output.stderr).into_owned());
+    }
+
+    let local: Vec<String> = String::from_utf8_lossy(&local_output.stdout)
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty())
+        .collect();
+
+    // Remote-tracking branches (refs/remotes/*). Drop symbolic HEAD pointers
+    // (e.g. "origin/HEAD -> origin/main") so only real branches remain.
+    let remote_output = Command::new("git")
+        .args(&["branch", "-r", "--format=%(refname:short)"])
+        .current_dir(&root_dir)
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    let remote: Vec<String> = String::from_utf8_lossy(&remote_output.stdout)
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty() && !l.ends_with("/HEAD") && !l.contains(" -> "))
+        .collect();
+
+    Ok(BranchesResult { local, remote })
+}
+
+/// Fetches from the configured remote and prunes remote-tracking refs that no
+/// longer exist on the remote. Returns Ok(()) silently when no remote is set.
+#[tauri::command]
+pub async fn git_fetch(root_dir: String) -> Result<(), String> {
+    // Skip silently when there is no remote configured.
+    let remote_check = Command::new("git")
+        .arg("remote")
+        .current_dir(&root_dir)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if String::from_utf8_lossy(&remote_check.stdout).trim().is_empty() {
+        return Ok(());
+    }
+
+    let output = Command::new("git")
+        .args(&["fetch", "--prune"])
+        .current_dir(&root_dir)
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).into_owned())
+    }
+}
+
 /// Performs a checkout to switch the repository's active branch.
+///
+/// When a remote-tracking ref (e.g. "origin/foo") is passed, a local tracking
+/// branch "foo" is checked out (created with `--track` if it doesn't already
+/// exist) so that subsequent push/pull operations are wired to origin.
 #[tauri::command]
 pub async fn git_checkout_branch(root_dir: String, branch_name: String) -> Result<(), String> {
+    let args: Vec<&str> = if branch_name.starts_with("origin/") {
+        let local_name = branch_name.strip_prefix("origin/").unwrap_or(&branch_name);
+        let local_exists = Command::new("git")
+            .args(&["show-ref", "--verify", "--quiet", &format!("refs/heads/{}", local_name)])
+            .current_dir(&root_dir)
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+        if local_exists {
+            vec!["checkout", local_name]
+        } else {
+            vec!["checkout", "--track", &branch_name]
+        }
+    } else {
+        vec!["checkout", &branch_name]
+    };
+
     let output = Command::new("git")
-        .args(&["checkout", &branch_name])
+        .args(&args)
         .current_dir(&root_dir)
         .output()
         .map_err(|e| e.to_string())?;
@@ -400,6 +494,47 @@ pub async fn git_create_branch(root_dir: String, branch_name: String, checkout: 
     };
     let output = Command::new("git")
         .args(&args)
+        .current_dir(&root_dir)
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).into_owned())
+    }
+}
+
+/// Deletes a local branch. When `force` is true uses `git branch -D` (delete
+/// even if not merged), otherwise `git branch -d` (safe delete, refuses if the
+/// branch has unmerged commits).
+#[tauri::command]
+pub async fn git_delete_branch(root_dir: String, branch_name: String, force: bool) -> Result<(), String> {
+    let flag = if force { "-D" } else { "-d" };
+    let output = Command::new("git")
+        .args(&["branch", flag, &branch_name])
+        .current_dir(&root_dir)
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).into_owned())
+    }
+}
+
+/// Deletes a branch from the remote origin via `git push origin --delete`.
+/// This is the "pushed deletion" that removes the branch on the remote.
+#[tauri::command]
+pub async fn git_delete_remote_branch(root_dir: String, branch_name: String) -> Result<(), String> {
+    // Accept either "origin/foo" or a bare "foo" — always delete from origin.
+    let local_name = branch_name
+        .strip_prefix("origin/")
+        .unwrap_or(&branch_name);
+
+    let output = Command::new("git")
+        .args(&["push", "origin", "--delete", local_name])
         .current_dir(&root_dir)
         .output()
         .map_err(|e| e.to_string())?;
