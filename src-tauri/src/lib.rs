@@ -198,25 +198,18 @@ async fn save_chat_history(
     content: String,
 ) -> Result<String, String> {
     println!("Rust [save_chat_history] saving chat {} to {}", chatId, rootDir);
-    let chats_dir = PathBuf::from(&rootDir).join(".axio").join("chats");
+    let chats_dir = PathBuf::from(&rootDir).join(".axiom").join("chats");
     std::fs::create_dir_all(&chats_dir).map_err(|e| e.to_string())?;
 
-    let timestamp = chrono_lite_timestamp();
-    let file_name = format!("{}_{}.json", chatId, timestamp);
+    // One file per chat, identified by chatId. Overwrites so all requests/replies
+    // in a conversation accumulate in the same file.
+    let file_name = format!("{}.json", chatId);
     let file_path = chats_dir.join(&file_name);
 
     std::fs::write(&file_path, &content).map_err(|e| e.to_string())?;
     println!("Rust [save_chat_history] saved to {:?}", file_path);
 
     Ok(file_path.to_string_lossy().into_owned())
-}
-
-fn chrono_lite_timestamp() -> String {
-    use std::time::SystemTime;
-    let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default();
-    let secs = now.as_secs();
-    let millis = now.subsec_millis();
-    format!("{}_{}", secs, millis)
 }
 
 #[tauri::command]
@@ -463,6 +456,81 @@ async fn search_project(
     Ok(final_results)
 }
 
+fn spawn_sidecar(app: &tauri::App) {
+    // Resolve the bundled server.js from the app resources.
+    // In dev, resources are copied to target/debug/resources/; in release they're
+    // bundled into the app bundle. resource_dir() handles both cases.
+    let resource_dir = match app.path().resource_dir() {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("[sidecar] failed to resolve resource dir: {}", e);
+            return;
+        }
+    };
+    let server_js = resource_dir.join("resources").join("sidecar").join("server.js");
+
+    if !server_js.exists() {
+        eprintln!(
+            "[sidecar] server.js not found at {}. \
+             Run `npm run build:sidecar` to generate it.",
+            server_js.display()
+        );
+        return;
+    }
+
+    // Resolve the bundled Node binary declared via `externalBin` in tauri.conf.json.
+    let sidecar_cmd = match app.shell().sidecar("node") {
+        Ok(cmd) => cmd,
+        Err(e) => {
+            eprintln!("[sidecar] failed to resolve bundled node binary: {}", e);
+            return;
+        }
+    };
+
+    match sidecar_cmd
+        .args([server_js.to_string_lossy().to_string()])
+        .spawn()
+    {
+        Ok((mut rx, child)) => {
+            println!(
+                "[sidecar] spawned node sidecar (server.js at {})",
+                server_js.display()
+            );
+
+            // Store the child handle so we can kill it on app exit.
+            if let Some(state) = app.try_state::<SidecarState>() {
+                *state.0.lock().unwrap() = Some(child);
+            }
+
+            // Forward sidecar stdout/stderr to the host console so it's observable.
+            tauri::async_runtime::spawn(async move {
+                while let Some(event) = rx.recv().await {
+                    match event {
+                        CommandEvent::Stdout(bytes) => {
+                            println!("[sidecar] {}", String::from_utf8_lossy(&bytes).trim());
+                        }
+                        CommandEvent::Stderr(bytes) => {
+                            eprintln!("[sidecar] {}", String::from_utf8_lossy(&bytes).trim());
+                        }
+                        CommandEvent::Terminated(status) => {
+                            println!("[sidecar] process exited: {:?}", status);
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+            });
+        }
+        Err(e) => {
+            eprintln!(
+                "[sidecar] failed to spawn: {}. \
+                 If port 4000 is already in use, stop any manually started sidecar first.",
+                e
+            );
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
@@ -473,47 +541,10 @@ pub fn run() {
         .manage(VfsState(Arc::new(Mutex::new(HashMap::new()))))
         .manage(SidecarState(Arc::new(Mutex::new(None))))
         .setup(|app| {
-            // Only spawn the bundled sidecar in release builds; in dev the
-            // user runs it manually for hot-reload.
-            if !cfg!(debug_assertions) {
-                let resource_path = app
-                    .path()
-                    .resolve("sidecar/server.js", tauri::path::BaseDirectory::Resource)?;
-
-                let sidecar = app
-                    .shell()
-                    .sidecar("node")
-                    .expect("failed to resolve `node` sidecar binary");
-
-                let (mut rx, child) = sidecar
-                    .args([resource_path.to_string_lossy().to_string()])
-                    .spawn()
-                    .expect("failed to spawn agent sidecar");
-
-                // Store the child handle so we can kill it on exit.
-                let state = app.state::<SidecarState>();
-                *state.0.lock().unwrap() = Some(child);
-
-                // Forward sidecar stdout/stderr to the host console.
-                tauri::async_runtime::spawn(async move {
-                    while let Some(event) = rx.recv().await {
-                        match event {
-                            CommandEvent::Stdout(bytes) => {
-                                println!("[sidecar] {}", String::from_utf8_lossy(&bytes).trim());
-                            }
-                            CommandEvent::Stderr(bytes) => {
-                                eprintln!("[sidecar] {}", String::from_utf8_lossy(&bytes).trim());
-                            }
-                            CommandEvent::Terminated(status) => {
-                                println!("[sidecar] process exited: {:?}", status);
-                                break;
-                            }
-                            _ => {}
-                        }
-                    }
-                });
-            }
-
+            // Spawn the bundled Node sidecar on startup (both dev and release).
+            // The Node binary is bundled via `externalBin` and server.js via `resources`,
+            // so the user never needs to install Node or run the sidecar manually.
+            spawn_sidecar(app);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

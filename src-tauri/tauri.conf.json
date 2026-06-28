@@ -34,6 +34,6 @@
       "icons/icon.ico"
     ],
     "externalBin": ["bin/node"],
-    "resources": ["resources/sidecar/server.js"]
+    "resources": ["resources/sidecar/server.js", "resources/sidecar/package.json"]
   }
 }

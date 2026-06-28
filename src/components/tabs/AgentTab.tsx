@@ -141,7 +141,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
     if (!rootPath) return;
     setLoadingHistory(true);
     try {
-      const chatsDir = `${rootPath}/.axio/chats`;
+      const chatsDir = `${rootPath}/.axiom/chats`;
       const tree = await invoke<any[]>("get_directory_structure", { rootDir: chatsDir });
       const chatFiles = (tree || []).filter((f: any) => f.name.endsWith(".json"));
 
@@ -170,7 +170,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
       loaded.sort((a, b) => (b.savedAt || "").localeCompare(a.savedAt || ""));
       setChatHistory(loaded);
     } catch (e) {
-      // .axio/chats may not exist yet
+      // .axiom/chats may not exist yet
       setChatHistory([]);
     } finally {
       setLoadingHistory(false);
