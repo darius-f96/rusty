@@ -13,7 +13,8 @@ import {
   Settings,
   X,
   StickyNote,
-  Square
+  Square,
+  Plug
 } from "lucide-react";
 import { useWorkspaceStore } from "../../../store";
 import { SidePane } from "../../sidepane/SidePane";
@@ -21,6 +22,7 @@ import { EdgeInspectorPane } from "../../edgeinspector/EdgeInspectorPane";
 import { ContextNode } from "../../nodes/ContextNode";
 import { TaskNode } from "../../nodes/TaskNode";
 import { GlobalChatNode } from "../../nodes/GlobalChatNode";
+import { McpNode } from "../../nodes/McpNode";
 import { ReconciliationEdge } from "../../ReconciliationEdge";
 import { StickyNode } from "../../nodes/sticky";
 import { BoundaryNode } from "../../nodes/boundary";
@@ -32,6 +34,7 @@ const nodeTypes = {
   contextNode: ContextNode,
   taskNode: TaskNode,
   globalChatNode: GlobalChatNode,
+  mcpNode: McpNode,
   stickyNode: StickyNode,
   boundaryNode: BoundaryNode,
 };
@@ -88,6 +91,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
   const addContextNode = useWorkspaceStore((state) => state.addContextNode);
   const addTaskNode = useWorkspaceStore((state) => state.addTaskNode);
   const addGlobalChatNode = useWorkspaceStore((state) => state.addGlobalChatNode);
+  const addMcpNode = useWorkspaceStore((state) => state.addMcpNode);
   const addStickyNode = useWorkspaceStore((state) => state.addStickyNode);
   const addBoundaryNode = useWorkspaceStore((state) => state.addBoundaryNode);
   const selectedEdgeId = useWorkspaceStore((state) => state.selectedEdgeId);
@@ -188,8 +192,11 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
       if (sourceNode.type === "contextNode" && targetNode.type === "contextNode") {
         return false;
       }
+      if (sourceNode.type === "mcpNode" && targetNode.type === "mcpNode") {
+        return false;
+      }
 
-      if (sourceNode.type === "contextNode") {
+      if (sourceNode.type === "contextNode" || sourceNode.type === "mcpNode") {
         const hasExisting = edges.some(
           (e) => e.source === source && e.target !== target
         );
@@ -243,7 +250,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
   }, []);
 
   const onNodeClick = (_event: React.MouseEvent, node: any) => {
-    if (node.type === "contextNode" || node.type === "stickyNode" || node.type === "boundaryNode") {
+    if (node.type === "contextNode" || node.type === "mcpNode" || node.type === "stickyNode" || node.type === "boundaryNode") {
       setSelectedNodeId(null);
     } else {
       setSelectedNodeId(node.id);
@@ -455,6 +462,17 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
                   <button
                     onClick={() => {
                       const center = getCanvasCenter();
+                      addMcpNode(center.x - 75, center.y - 30, tab.id);
+                      setNodeMenuOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
+                  >
+                    <Plug size={13} className="text-sky-400" />
+                    <span>Create MCP Node</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      const center = getCanvasCenter();
                       addStickyNode(center.x - 100, center.y - 75, tab.id);
                       setNodeMenuOpen(false);
                     }}
@@ -595,6 +613,21 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
               >
                 <Folder size={13} className="text-emerald-400" />
                 <span>Add Context Node</span>
+              </button>
+              <button
+                onClick={() => {
+                  if (!contextMenu || !rfInstance) return;
+                  const flowPosition = rfInstance.screenToFlowPosition({
+                    x: contextMenu.screenX,
+                    y: contextMenu.screenY,
+                  });
+                  addMcpNode(flowPosition.x - 75, flowPosition.y - 30, tab.id);
+                  setContextMenu(null);
+                }}
+                className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
+              >
+                <Plug size={13} className="text-sky-400" />
+                <span>Add MCP Node</span>
               </button>
               <button
                 onClick={() => handleAddNodeFromContextMenu("sticky")}

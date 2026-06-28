@@ -146,7 +146,28 @@ export const Workspace: React.FC = () => {
       })
       .filter((s) => s.length > 0);
 
-    console.log("WebSocket [executeNode] starting task execution", { nodeId, inputFiles });
+    // Gather MCP context from connected MCP nodes (server config + fetch description)
+    const mcpServersMap = useWorkspaceStore.getState().mcpServers;
+    const mcpContext = connectedEdges
+      .map((edge) => currentNodes.find((n) => n.id === edge.source))
+      .filter((n): n is Exclude<typeof n, undefined> => n !== undefined && n.type === "mcpNode" && !!n.data.mcpServerName)
+      .map((n) => {
+        const server = mcpServersMap[n.data.mcpServerName as string];
+        if (!server) return null;
+        return {
+          server,
+          description: (n.data.description as string) || "",
+          nodeName: (n.data.name as string) || "MCP Context",
+        };
+      })
+      .filter((c): c is Exclude<typeof c, null> => c !== null);
+
+    // Also surface MCP fetch intents in the context descriptions sent to the LLM.
+    const mcpDescriptions = mcpContext.map(
+      (c) => `[MCP: ${c.server.displayName || c.server.name}] ${c.description || "Fetch relevant information from this MCP server."}`
+    );
+
+    console.log("WebSocket [executeNode] starting task execution", { nodeId, inputFiles, mcpContext: mcpContext.length });
 
     clearLogs(nodeId);
     setNodeStatus(nodeId, "running");
@@ -182,8 +203,8 @@ export const Workspace: React.FC = () => {
         formattedPrompt += `<general context>\n${globalContextSummary}\n</general context>\n`;
       }
       formattedPrompt += `<TaskNodeContent>\n${node.data.prompt || ""}\n</TaskNodeContent>\n`;
-      if (contextDescriptions.length > 0) {
-        formattedPrompt += `<Context>\n${contextDescriptions.join("\n")}\n</Context>`;
+      if (contextDescriptions.length > 0 || mcpDescriptions.length > 0) {
+        formattedPrompt += `<Context>\n${[...contextDescriptions, ...mcpDescriptions].join("\n")}\n</Context>`;
       }
 
       const userMsg = {
@@ -213,6 +234,7 @@ export const Workspace: React.FC = () => {
           inputFiles,
           globalContext: globalContextSummary || "",
           contextDescriptions,
+          mcpContext,
           chatHistory: chatHistoryToSend,
           customProvider:
             provider &&

@@ -10,19 +10,22 @@ import { WebSocket } from "ws";
 import path from "path";
 import { safeSend, getNextId, registerPendingRequest } from "../services/websocket";
 import { createListFilesTool, createSearchCodebaseTool } from "../services/tools";
+import { createMcpTools, McpServerConfig } from "../services/mcpClient";
 
 export async function executeNode(ws: WebSocket, data: any): Promise<void> {
-  const { nodeId, instructions, model, workspaceRoot, inputFiles, customProvider, globalContext, contextDescriptions, chatHistory, skill } = data;
+  const { nodeId, instructions, model, workspaceRoot, inputFiles, customProvider, globalContext, contextDescriptions, chatHistory, skill, mcpContext } = data;
   console.log(`WebSocket [Server] execute_node task starting`, {
     nodeId,
     model,
     workspaceRoot,
     inputFilesCount: inputFiles?.length || 0,
     chatHistoryCount: chatHistory?.length || 0,
-    hasSkill: !!skill
+    hasSkill: !!skill,
+    mcpContextCount: mcpContext?.length || 0
   });
 
   const modifiedFiles = new Set<string>();
+  const mcpDisposers: Array<() => void> = [];
 
   const sendLog = (message: string) => {
     safeSend(ws, { type: "log", nodeId, message });
@@ -126,8 +129,34 @@ export async function executeNode(ws: WebSocket, data: any): Promise<void> {
       createSearchCodebaseTool(workspaceRoot)
     ];
 
+    // Connect to MCP servers attached via MCP context nodes and merge their tools.
+    const mcpToolDescriptions: string[] = [];
+    if (Array.isArray(mcpContext) && mcpContext.length > 0) {
+      for (const ctx of mcpContext) {
+        const server: McpServerConfig = ctx.server;
+        const description: string = ctx.description || "";
+        try {
+          const { tools: mcpTools, dispose } = await createMcpTools(server, sendLog);
+          mcpDisposers.push(dispose);
+          for (const t of mcpTools) {
+            allTools.push(t);
+            mcpToolDescriptions.push(`- '${t.name}': ${t.description}`);
+          }
+          if (description) {
+            mcpToolDescriptions.push(`  (User intent for ${server.name}: ${description})`);
+          }
+        } catch (err: any) {
+          sendLog(`MCP context "${server.name}" could not be loaded: ${err.message}`);
+        }
+      }
+    }
+
     const enabledToolNames = skill?.enabledTools || ["read_file", "write_file", "list_files", "search_codebase"];
-    const tools = allTools.filter((t: any) => enabledToolNames.includes(t.name));
+    // Built-in tools are filtered by the skill; MCP tools are always available.
+    const tools = [
+      ...allTools.filter((t: any) => enabledToolNames.includes(t.name)),
+      ...allTools.filter((t: any) => t.name.startsWith("mcp__")),
+    ];
 
     const toolDescriptions: Record<string, string> = {
       read_file: "- 'read_file': Read a file's current content before editing it.",
@@ -135,7 +164,10 @@ export async function executeNode(ws: WebSocket, data: any): Promise<void> {
       list_files: "- 'list_files': Discover files in the workspace.",
       search_codebase: "- 'search_codebase': Find specific code patterns.",
     };
-    const toolListText = enabledToolNames.map((name: string) => toolDescriptions[name] || `- '${name}'`).join("\n");
+    const toolListText = [
+      ...enabledToolNames.map((name: string) => toolDescriptions[name] || `- '${name}'`),
+      ...mcpToolDescriptions,
+    ].join("\n");
 
     const filesList = inputFiles && inputFiles.length > 0
       ? `You have direct read/write access to the following connected files:
@@ -150,6 +182,7 @@ Workspace directory root: ${workspaceRoot || "unknown"}
 ${filesList}
 ${globalContext ? `\n--- GLOBAL ARCHITECTURAL GUIDELINES ---\n${globalContext}\n` : ""}
 ${contextDescriptions && contextDescriptions.length > 0 ? `\n--- CONNECTED CONTEXT DESCRIPTIONS ---\n${contextDescriptions.join("\n")}\n` : ""}
+${mcpToolDescriptions.length > 0 ? `\n--- MCP TOOL INTEGRATIONS ---\nThe following tools connect to external MCP servers. Use them to fetch the information requested in the connected MCP context descriptions.\n${mcpToolDescriptions.join("\n")}\n` : ""}
 Remember:
 ${toolListText}
 - Always output clean code without placeholder comments.
@@ -260,6 +293,7 @@ CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
     }
 
     console.log(`WebSocket [Server] Task complete. Sending success payload...`);
+    mcpDisposers.forEach((d) => d());
     safeSend(ws, {
       type: "execution_success",
       nodeId,
@@ -267,7 +301,8 @@ CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
     });
 
   } catch (err: any) {
-    console.error("WebSocket [Server] execute_node failed:", err);
+    console.error(`WebSocket [Server] execute_node failed:`, err);
+    mcpDisposers.forEach((d) => d());
     sendLog(`Critical failure: ${err.message}`);
     safeSend(ws, {
       type: "execution_error",

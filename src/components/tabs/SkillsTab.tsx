@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useWorkspaceStore, Skill } from "../../store";
 import { skillsService } from "../../services/skillsService";
-import { Cpu, Plus, Trash2, Save, Wand2 } from "lucide-react";
+import { Cpu, Plus, Trash2, Save, Wand2, Plug } from "lucide-react";
 import { CustomSelect } from "../CustomSelect";
 
 const AVAILABLE_TOOLS = [
@@ -18,6 +18,7 @@ export const SkillsTab: React.FC = () => {
   const deleteSkill = useWorkspaceStore((state) => state.deleteSkill);
   const rootPath = useWorkspaceStore((state) => state.rootPath);
   const customProviders = useWorkspaceStore((state) => state.customProviders);
+  const mcpServers = useWorkspaceStore((state) => state.mcpServers);
 
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const [editingSkill, setEditingSkill] = useState<Partial<Skill> | null>(null);
@@ -51,6 +52,7 @@ export const SkillsTab: React.FC = () => {
       description: "",
       systemPrompt: "",
       enabledTools: ["read_file", "write_file", "list_files", "search_codebase"],
+      mcpServers: [],
       isBuiltIn: false,
       icon: "help",
       createdAt: new Date().toISOString(),
@@ -70,6 +72,7 @@ export const SkillsTab: React.FC = () => {
       systemPrompt: editingSkill.systemPrompt || "",
       enabledTools: editingSkill.enabledTools || [],
       preferredModel: editingSkill.preferredModel,
+      mcpServers: editingSkill.mcpServers || [],
       isBuiltIn: editingSkill.isBuiltIn || false,
       icon: editingSkill.icon,
       createdAt: editingSkill.createdAt || new Date().toISOString(),
@@ -110,6 +113,15 @@ export const SkillsTab: React.FC = () => {
       ? current.filter((t) => t !== toolId)
       : [...current, toolId];
     setEditingSkill({ ...editingSkill, enabledTools: updated });
+  };
+
+  const handleMcpToggle = (serverName: string) => {
+    if (!editingSkill) return;
+    const current = editingSkill.mcpServers || [];
+    const updated = current.includes(serverName)
+      ? current.filter((n) => n !== serverName)
+      : [...current, serverName];
+    setEditingSkill({ ...editingSkill, mcpServers: updated });
   };
 
   const handleGenerateWithAI = async (model: string, description: string) => {
@@ -325,6 +337,44 @@ export const SkillsTab: React.FC = () => {
                       );
                     })}
                   </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider font-mono block mb-2">
+                    Allowed MCP Servers
+                  </label>
+                  {Object.keys(mcpServers).length === 0 ? (
+                    <p className="text-[10px] font-mono text-[var(--text-muted)] py-2 px-3 border border-dashed border-[var(--border-color)] rounded-lg">
+                      No MCP servers configured. Add one via the MCP Integration tab.
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {Object.entries(mcpServers).map(([name, srv]) => {
+                        const selected = (editingSkill.mcpServers || []).includes(name);
+                        return (
+                          <button
+                            key={name}
+                            onClick={() => handleMcpToggle(name)}
+                            className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border transition-all ${
+                              selected
+                                ? "border-sky-500 bg-sky-500/15 text-sky-300"
+                                : "border-[var(--border-color)] bg-[var(--bg-app)]/50 text-[var(--text-muted)] hover:border-sky-500/50 hover:text-[var(--text-light)]"
+                            }`}
+                            title={srv.transport.url || srv.transport.command || name}
+                          >
+                            <Plug size={12} className={selected ? "text-sky-400" : "text-[var(--text-muted)]"} />
+                            <span className="text-[11px] font-bold">{srv.displayName || name}</span>
+                            {!srv.enabled && (
+                              <span className="text-[8px] font-mono text-[var(--text-muted)] uppercase">off</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <p className="text-[9px] text-[var(--text-muted)] font-mono mt-1.5">
+                    Selected servers expose their tools to the LLM when this skill is active.
+                  </p>
                 </div>
 
                 <div>

@@ -65,6 +65,13 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       const currentExploreModel = selectedNode?.data?.exploreModel || currentActiveModel;
       const chatHistory = useWorkspaceStore.getState().globalChatHistory[selectedNodeId] || [];
 
+      // Resolve an MCP server selected on the Global Explorer node, if any.
+      const mcpServerName = selectedNode?.data?.mcpServerName as string | undefined;
+      const mcpServersMap = useWorkspaceStore.getState().mcpServers;
+      const mcpServers = mcpServerName && mcpServersMap[mcpServerName]
+        ? [mcpServersMap[mcpServerName]]
+        : [];
+
       socket.send(JSON.stringify({
         type: "global_explore",
         nodeId: selectedNodeId,
@@ -72,6 +79,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
         workspaceRoot: rootPath,
         model: currentExploreModel,
         chatHistory: chatHistory.map((m) => ({ role: m.role, content: m.content })),
+        mcpServers,
         customProvider:
           prov &&
           (prov.id !== "anthropic" && prov.id !== "openai" || !!prov.apiKey)

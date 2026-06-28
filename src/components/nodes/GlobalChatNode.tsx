@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, memo, useContext } from "react";
-import { Globe, Pencil, Check, Trash2, Sparkles, X, Loader2 } from "lucide-react";
+import { Globe, Pencil, Check, Trash2, Sparkles, X, Loader2, Plug, ChevronDown } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
 import { processResponse } from "../../services/responseProcessingService";
 import { CanvasTabContext } from "../tabs/canvas/CanvasTabContext";
@@ -9,10 +9,12 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
   const updateNode = useWorkspaceStore((state) => state.updateTaskNode);
   const deleteNode = useWorkspaceStore((state) => state.deleteNode);
   const globalContextSummary = useWorkspaceStore((state) => state.globalContextSummary);
+  const mcpServers = useWorkspaceStore((state) => state.mcpServers);
   const nodeStatus = useWorkspaceStore((state) => (state.canvasContexts[tabId] || { nodeStatus: {} }).nodeStatus[id] || "idle");
 
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(data.name || "Global Explorer");
+  const [mcpMenuOpen, setMcpMenuOpen] = useState(false);
 
   // Resize state
   const [width, setWidth] = useState(data.width || 384);
@@ -145,12 +147,61 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
 
       {/* Node Content */}
       <div className="p-3 flex-1 flex flex-col min-h-0 overflow-hidden">
+        {/* MCP server selector — lets the explorer call MCP tools */}
+        <div className="flex-shrink-0 mb-2">
+          <div className="relative">
+            <button
+              onClick={(e) => { e.stopPropagation(); setMcpMenuOpen(!mcpMenuOpen); }}
+              onPointerDown={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="nodrag w-full bg-[var(--bg-app)]/60 border border-[var(--border-color)] rounded-lg px-2 py-1.5 text-[10px] font-sans text-left flex items-center justify-between hover:border-violet-500/50 transition-colors"
+              title="Route exploration through an MCP server"
+            >
+              <span className="flex items-center space-x-1.5 min-w-0">
+                <Plug size={11} className="text-sky-400 flex-shrink-0" />
+                <span className={data.mcpServerName ? "text-[var(--text-light)] truncate" : "text-[var(--text-muted)] truncate"}>
+                  {data.mcpServerName ? (mcpServers[data.mcpServerName]?.displayName || data.mcpServerName) : "MCP: none"}
+                </span>
+              </span>
+              <ChevronDown size={11} className="text-[var(--text-muted)] flex-shrink-0 ml-2" />
+            </button>
+            {mcpMenuOpen && (
+              <div
+                className="absolute z-30 left-0 right-0 mt-1 bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-lg shadow-xl py-1 max-h-44 overflow-y-auto"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  onClick={(e) => { e.stopPropagation(); updateNode(id, { mcpServerName: "" }); setMcpMenuOpen(false); }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="w-full text-left px-2.5 py-1.5 hover:bg-[var(--accent-bg)] text-[10px] font-sans text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors"
+                >
+                  MCP: none
+                </button>
+                {Object.keys(mcpServers).map((name) => {
+                  const srv = mcpServers[name];
+                  return (
+                    <button
+                      key={name}
+                      onClick={(e) => { e.stopPropagation(); updateNode(id, { mcpServerName: name }); setMcpMenuOpen(false); }}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      className="w-full text-left px-2.5 py-1.5 hover:bg-[var(--accent-bg)] text-[10px] font-sans text-[var(--text-normal)] hover:text-[var(--text-light)] transition-colors flex items-center justify-between"
+                    >
+                      <span className="truncate">{srv.displayName || srv.name}</span>
+                      <span className="text-[8px] font-mono ml-2 text-[var(--text-muted)]">{srv.transport.type}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
         {summaryText ? (
           <div className="flex flex-col flex-1 min-h-0 space-y-1.5">
             <div className="text-[9px] uppercase font-bold text-violet-400 font-sans tracking-wide flex-shrink-0">
               Global Context Summary
             </div>
-            <div 
+            <div
               className="nodrag text-xs font-sans font-medium text-[var(--text-light)] leading-relaxed flex-1 overflow-y-auto whitespace-pre-wrap bg-[var(--bg-app)]/50 rounded-lg p-2.5 border border-[var(--border-color)] w-full antialiased subpixel-antialiased select-text"
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}

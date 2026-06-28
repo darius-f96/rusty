@@ -1,9 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { Plug, Plus, Pencil, Trash2, Power } from "lucide-react";
-import { McpConfigFile, McpServerConfig, TransportType, AuthType } from "./types";
+import { McpServerConfig, TransportType, AuthType } from "./types";
 import { McpIntegrationModal } from "./McpIntegrationModal";
-
-const STORAGE_KEY = "axiom_mcp_config";
+import { useWorkspaceStore } from "../../store";
 
 const TRANSPORT_LABEL: Record<TransportType, string> = {
   http: "HTTP",
@@ -19,44 +18,19 @@ const AUTH_LABEL: Record<AuthType, string> = {
   oauth2: "OAuth 2.0",
 };
 
-const emptyConfig: McpConfigFile = { mcpServers: {} };
-
-function loadConfig(): McpConfigFile {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return emptyConfig;
-    const parsed = JSON.parse(raw) as McpConfigFile;
-    if (parsed && parsed.mcpServers && typeof parsed.mcpServers === "object") {
-      return parsed;
-    }
-    return emptyConfig;
-  } catch {
-    return emptyConfig;
-  }
-}
-
 interface EditingState {
   name?: string;
   server?: McpServerConfig;
 }
 
 export const McpIntegrationTab: React.FC = () => {
-  const [config, setConfig] = useState<McpConfigFile>(emptyConfig);
+  const mcpServers = useWorkspaceStore((state) => state.mcpServers);
+  const addMcpServer = useWorkspaceStore((state) => state.addMcpServer);
+  const updateMcpServer = useWorkspaceStore((state) => state.updateMcpServer);
+  const removeMcpServer = useWorkspaceStore((state) => state.removeMcpServer);
   const [editing, setEditing] = useState<EditingState | null>(null);
 
-  useEffect(() => {
-    setConfig(loadConfig());
-  }, []);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
-    } catch (e) {
-      console.error("Failed to persist MCP config:", e);
-    }
-  }, [config]);
-
-  const servers = Object.values(config.mcpServers);
+  const servers = Object.values(mcpServers);
 
   const handleAdd = () => setEditing({});
   const handleEdit = (server: McpServerConfig) =>
@@ -64,39 +38,24 @@ export const McpIntegrationTab: React.FC = () => {
   const handleCancel = () => setEditing(null);
 
   const handleSave = (cfg: McpServerConfig) => {
-    setConfig((prev) => {
-      const next = { ...prev.mcpServers };
-      if (editing?.name && editing.name !== cfg.name) {
-        delete next[editing.name];
-      }
-      next[cfg.name] = cfg;
-      return { mcpServers: next };
-    });
+    if (editing?.name && editing.name !== cfg.name) {
+      removeMcpServer(editing.name);
+    }
+    addMcpServer(cfg);
     setEditing(null);
   };
 
   const handleDelete = (name: string) => {
-    setConfig((prev) => {
-      const next = { ...prev.mcpServers };
-      delete next[name];
-      return { mcpServers: next };
-    });
+    removeMcpServer(name);
   };
 
   const toggleEnabled = (name: string) => {
-    setConfig((prev) => {
-      const existing = prev.mcpServers[name];
-      if (!existing) return prev;
-      return {
-        mcpServers: {
-          ...prev.mcpServers,
-          [name]: { ...existing, enabled: !existing.enabled },
-        },
-      };
-    });
+    const existing = mcpServers[name];
+    if (!existing) return;
+    updateMcpServer(name, { enabled: !existing.enabled });
   };
 
-  const existingNames = Object.keys(config.mcpServers).filter(
+  const existingNames = Object.keys(mcpServers).filter(
     (n) => n !== editing?.name
   );
 

@@ -12,14 +12,17 @@ import fs from "fs";
 import { safeSend, getNextId, registerPendingRequest } from "../services/websocket";
 import { createListFilesTool, createSearchCodebaseTool, listFilesRecursive } from "../services/tools";
 import { callLlmWithToolsMultiRound, LlmConfig } from "../services/llm";
+import { createMcpTools, McpServerConfig } from "../services/mcpClient";
 
 export async function globalExplore(ws: WebSocket, data: any): Promise<void> {
-  const { nodeId, prompt, workspaceRoot, model, chatHistory, customProvider } = data;
-  console.log(`WebSocket [Server] global_explore starting`, { nodeId, workspaceRoot, model });
+  const { nodeId, prompt, workspaceRoot, model, chatHistory, customProvider, mcpServers } = data;
+  console.log(`WebSocket [Server] global_explore starting`, { nodeId, workspaceRoot, model, mcpCount: mcpServers?.length || 0 });
 
   const sendLog = (message: string) => {
     safeSend(ws, { type: "log", nodeId, message });
   };
+
+  const mcpDisposers: Array<() => void> = [];
 
   try {
     const readVfsTool = {
@@ -79,6 +82,23 @@ export async function globalExplore(ws: WebSocket, data: any): Promise<void> {
       createSearchCodebaseTool(workspaceRoot)
     ];
 
+    // Merge tools from any MCP servers selected on the Global Explorer node.
+    const mcpToolLines: string[] = [];
+    if (Array.isArray(mcpServers) && mcpServers.length > 0) {
+      for (const server of mcpServers as McpServerConfig[]) {
+        try {
+          const { tools: mcpTools, dispose } = await createMcpTools(server, sendLog);
+          mcpDisposers.push(dispose);
+          for (const t of mcpTools) {
+            tools.push(t);
+            mcpToolLines.push(`- '${t.name}': ${t.description}`);
+          }
+        } catch (err: any) {
+          sendLog(`MCP server "${server.name}" could not be loaded: ${err.message}`);
+        }
+      }
+    }
+
     const systemPrompt = `You are a codebase exploration assistant inside a spatial development canvas called Axiom.
 Your job is to analyze the workspace and provide architectural summaries, patterns, and guidelines.
 
@@ -88,8 +108,9 @@ You have access to tools:
 - 'read': Read any file in the workspace (input: {{"path": "file/path"}}).
 - 'list_files': List all files in the workspace recursively (no input needed).
 - 'search_codebase': Search for text patterns across the codebase (input: {{"pattern": "search text"}}).
-
+${mcpToolLines.length > 0 ? `\nMCP integration tools (external data sources):\n${mcpToolLines.join("\n")}\n` : ""}
 IMPORTANT: Always use tools to explore the codebase before answering. Start by listing files, then read relevant ones.
+${mcpToolLines.length > 0 ? "If the user asks for external information available via MCP tools, call those tools to fetch it.\n" : ""}
 
 After exploring, provide:
 1. A clear architectural summary of the codebase structure.
@@ -188,6 +209,7 @@ IMPORTANT: End your response with a section marked "--- SUMMARY ---" that contai
     }
 
     console.log(`WebSocket [Server] Global Explore completed. Response length: ${responseText.length} chars`);
+    mcpDisposers.forEach((d) => d());
 
     safeSend(ws, {
       type: "global_explore_complete",
@@ -196,7 +218,8 @@ IMPORTANT: End your response with a section marked "--- SUMMARY ---" that contai
       summary
     });
   } catch (err: any) {
-    console.error("WebSocket [Server] global_explore error:", err);
+    console.error(`WebSocket [Server] global_explore error:`, err);
+    mcpDisposers.forEach((d) => d());
     safeSend(ws, {
       type: "global_explore_error",
       nodeId,

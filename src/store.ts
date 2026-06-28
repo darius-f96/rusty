@@ -13,6 +13,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { themes, applyThemeProperties, defineMonacoTheme } from "./theme";
 import { loader } from "@monaco-editor/react";
 import { skillsService } from "./services/skillsService";
+import { McpServerConfig } from "./components/mcp/types";
 
 export interface CustomProvider {
   id: string;
@@ -84,6 +85,7 @@ export interface Skill {
   systemPrompt: string;
   enabledTools: string[];
   preferredModel?: string;
+  mcpServers: string[];
   isBuiltIn: boolean;
   icon?: string;
   createdAt: string;
@@ -161,6 +163,12 @@ export interface WorkspaceState {
   setActiveSkill: (id: string | null) => void;
   loadSkills: () => Promise<void>;
 
+  mcpServers: Record<string, McpServerConfig>;
+  setMcpServers: (servers: Record<string, McpServerConfig>) => void;
+  addMcpServer: (server: McpServerConfig) => void;
+  updateMcpServer: (name: string, updates: Partial<McpServerConfig>) => void;
+  removeMcpServer: (name: string) => void;
+
   activeThemeId: string;
   setActiveThemeId: (themeId: string) => void;
   
@@ -178,6 +186,7 @@ export interface WorkspaceState {
   addContextNode: (x: number, y: number, fileContext?: { path: string; name: string; isDir: boolean }, tabId?: string) => void;
   addTaskNode: (x: number, y: number, tabId?: string) => void;
   addGlobalChatNode: (x: number, y: number, tabId?: string) => void;
+  addMcpNode: (x: number, y: number, tabId?: string) => void;
   addStickyNode: (x: number, y: number, tabId?: string, color?: string) => void;
   addBoundaryNode: (x: number, y: number, tabId?: string) => void;
   updateTaskNode: (id: string, data: any) => void;
@@ -395,6 +404,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       description: "Focus on implementing features, writing clean code, and running tests. Be action-oriented.",
       systemPrompt: "You are an AI coding agent specialized in building features and implementing code. Your focus is to take user requirements and turn them into working code as efficiently as possible.\n\nGuidelines:\n- Write clean, maintainable code\n- Follow the existing code style and patterns in the project\n- Break down complex tasks into manageable pieces\n- Test your changes when possible\n- Keep explanations concise but informative\n- When done, summarize what was implemented",
       enabledTools: ["read_file", "write_file", "list_files", "search_codebase"],
+      mcpServers: [],
       isBuiltIn: true,
       icon: "hammer",
       createdAt: new Date().toISOString(),
@@ -406,6 +416,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       description: "Analyze architecture, explore code, and propose plans. Read-only focus.",
       systemPrompt: "You are an AI coding agent specialized in analysis, architecture planning, and code exploration. Your focus is to deeply understand the codebase and help users plan their approach.\n\nGuidelines:\n- Read and analyze existing code thoroughly before making suggestions\n- Ask clarifying questions to understand the full context\n- Provide structured plans with clear steps\n- Identify potential issues or risks in proposed approaches\n- Suggest trade-offs and alternatives\n- Do NOT write code unless explicitly requested\n- When exploring, provide detailed findings about the code structure",
       enabledTools: ["read_file", "list_files", "search_codebase"],
+      mcpServers: [],
       isBuiltIn: true,
       icon: "map",
       createdAt: new Date().toISOString(),
@@ -417,6 +428,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       description: "Ask many clarifying questions before doing anything. Thoroughly understand requirements first.",
       systemPrompt: "You are an AI coding agent specialized in understanding requirements through dialogue. Before taking any action, you must thoroughly understand what the user wants to achieve.\n\nGuidelines:\n- Ask detailed clarifying questions about requirements\n- Break down the task into smaller, well-defined pieces\n- Understand the desired outcome before suggesting approaches\n- Explore the relevant parts of the codebase to ground your understanding\n- Confirm your understanding with the user before proceeding\n- Do not write any code until you have a thorough understanding\n- Use questions to uncover requirements, constraints, and priorities\n- Be thorough - it's better to ask more questions now than to misunderstand later\n- Once you fully understand the task, propose a clear action plan for user approval",
       enabledTools: ["read_file", "write_file", "list_files", "search_codebase"],
+      mcpServers: [],
       isBuiltIn: true,
       icon: "help",
       createdAt: new Date().toISOString(),
@@ -424,6 +436,18 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     }
   ],
   activeSkillId: null,
+  mcpServers: (() => {
+    try {
+      const raw = localStorage.getItem("axiom_mcp_config");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.mcpServers && typeof parsed.mcpServers === "object") {
+          return parsed.mcpServers as Record<string, McpServerConfig>;
+        }
+      }
+    } catch { /* ignore */ }
+    return {};
+  })(),
   editorGroups: [
     { id: "group_0", openTabs: [{ id: "canvas", type: "canvas" as const, title: "Axiom", key: "canvas" }], activeTabId: "canvas" }
   ],
@@ -532,7 +556,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       const userSkills = await skillsService.loadSkills(rootPath);
       const builtInSkills = useWorkspaceStore.getState().skills.filter(s => s.isBuiltIn);
       const existingUserIds = new Set(builtInSkills.map(s => s.id));
-      const newUserSkills = userSkills.filter((us: Skill) => !existingUserIds.has(us.id));
+      const newUserSkills = userSkills
+        .filter((us: Skill) => !existingUserIds.has(us.id))
+        .map((us: Skill) => ({ ...us, mcpServers: us.mcpServers || [] }));
       const allSkills = [...builtInSkills, ...newUserSkills];
       set({ skills: allSkills });
     } catch (e) {
@@ -845,6 +871,29 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
 
   setActiveSkill: (id) => set({ activeSkillId: id }),
 
+  setMcpServers: (servers) => {
+    set({ mcpServers: servers });
+    setTimeout(() => useWorkspaceStore.getState().saveSecureConfig(), 0);
+  },
+  addMcpServer: (server) => set((state) => {
+    const next = { ...state.mcpServers, [server.name]: server };
+    setTimeout(() => useWorkspaceStore.getState().saveSecureConfig(), 0);
+    return { mcpServers: next };
+  }),
+  updateMcpServer: (name, updates) => set((state) => {
+    const existing = state.mcpServers[name];
+    if (!existing) return {};
+    const next = { ...state.mcpServers, [name]: { ...existing, ...updates } };
+    setTimeout(() => useWorkspaceStore.getState().saveSecureConfig(), 0);
+    return { mcpServers: next };
+  }),
+  removeMcpServer: (name) => set((state) => {
+    const next = { ...state.mcpServers };
+    delete next[name];
+    setTimeout(() => useWorkspaceStore.getState().saveSecureConfig(), 0);
+    return { mcpServers: next };
+  }),
+
   addContextNode: (x, y, fileContext, tabId) => set((state) => {
     const targetTabId = tabId || getActiveCanvasTabId(state);
     const id = `context_${Date.now()}`;
@@ -949,6 +998,41 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         summary: "",
         width: 384,
         height: 220
+      }
+    };
+    return updateContextAndSync(state, targetTabId, (ctx) => ({
+      nodes: [...ctx.nodes, newNode]
+    }));
+  }),
+
+  addMcpNode: (x, y, tabId) => set((state) => {
+    const targetTabId = tabId || getActiveCanvasTabId(state);
+    const id = `mcp_${Date.now()}`;
+    const targetCtx = getOrCreateContext(state, targetTabId);
+
+    let finalX = x;
+    let finalY = y;
+    let attempts = 0;
+    while (
+      targetCtx.nodes.some(
+        (n) => Math.abs(n.position.x - finalX) < 60 && Math.abs(n.position.y - finalY) < 60
+      ) &&
+      attempts < 100
+    ) {
+      finalX += 50;
+      finalY += 50;
+      attempts++;
+    }
+
+    const newNode: Node = {
+      id,
+      type: "mcpNode",
+      position: { x: finalX, y: finalY },
+      data: {
+        id,
+        name: "MCP Context",
+        mcpServerName: "",
+        description: "",
       }
     };
     return updateContextAndSync(state, targetTabId, (ctx) => ({
@@ -1543,6 +1627,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       activeModel: state.activeModel,
       activeThemeId: state.activeThemeId,
       lastWorkspacePath: state.rootPath,
+      mcpServers: state.mcpServers,
     });
   },
 
@@ -1554,6 +1639,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       activeModel?: string;
       activeThemeId?: string;
       lastWorkspacePath?: string;
+      mcpServers?: Record<string, McpServerConfig>;
     }>("axiom_secure_config");
 
     if (config) {
@@ -1561,6 +1647,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       if (config.customProviders) updates.customProviders = config.customProviders;
       if (config.activeCustomProviderId !== undefined) updates.activeCustomProviderId = config.activeCustomProviderId;
       if (config.activeModel) updates.activeModel = config.activeModel;
+      if (config.mcpServers) updates.mcpServers = config.mcpServers;
 
       if (config.activeThemeId) {
         updates.activeThemeId = config.activeThemeId;
