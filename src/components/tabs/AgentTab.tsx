@@ -27,8 +27,12 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
   const openTab = useWorkspaceStore((state) => state.openTab);
   const setFileTree = useWorkspaceStore((state) => state.setFileTree);
   const loadGitStatus = useWorkspaceStore((state) => state.loadGitStatus);
+  const skills = useWorkspaceStore((state) => state.skills);
+  const activeSkillId = useWorkspaceStore((state) => state.activeSkillId);
+  const setActiveSkill = useWorkspaceStore((state) => state.setActiveSkill);
 
   const [selectedModel, setSelectedModel] = useState(activeModel);
+  const [selectedSkillId, setSelectedSkillId] = useState<string | null>(activeSkillId);
   const [message, setMessage] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [fileReferences, setFileReferences] = useState<FileReference[]>([]);
@@ -102,6 +106,10 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
   }, [selectedModel]);
 
   useEffect(() => {
+    setSelectedSkillId(activeSkillId);
+  }, [activeSkillId]);
+
+  useEffect(() => {
     return () => {
       if (agentSocketRef.current) {
         agentSocketRef.current.close();
@@ -158,6 +166,13 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
       const currentActiveProviderId = useWorkspaceStore.getState().activeCustomProviderId;
       const prov = currentProviders.find((p) => p.id === currentActiveProviderId);
       const chatHistory = useWorkspaceStore.getState().agentChats[tab.id] || [];
+      const currentSkills = useWorkspaceStore.getState().skills;
+      const selectedSkill = selectedSkillId ? currentSkills.find((s: any) => s.id === selectedSkillId) : null;
+      const skillData = selectedSkill ? {
+        systemPrompt: selectedSkill.systemPrompt,
+        enabledTools: selectedSkill.enabledTools,
+        preferredModel: selectedSkill.preferredModel,
+      } : null;
 
       socket.send(JSON.stringify({
         type: "agent_chat",
@@ -173,6 +188,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
           (prov.id !== "anthropic" && prov.id !== "openai" || !!prov.apiKey)
             ? prov
             : null,
+        skill: skillData,
       }));
     };
 
@@ -648,6 +664,16 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
             options={modelOptions}
             placeholder="Select model"
             className="w-64"
+          />
+          <CustomSelect
+            value={selectedSkillId || ""}
+            onChange={(val) => {
+              setSelectedSkillId(val || null);
+              setActiveSkill(val || null);
+            }}
+            options={[{ id: "", name: "No skill" }, ...skills.map(s => ({ id: s.id, name: s.name }))]}
+            placeholder="Select skill"
+            className="w-48"
           />
           {modifiedFiles.length > 0 && (
             <span className="flex items-center space-x-1.5 px-2.5 py-1 bg-emerald-500/15 border border-emerald-500/30 rounded-lg text-[10px] font-mono text-emerald-300">

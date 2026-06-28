@@ -12,6 +12,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { themes, applyThemeProperties, defineMonacoTheme } from "./theme";
 import { loader } from "@monaco-editor/react";
+import { skillsService } from "./services/skillsService";
 
 export interface CustomProvider {
   id: string;
@@ -44,7 +45,7 @@ export interface GitStatusResult {
 
 export interface Tab {
   id: string;
-  type: "canvas" | "file" | "task" | "settings" | "llm-setup" | "git-diff" | "git-history" | "workspace" | "agent";
+  type: "canvas" | "file" | "task" | "settings" | "llm-setup" | "git-diff" | "git-history" | "workspace" | "agent" | "skills";
   title: string;
   key: string;
   diffType?: "staged" | "unstaged" | "commit";
@@ -74,6 +75,19 @@ export interface AgentPermissionRequest {
   toolCall: AgentToolCall;
   description: string;
   timestamp: string;
+}
+
+export interface Skill {
+  id: string;
+  name: string;
+  description: string;
+  systemPrompt: string;
+  enabledTools: string[];
+  preferredModel?: string;
+  isBuiltIn: boolean;
+  icon?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface EditorGroup {
@@ -136,7 +150,15 @@ export interface WorkspaceState {
   clearAgentStream: (tabId: string) => void;
   addAgentPermissionRequest: (tabId: string, request: AgentPermissionRequest) => void;
   resolveAgentPermission: (tabId: string, requestId: string, approved: boolean) => void;
-  
+
+  skills: Skill[];
+  activeSkillId: string | null;
+  addSkill: (skill: Skill) => void;
+  updateSkill: (id: string, updates: Partial<Skill>) => void;
+  deleteSkill: (id: string) => void;
+  setActiveSkill: (id: string | null) => void;
+  loadSkills: () => Promise<void>;
+
   activeThemeId: string;
   setActiveThemeId: (themeId: string) => void;
   
@@ -362,6 +384,42 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   gitStatus: null,
   devLogs: [],
   showDevConsole: false,
+  skills: [
+    {
+      id: "skill_build",
+      name: "build",
+      description: "Focus on implementing features, writing clean code, and running tests. Be action-oriented.",
+      systemPrompt: "You are an AI coding agent specialized in building features and implementing code. Your focus is to take user requirements and turn them into working code as efficiently as possible.\n\nGuidelines:\n- Write clean, maintainable code\n- Follow the existing code style and patterns in the project\n- Break down complex tasks into manageable pieces\n- Test your changes when possible\n- Keep explanations concise but informative\n- When done, summarize what was implemented",
+      enabledTools: ["read_file", "write_file", "list_files", "search_codebase"],
+      isBuiltIn: true,
+      icon: "hammer",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    },
+    {
+      id: "skill_plan",
+      name: "plan",
+      description: "Analyze architecture, explore code, and propose plans. Read-only focus.",
+      systemPrompt: "You are an AI coding agent specialized in analysis, architecture planning, and code exploration. Your focus is to deeply understand the codebase and help users plan their approach.\n\nGuidelines:\n- Read and analyze existing code thoroughly before making suggestions\n- Ask clarifying questions to understand the full context\n- Provide structured plans with clear steps\n- Identify potential issues or risks in proposed approaches\n- Suggest trade-offs and alternatives\n- Do NOT write code unless explicitly requested\n- When exploring, provide detailed findings about the code structure",
+      enabledTools: ["read_file", "list_files", "search_codebase"],
+      isBuiltIn: true,
+      icon: "map",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    },
+    {
+      id: "skill_grind_me",
+      name: "grind-me",
+      description: "Ask many clarifying questions before doing anything. Thoroughly understand requirements first.",
+      systemPrompt: "You are an AI coding agent specialized in understanding requirements through dialogue. Before taking any action, you must thoroughly understand what the user wants to achieve.\n\nGuidelines:\n- Ask detailed clarifying questions about requirements\n- Break down the task into smaller, well-defined pieces\n- Understand the desired outcome before suggesting approaches\n- Explore the relevant parts of the codebase to ground your understanding\n- Confirm your understanding with the user before proceeding\n- Do not write any code until you have a thorough understanding\n- Use questions to uncover requirements, constraints, and priorities\n- Be thorough - it's better to ask more questions now than to misunderstand later\n- Once you fully understand the task, propose a clear action plan for user approval",
+      enabledTools: ["read_file", "write_file", "list_files", "search_codebase"],
+      isBuiltIn: true,
+      icon: "help",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+  ],
+  activeSkillId: null,
   editorGroups: [
     { id: "group_0", openTabs: [{ id: "canvas", type: "canvas" as const, title: "Axiom", key: "canvas" }], activeTabId: "canvas" }
   ],
@@ -432,6 +490,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       nodeStatus: {}
     });
     useWorkspaceStore.getState().loadGitStatus();
+    useWorkspaceStore.getState().loadSkills();
     setTimeout(() => useWorkspaceStore.getState().saveSecureConfig(), 0);
   },
   setGitStatus: (status) => set({ gitStatus: status }),
@@ -460,6 +519,20 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       set({ gitStatus: mappedStatus });
     } catch (err) {
       console.error("Failed to load git status:", err);
+    }
+  },
+  loadSkills: async () => {
+    const rootPath = useWorkspaceStore.getState().rootPath;
+    if (!rootPath) return;
+    try {
+      const userSkills = await skillsService.loadSkills(rootPath);
+      const builtInSkills = useWorkspaceStore.getState().skills.filter(s => s.isBuiltIn);
+      const existingUserIds = new Set(builtInSkills.map(s => s.id));
+      const newUserSkills = userSkills.filter((us: Skill) => !existingUserIds.has(us.id));
+      const allSkills = [...builtInSkills, ...newUserSkills];
+      set({ skills: allSkills });
+    } catch (e) {
+      console.error("Failed to load skills:", e);
     }
   },
   setFileTree: (tree) => set({ fileTree: tree }),
@@ -748,6 +821,25 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       }
     };
   }),
+
+  addSkill: (skill) => set((state) => {
+    const existing = state.skills.find(s => s.id === skill.id);
+    if (existing) {
+      return { skills: state.skills.map(s => s.id === skill.id ? skill : s) };
+    }
+    return { skills: [...state.skills, skill] };
+  }),
+
+  updateSkill: (id, updates) => set((state) => ({
+    skills: state.skills.map(s => s.id === id ? { ...s, ...updates, updatedAt: new Date().toISOString() } : s)
+  })),
+
+  deleteSkill: (id) => set((state) => ({
+    skills: state.skills.filter(s => s.id !== id),
+    activeSkillId: state.activeSkillId === id ? null : state.activeSkillId
+  })),
+
+  setActiveSkill: (id) => set({ activeSkillId: id }),
 
   addContextNode: (x, y, fileContext, tabId) => set((state) => {
     const targetTabId = tabId || getActiveCanvasTabId(state);

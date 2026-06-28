@@ -1,5 +1,5 @@
 import React from "react";
-import { FolderOpen, Files, Cpu, Settings, GitBranch, ChevronLeft, Plus, FolderPlus, FoldHorizontal, RefreshCw, Bot } from "lucide-react";
+import { FolderOpen, Files, Cpu, Settings, GitBranch, ChevronLeft, Plus, FolderPlus, FoldHorizontal, RefreshCw, Bot, Wand2 } from "lucide-react";
 import { useWorkspaceStore } from "../store";
 import { FileTree } from "./FileTree";
 import { invoke } from "@tauri-apps/api/core";
@@ -103,6 +103,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
       type: "settings",
       title: "Settings",
       key: "settings",
+    });
+  };
+
+  const handleSkillsClick = () => {
+    openTab({
+      id: "skills",
+      type: "skills",
+      title: "Skills",
+      key: "skills",
     });
   };
 
@@ -256,6 +265,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <Cpu size={20} />
             <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-zinc-950 text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-zinc-800 whitespace-nowrap">
               LLM Integrations
+            </span>
+          </button>
+
+          {/* Skills */}
+          <button
+            onClick={handleSkillsClick}
+            className={`p-2.5 rounded-lg transition-all cursor-pointer relative group ${activeTabId === "skills"
+              ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
+              : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
+              }`}
+          >
+            <Wand2 size={20} />
+            <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-zinc-950 text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-zinc-800 whitespace-nowrap">
+              Skills
             </span>
           </button>
         </div>

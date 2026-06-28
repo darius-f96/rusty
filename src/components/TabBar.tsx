@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { X, Cpu, Settings, GitCommit, ChevronDown, FolderOpen, Columns } from "lucide-react";
+import { X, Cpu, Settings, GitCommit, ChevronDown, FolderOpen, Columns, Wand2 } from "lucide-react";
 import { useWorkspaceStore } from "../store";
 import { FileIcon } from "../services/fileTypeService";
 import { AxiomIcon } from "./AxiomIcon";
@@ -126,6 +126,16 @@ export const TabBar: React.FC<TabBarProps> = ({ groupId }) => {
               )}
               {tab.type === "llm-setup" && (
                 <Cpu
+                  size={11}
+                  className={
+                    isActive
+                      ? "text-[var(--accent-color)]"
+                      : "text-[var(--text-muted)]"
+                  }
+                />
+              )}
+              {tab.type === "skills" && (
+                <Wand2
                   size={11}
                   className={
                     isActive

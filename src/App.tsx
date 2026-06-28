@@ -101,7 +101,14 @@ function App() {
 
   // Load secure configuration on startup
   useEffect(() => {
-    useWorkspaceStore.getState().loadSecureConfig().catch((err) => {
+    useWorkspaceStore.getState().loadSecureConfig().then(() => {
+      const rootPath = useWorkspaceStore.getState().rootPath;
+      if (rootPath) {
+        useWorkspaceStore.getState().loadSkills().catch((err) => {
+          console.error("Failed to load skills on startup:", err);
+        });
+      }
+    }).catch((err) => {
       console.error("Failed to load secure configuration on startup:", err);
     });
   }, []);

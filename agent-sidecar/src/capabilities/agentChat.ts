@@ -13,8 +13,8 @@ import { createListFilesTool, createSearchCodebaseTool } from "../services/tools
 import { callLlmWithToolsMultiRound, LlmConfig } from "../services/llm";
 
 export async function agentChat(ws: WebSocket, data: any): Promise<void> {
-  const { tabId, message, model, workspaceRoot, chatHistory, customProvider } = data;
-  console.log(`WebSocket [Server] agent_chat starting`, { tabId, workspaceRoot, model });
+  const { tabId, message, model, workspaceRoot, chatHistory, customProvider, skill } = data;
+  console.log(`WebSocket [Server] agent_chat starting`, { tabId, workspaceRoot, model, hasSkill: !!skill });
 
   const modifiedFiles = new Set<string>();
 
@@ -86,23 +86,31 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
       }
     };
 
-    const tools = [
+const allTools = [
       readVfsTool,
       writeVfsTool,
       createListFilesTool(workspaceRoot),
       createSearchCodebaseTool(workspaceRoot)
     ];
 
-    const systemPrompt = `You are an AI coding agent operating inside the Axiom spatial development canvas.
+    const enabledToolNames = skill?.enabledTools || ["read_file", "write_file", "list_files", "search_codebase"];
+    const tools = allTools.filter((t: any) => enabledToolNames.includes(t.name));
+
+    const toolDescriptions: Record<string, string> = {
+      read_file: "- 'read_file': Read any file in the workspace (input: {\"path\": \"file/path\"}).",
+      write_file: "- 'write_file': Write or edit a file (input: {\"path\": \"file/path\", \"content\": \"full content\"}).",
+      list_files: "- 'list_files': List all files in the workspace (no input needed).",
+      search_codebase: "- 'search_codebase': Search for text patterns across the codebase (input: {\"pattern\": \"search text\"}).",
+    };
+    const toolListText = enabledToolNames.map((name: string) => toolDescriptions[name] || `- '${name}'`).join("\n");
+
+    const defaultSystemPrompt = `You are an AI coding agent operating inside the Axiom spatial development canvas.
 You help the user analyze, modify, and implement code in their workspace.
 
 Workspace root: ${workspaceRoot || "unknown"}
 
 You have access to tools:
-- 'read_file': Read any file in the workspace (input: {"path": "file/path"}).
-- 'write_file': Write or edit a file (input: {"path": "file/path", "content": "full content"}).
-- 'list_files': List all files in the workspace (no input needed).
-- 'search_codebase': Search for text patterns across the codebase (input: {"pattern": "search text"}).
+${toolListText}
 
 Guidelines:
 - Use 'read_file' to read a file before editing it.
@@ -111,6 +119,8 @@ Guidelines:
 - Output clean code without placeholder comments.
 - Once done, summarize the changes you made.
 `;
+
+    const systemPrompt = skill?.systemPrompt || defaultSystemPrompt;
 
     sendLog("Initializing agent...");
 

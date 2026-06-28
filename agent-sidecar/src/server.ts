@@ -55,6 +55,7 @@ import { executeNode } from "./capabilities/executeNode";
 import { globalExplore } from "./capabilities/globalExplore";
 import { reconciliateEdge } from "./capabilities/reconciliateEdge";
 import { agentChat } from "./capabilities/agentChat";
+import { generateSkill } from "./capabilities/generateSkill";
 
 dotenv.config();
 
@@ -167,6 +168,8 @@ wss.on("connection", (ws: WebSocket) => {
         await reconciliateEdge(ws, data);
       } else if (data.type === "agent_chat") {
         await agentChat(ws, data);
+      } else if (data.type === "generate_skill") {
+        await generateSkill(ws, data);
       } else {
         console.warn(`WebSocket [Server] Unknown message type: ${data.type}`);
       }
