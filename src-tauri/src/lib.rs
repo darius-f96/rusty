@@ -187,6 +187,34 @@ async fn create_directory(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn save_chat_history(
+    rootDir: String,
+    chatId: String,
+    content: String,
+) -> Result<String, String> {
+    println!("Rust [save_chat_history] saving chat {} to {}", chatId, rootDir);
+    let chats_dir = PathBuf::from(&rootDir).join(".axio").join("chats");
+    std::fs::create_dir_all(&chats_dir).map_err(|e| e.to_string())?;
+
+    let timestamp = chrono_lite_timestamp();
+    let file_name = format!("{}_{}.json", chatId, timestamp);
+    let file_path = chats_dir.join(&file_name);
+
+    std::fs::write(&file_path, &content).map_err(|e| e.to_string())?;
+    println!("Rust [save_chat_history] saved to {:?}", file_path);
+
+    Ok(file_path.to_string_lossy().into_owned())
+}
+
+fn chrono_lite_timestamp() -> String {
+    use std::time::SystemTime;
+    let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default();
+    let secs = now.as_secs();
+    let millis = now.subsec_millis();
+    format!("{}_{}", secs, millis)
+}
+
+#[tauri::command]
 async fn delete_file_or_dir(path: String) -> Result<(), String> {
     let path_buf = PathBuf::from(&path);
     if !path_buf.exists() {
@@ -447,6 +475,7 @@ pub fn run() {
             write_file_disk,
             create_file,
             create_directory,
+            save_chat_history,
             delete_file_or_dir,
             move_file_or_dir,
             search_project,

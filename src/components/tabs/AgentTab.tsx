@@ -49,6 +49,8 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
   const consoleBufferRef = useRef<string>("");
   const isAtBottomRef = useRef(true);
   const suppressScrollRef = useRef(false);
+  const savedChatPathRef = useRef<string | null>(null);
+  const chatSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const editorGroups = useWorkspaceStore((state) => state.editorGroups);
   const targetGroup = editorGroups.find((g) => g.id === groupId);
@@ -136,6 +138,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
     addAgentMessage(tab.id, consoleMessage);
     consoleMessageIdRef.current = consoleMessageId;
     consoleBufferRef.current = "";
+    saveChatHistory(true);
 
     const messageToSend = message;
     setMessage("");
@@ -183,6 +186,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
             updateAgentMessage(tab.id, consoleMessageIdRef.current, consoleBufferRef.current);
             setConsoleUpdateCount(c => c + 1);
           }
+          saveChatHistory();
           return;
         }
 
@@ -256,6 +260,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
           });
           setIsStreaming(false);
           socket.close();
+          saveChatHistory(true);
         }
 
         if (msg.type === "permission_request" && msg.tabId === tab.id) {
@@ -467,6 +472,32 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
 
   const toggleConsoleCollapse = (id: string) => {
     setCollapsedConsoles((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const saveChatHistory = async (forceNew = false) => {
+    if (chatSaveTimeoutRef.current) {
+      clearTimeout(chatSaveTimeoutRef.current);
+    }
+    chatSaveTimeoutRef.current = setTimeout(async () => {
+      try {
+        if (!rootPath) return;
+        const chats = useWorkspaceStore.getState().agentChats[tab.id] || [];
+        const payload = JSON.stringify({ tabId: tab.id, messages: chats, savedAt: new Date().toISOString() });
+
+        if (forceNew || !savedChatPathRef.current) {
+          const result = await invoke("save_chat_history", {
+            rootDir: rootPath,
+            chatId: `agent_${tab.id}`,
+            content: payload,
+          });
+          savedChatPathRef.current = result as string;
+        } else {
+          await invoke("write_file_disk", { path: savedChatPathRef.current, content: payload });
+        }
+      } catch (e) {
+        console.error("Failed to save chat history:", e);
+      }
+    }, 300);
   };
 
   const renderMessageContent = (content: string) => {
