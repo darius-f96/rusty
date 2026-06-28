@@ -10,6 +10,8 @@ import { DiffEditor } from "@monaco-editor/react";
 import { CustomSelect } from "../../CustomSelect";
 import { invoke } from "@tauri-apps/api/core";
 import { Save, RotateCcw } from "lucide-react";
+import { useDiffViewMode } from "../../../hooks/useDiffViewMode";
+import { DiffViewToggle } from "../../ui/DiffViewToggle";
 
 interface EdgeDiffTabContentProps {
   sourceModifiedFiles: string[];
@@ -52,6 +54,8 @@ export const EdgeDiffTabContent: React.FC<EdgeDiffTabContentProps> = ({
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const diffEditorRef = useRef<any>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { viewMode, isAutoMode, toggleViewMode, enableAutoMode, renderSideBySide } = useDiffViewMode(containerRef);
 
   const fileOptions = sourceModifiedFiles.map((file) => ({
     id: file,
@@ -94,18 +98,26 @@ export const EdgeDiffTabContent: React.FC<EdgeDiffTabContentProps> = ({
   const displayCode = isDirty ? editedCode : modifiedCode;
 
   return (
-    <div className="flex flex-col h-full w-full">
+    <div ref={containerRef} className="flex flex-col h-full w-full">
       {sourceModifiedFiles.length > 0 && (
         <div className="px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)] flex items-center justify-between text-xs font-mono flex-shrink-0">
-          <span className="text-[var(--text-muted)] mr-4">File:</span>
-          <CustomSelect
-            value={diffFile}
-            onChange={(val) => {
-              setDiffFile(val);
-              loadDiffContent(val);
-            }}
-            options={fileOptions}
-            className="w-64"
+          <div className="flex items-center space-x-3">
+            <span className="text-[var(--text-muted)] mr-4">File:</span>
+            <CustomSelect
+              value={diffFile}
+              onChange={(val) => {
+                setDiffFile(val);
+                loadDiffContent(val);
+              }}
+              options={fileOptions}
+              className="w-64"
+            />
+          </div>
+          <DiffViewToggle
+            viewMode={viewMode}
+            isAutoMode={isAutoMode}
+            onToggle={toggleViewMode}
+            onEnableAuto={enableAutoMode}
           />
         </div>
       )}
@@ -152,7 +164,7 @@ export const EdgeDiffTabContent: React.FC<EdgeDiffTabContentProps> = ({
                 minimap: { enabled: false },
                 scrollBeyondLastLine: false,
                 lineNumbers: "on",
-                renderSideBySide: true,
+                renderSideBySide,
                 fontSize: 11,
               }}
             />

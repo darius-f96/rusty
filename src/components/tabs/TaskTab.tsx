@@ -6,6 +6,8 @@ import { CustomSelect } from "../CustomSelect";
 import { invoke } from "@tauri-apps/api/core";
 import { getFileTypeDetails } from "../../services/fileTypeService";
 import { processResponse } from "../../services/responseProcessingService";
+import { useDiffViewMode } from "../../hooks/useDiffViewMode";
+import { DiffViewToggle } from "../ui/DiffViewToggle";
 
 const EMPTY_ARRAY: any[] = [];
 
@@ -45,6 +47,8 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, groupId })
   const [activeDiffFile, setActiveDiffFile] = useState<string>("");
 
   const diffEditorRef = useRef<any>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { viewMode, isAutoMode, toggleViewMode, enableAutoMode, renderSideBySide } = useDiffViewMode(containerRef);
 
   // Set active diff file automatically if modified files exist
   useEffect(() => {
@@ -212,15 +216,23 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, groupId })
         {/* Task Diff Selector Dropdown */}
         {taskSubTab === "diff" && modifiedFiles.length > 0 && (
           <div className="px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)] flex items-center justify-between text-xs font-mono">
-            <span className="text-[var(--text-muted)] mr-4">File Diff:</span>
-            <CustomSelect
-              value={activeDiffFile}
-              onChange={setActiveDiffFile}
-              options={modifiedFiles.map((file) => ({
-                id: file,
-                name: file.split("/").pop() || file,
-              }))}
-              className="w-64"
+            <div className="flex items-center space-x-3">
+              <span className="text-[var(--text-muted)] mr-4">File Diff:</span>
+              <CustomSelect
+                value={activeDiffFile}
+                onChange={setActiveDiffFile}
+                options={modifiedFiles.map((file) => ({
+                  id: file,
+                  name: file.split("/").pop() || file,
+                }))}
+                className="w-64"
+              />
+            </div>
+            <DiffViewToggle
+              viewMode={viewMode}
+              isAutoMode={isAutoMode}
+              onToggle={toggleViewMode}
+              onEnableAuto={enableAutoMode}
             />
           </div>
         )}
@@ -256,7 +268,7 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, groupId })
         <div className="flex-1 overflow-hidden relative bg-[var(--bg-app)]">
           {taskSubTab === "diff" && (
             activeDiffFile ? (
-              <div className="w-full h-full relative bg-[var(--bg-app)]">
+              <div ref={containerRef} className="w-full h-full relative bg-[var(--bg-app)]">
                 {loadingDiff ? (
                   <div className="w-full h-full flex items-center justify-center font-mono text-xs text-[var(--text-muted)]">
                     <span>Loading diff view...</span>
@@ -274,7 +286,7 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, groupId })
                       minimap: { enabled: false },
                       scrollBeyondLastLine: false,
                       lineNumbers: "on",
-                      renderSideBySide: true,
+                      renderSideBySide,
                       fontSize: 11,
                     }}
                   />

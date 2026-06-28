@@ -3,6 +3,8 @@ import { DiffEditor } from "@monaco-editor/react";
 import { CustomSelect } from "../../CustomSelect";
 import { invoke } from "@tauri-apps/api/core";
 import { Save, RotateCcw } from "lucide-react";
+import { useDiffViewMode } from "../../../hooks/useDiffViewMode";
+import { DiffViewToggle } from "../../ui/DiffViewToggle";
 
 interface DiffTabContentProps {
   selectedNode: any;
@@ -49,6 +51,8 @@ export const DiffTabContent: React.FC<DiffTabContentProps> = ({
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const diffEditorRef = useRef<any>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { viewMode, isAutoMode, toggleViewMode, enableAutoMode, renderSideBySide } = useDiffViewMode(containerRef);
 
   const diffOptions = modifiedFiles.map((file) => ({
     id: file,
@@ -91,16 +95,24 @@ export const DiffTabContent: React.FC<DiffTabContentProps> = ({
   const displayCode = isDirty ? editedCode : modifiedCode;
 
   return (
-    <div className="flex flex-col h-full w-full">
+    <div ref={containerRef} className="flex flex-col h-full w-full">
       {/* File Diff Dropdown Selector (only for TaskNode when files are edited) */}
       {selectedNode.type === "taskNode" && modifiedFiles.length > 0 && (
         <div className="px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)] flex items-center justify-between text-xs font-mono flex-shrink-0">
-          <span className="text-[var(--text-muted)] mr-4">File Diff:</span>
-          <CustomSelect
-            value={activeDiffFile}
-            onChange={setActiveDiffFile}
-            options={diffOptions}
-            className="w-64"
+          <div className="flex items-center space-x-3">
+            <span className="text-[var(--text-muted)] mr-4">File Diff:</span>
+            <CustomSelect
+              value={activeDiffFile}
+              onChange={setActiveDiffFile}
+              options={diffOptions}
+              className="w-64"
+            />
+          </div>
+          <DiffViewToggle
+            viewMode={viewMode}
+            isAutoMode={isAutoMode}
+            onToggle={toggleViewMode}
+            onEnableAuto={enableAutoMode}
           />
         </div>
       )}
@@ -147,7 +159,7 @@ export const DiffTabContent: React.FC<DiffTabContentProps> = ({
                 minimap: { enabled: false },
                 scrollBeyondLastLine: false,
                 lineNumbers: "on",
-                renderSideBySide: true,
+                renderSideBySide,
                 fontSize: 11
               }}
             />

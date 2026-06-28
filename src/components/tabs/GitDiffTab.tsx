@@ -3,6 +3,8 @@ import { DiffEditor } from "@monaco-editor/react";
 import { useWorkspaceStore } from "../../store";
 import { invoke } from "@tauri-apps/api/core";
 import { getFileTypeDetails } from "../../services/fileTypeService";
+import { useDiffViewMode } from "../../hooks/useDiffViewMode";
+import { DiffViewToggle } from "../ui/DiffViewToggle";
 
 interface GitDiffTabProps {
   tab: any;
@@ -20,6 +22,8 @@ export const GitDiffTab: React.FC<GitDiffTabProps> = ({ tab, groupId }) => {
   const [gitModifiedCode, setGitModifiedCode] = useState("");
   const [loading, setLoading] = useState(true);
   const diffEditorRef = useRef<any>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { viewMode, isAutoMode, toggleViewMode, enableAutoMode, renderSideBySide } = useDiffViewMode(containerRef);
 
   useEffect(() => {
     if (!rootPath) return;
@@ -104,13 +108,21 @@ export const GitDiffTab: React.FC<GitDiffTabProps> = ({ tab, groupId }) => {
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+    <div ref={containerRef} className="flex-1 flex flex-col h-full overflow-hidden relative">
       {/* Header info */}
       <div className="px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)] flex items-center justify-between text-xs font-mono">
-        <span className="text-[var(--text-light)] font-bold">{tab.title}</span>
-        <span className="text-[var(--text-muted)] text-[10px] truncate max-w-[400px]">
-          {tab.key}
-        </span>
+        <div className="flex items-center space-x-3">
+          <span className="text-[var(--text-light)] font-bold">{tab.title}</span>
+          <span className="text-[var(--text-muted)] text-[10px] truncate max-w-[400px]">
+            {tab.key}
+          </span>
+        </div>
+        <DiffViewToggle
+          viewMode={viewMode}
+          isAutoMode={isAutoMode}
+          onToggle={toggleViewMode}
+          onEnableAuto={enableAutoMode}
+        />
       </div>
 
       {/* Diff editor viewport */}
@@ -132,7 +144,7 @@ export const GitDiffTab: React.FC<GitDiffTabProps> = ({ tab, groupId }) => {
               minimap: { enabled: false },
               scrollBeyondLastLine: false,
               lineNumbers: "on",
-              renderSideBySide: true,
+              renderSideBySide,
               fontSize: 11,
             }}
           />
