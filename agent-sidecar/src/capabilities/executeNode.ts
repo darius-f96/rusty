@@ -184,7 +184,7 @@ CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
 
         console.log("WebSocket [Server] Creating task session with model:", selectedModel ? (selectedModel as any).modelId || (selectedModel as any).name || "default" : "default");
 
-        const sdkToolNames = enabledToolNames.map(name => {
+        const sdkToolNames = enabledToolNames.map((name: string) => {
           if (name === "read_file") return "read";
           if (name === "write_file") return "write";
           return name;
