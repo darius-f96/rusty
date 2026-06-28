@@ -113,6 +113,15 @@ export const Workspace: React.FC = () => {
       provider = customProviders.find((p) => p.id === activeCustomProviderId);
     }
 
+    // Resolve skill
+    const nodeSkillId = (node.data as any).skillId;
+    const selectedSkill = nodeSkillId ? storeState.skills.find((s) => s.id === nodeSkillId) : null;
+    const skillData = selectedSkill ? {
+      systemPrompt: selectedSkill.systemPrompt,
+      enabledTools: selectedSkill.enabledTools,
+      preferredModel: selectedSkill.preferredModel,
+    } : null;
+
     const connectedEdges = currentEdges.filter((edge) => edge.target === nodeId);
     const inputFiles = connectedEdges
       .map((edge) => currentNodes.find((n) => n.id === edge.source))
@@ -209,6 +218,7 @@ export const Workspace: React.FC = () => {
             (provider.id !== "anthropic" && provider.id !== "openai" || !!provider.apiKey)
               ? provider
               : null,
+          skill: skillData,
         })
       );
     };

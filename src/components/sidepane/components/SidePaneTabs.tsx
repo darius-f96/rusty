@@ -1,7 +1,5 @@
 import React from "react";
 import { Code, MessageSquare, Terminal } from "lucide-react";
-import { useWorkspaceStore } from "../../../store";
-import { CustomSelect } from "../../CustomSelect";
 
 interface SidePaneTabsProps {
   selectedNode: any;
@@ -16,14 +14,6 @@ export const SidePaneTabs: React.FC<SidePaneTabsProps> = ({
   setActiveTab,
   nodeStatus
 }) => {
-  const activeModel = useWorkspaceStore((state) => state.activeModel);
-  const providers = useWorkspaceStore((state) => state.customProviders);
-  const updateNode = useWorkspaceStore((state) => state.updateTaskNode);
-
-  const modelOptions = providers.flatMap((p) => p.models).map((m) => ({
-    id: m.id,
-    name: m.name,
-  }));
 
   return (
     <div className="flex border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/10 text-xs font-mono select-none justify-between items-center pr-3 flex-shrink-0">
@@ -70,18 +60,6 @@ export const SidePaneTabs: React.FC<SidePaneTabsProps> = ({
         )}
       </div>
 
-      {selectedNode.type === "taskNode" && (
-        <div className="flex items-center space-x-1.5 py-1">
-          <span className="text-[10px] text-[var(--text-muted)] font-sans uppercase font-semibold">Model:</span>
-          <CustomSelect
-            value={(selectedNode.data as any).model || activeModel}
-            onChange={(val) => updateNode(selectedNode.id, { model: val })}
-            options={modelOptions}
-            placeholder="No models"
-            className="w-36"
-          />
-        </div>
-      )}
-    </div>
+      </div>
   );
 };

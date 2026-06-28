@@ -12,13 +12,14 @@ import { safeSend, getNextId, registerPendingRequest } from "../services/websock
 import { createListFilesTool, createSearchCodebaseTool } from "../services/tools";
 
 export async function executeNode(ws: WebSocket, data: any): Promise<void> {
-  const { nodeId, instructions, model, workspaceRoot, inputFiles, customProvider, globalContext, contextDescriptions, chatHistory } = data;
+  const { nodeId, instructions, model, workspaceRoot, inputFiles, customProvider, globalContext, contextDescriptions, chatHistory, skill } = data;
   console.log(`WebSocket [Server] execute_node task starting`, {
     nodeId,
     model,
     workspaceRoot,
     inputFilesCount: inputFiles?.length || 0,
-    chatHistoryCount: chatHistory?.length || 0
+    chatHistoryCount: chatHistory?.length || 0,
+    hasSkill: !!skill
   });
 
   const modifiedFiles = new Set<string>();
@@ -118,13 +119,31 @@ export async function executeNode(ws: WebSocket, data: any): Promise<void> {
 
     sendLog("Initializing Pi agent runtime...");
 
+    const allTools = [
+      readVfsTool,
+      writeVfsTool,
+      createListFilesTool(workspaceRoot),
+      createSearchCodebaseTool(workspaceRoot)
+    ];
+
+    const enabledToolNames = skill?.enabledTools || ["read_file", "write_file", "list_files", "search_codebase"];
+    const tools = allTools.filter((t: any) => enabledToolNames.includes(t.name));
+
+    const toolDescriptions: Record<string, string> = {
+      read_file: "- 'read_file': Read a file's current content before editing it.",
+      write_file: "- 'write_file': Write or edit a file.",
+      list_files: "- 'list_files': Discover files in the workspace.",
+      search_codebase: "- 'search_codebase': Find specific code patterns.",
+    };
+    const toolListText = enabledToolNames.map((name: string) => toolDescriptions[name] || `- '${name}'`).join("\n");
+
     const filesList = inputFiles && inputFiles.length > 0
       ? `You have direct read/write access to the following connected files:
 ${inputFiles.map((f: any) => `- ${f.path}`).join("\n")}
 Please read them first if you need to modify or inspect them.`
       : `No input files are directly connected to this task node. You can read/write any files in the workspace.`;
 
-    const systemPrompt = `You are an AI coding agent operating inside a spatial canvas.
+    const defaultSystemPrompt = `You are an AI coding agent operating inside a spatial canvas.
 Update files according to these user instructions: ${instructions}
 
 Workspace directory root: ${workspaceRoot || "unknown"}
@@ -132,10 +151,7 @@ ${filesList}
 ${globalContext ? `\n--- GLOBAL ARCHITECTURAL GUIDELINES ---\n${globalContext}\n` : ""}
 ${contextDescriptions && contextDescriptions.length > 0 ? `\n--- CONNECTED CONTEXT DESCRIPTIONS ---\n${contextDescriptions.join("\n")}\n` : ""}
 Remember:
-- Use the 'read_file' tool to read a file's current content before editing it.
-- Use the 'write_file' tool to write the updated content back.
-- Use the 'list_files' tool to discover files in the workspace.
-- Use the 'search_codebase' tool to find specific code patterns.
+${toolListText}
 - Always output clean code without placeholder comments.
 
 CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
@@ -145,6 +161,10 @@ CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
 4. TARGETED WRITING: Go straight to creating or modifying the requested files as quickly as possible. Do not get sidetracked by other improvements or warnings in the codebase.
 5. TERMINATE PROMPTLY: Once you have successfully written or updated all requested files, do NOT run redundant tools (like search_codebase, list_files, or read_file) to double-check or verify your work. Stop calling tools immediately and provide your final response summarizing the changes made.
 `;
+
+    const systemPrompt = skill?.systemPrompt
+      ? skill.systemPrompt.replace(/\$\{workspaceRoot\}/g, workspaceRoot || "unknown").replace(/\$\{instructions\}/g, instructions)
+      : defaultSystemPrompt;
 
     let runResult;
     let useMultiRound = !!(chatHistory && chatHistory.length > 1);
@@ -164,13 +184,17 @@ CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
 
         console.log("WebSocket [Server] Creating task session with model:", selectedModel ? (selectedModel as any).modelId || (selectedModel as any).name || "default" : "default");
 
-        const allTools = [readVfsTool, writeVfsTool, createListFilesTool(workspaceRoot), createSearchCodebaseTool(workspaceRoot)];
+        const sdkToolNames = enabledToolNames.map(name => {
+          if (name === "read_file") return "read";
+          if (name === "write_file") return "write";
+          return name;
+        });
 
         const { session } = await createAgentSession({
           cwd: workspaceRoot,
           model: selectedModel,
-          tools: ["read", "write", "list_files", "search_codebase"],
-          customTools: allTools as any
+          tools: sdkToolNames,
+          customTools: tools as any
         });
 
         sendLog("Executing agent reasoning loop...");
@@ -225,7 +249,7 @@ CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
           { baseUrl, apiKey, model: modelName },
           systemPrompt,
           instructions,
-          [readVfsTool, writeVfsTool, createListFilesTool(workspaceRoot), createSearchCodebaseTool(workspaceRoot)],
+          tools,
           workspaceRoot,
           sendLog,
           30,

@@ -12,6 +12,7 @@ interface CustomSelectProps {
   placeholder?: string;
   className?: string;
   buttonClassName?: string;
+  direction?: "down" | "up";
 }
 
 export const CustomSelect: React.FC<CustomSelectProps> = ({
@@ -20,7 +21,8 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
   options,
   placeholder = "Select option...",
   className = "",
-  buttonClassName = ""
+  buttonClassName = "",
+  direction = "down"
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -72,7 +74,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
 
       {/* Dropdown Options List */}
       {isOpen && (
-        <div className="absolute left-0 right-0 mt-1 bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-lg shadow-2xl z-[100] animate-fadeIn p-1 flex flex-col max-h-56">
+        <div className={`absolute left-0 right-0 bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-lg shadow-2xl z-[100] animate-fadeIn p-1 flex flex-col max-h-56 ${direction === "up" ? "bottom-full mb-1" : "mt-1"}`}>
           {showSearch && (
             <div className="p-1 border-b border-[var(--border-color)]/30 mb-1">
               <input

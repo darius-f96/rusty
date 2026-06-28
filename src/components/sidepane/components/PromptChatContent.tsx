@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { Play } from "lucide-react";
 import { useWorkspaceStore } from "../../../store";
 import { processResponse } from "../../../services/responseProcessingService";
+import { CustomSelect } from "../../CustomSelect";
 
 interface PromptChatContentProps {
   selectedNode: any;
@@ -10,6 +11,38 @@ interface PromptChatContentProps {
 }
 
 const EMPTY_ARRAY: any[] = [];
+
+const ModelSelector: React.FC<{ nodeId: string; nodeData: any }> = ({ nodeId, nodeData }) => {
+  const activeModel = useWorkspaceStore((s) => s.activeModel);
+  const providers = useWorkspaceStore((s) => s.customProviders);
+  const updateTaskNode = useWorkspaceStore((s) => s.updateTaskNode);
+  const modelOptions = providers.flatMap((p) => p.models).map((m) => ({ id: m.id, name: m.name }));
+  return (
+    <CustomSelect
+      value={nodeData.model || activeModel}
+      onChange={(val) => updateTaskNode(nodeId, { model: val })}
+      options={modelOptions}
+      placeholder="Model"
+      className="w-28 text-[10px]"
+      direction="up"
+    />
+  );
+};
+
+const SkillSelector: React.FC<{ nodeId: string }> = ({ nodeId }) => {
+  const skills = useWorkspaceStore((s) => s.skills);
+  const updateTaskNode = useWorkspaceStore((s) => s.updateTaskNode);
+  return (
+    <CustomSelect
+      value={""}
+      onChange={(val) => updateTaskNode(nodeId, { skillId: val || undefined })}
+      options={[{ id: "", name: "—" }, ...skills.map((s) => ({ id: s.id, name: s.name }))]}
+      placeholder="Skill"
+      className="w-24 text-[10px]"
+      direction="up"
+    />
+  );
+};
 
 export const PromptChatContent: React.FC<PromptChatContentProps> = ({
   selectedNode,
@@ -78,6 +111,16 @@ export const PromptChatContent: React.FC<PromptChatContentProps> = ({
           );
         })}
       </div>
+
+      {/* Model & Skill selectors */}
+      {selectedNode?.type === "taskNode" && (
+        <div className="flex items-center space-x-2 px-3 py-1.5 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/10">
+          <span className="text-[9px] text-[var(--text-muted)] font-sans uppercase font-semibold">M:</span>
+          <ModelSelector nodeId={selectedNode.id} nodeData={selectedNode.data} />
+          <span className="text-[9px] text-[var(--text-muted)] font-sans uppercase font-semibold">S:</span>
+          <SkillSelector nodeId={selectedNode.id} />
+        </div>
+      )}
 
       {/* Input prompt area */}
       <div className="p-3 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/20">
