@@ -27,4 +27,5 @@ regex = "1.10"
 ignore = "0.4.22"
 fuzzy-matcher = "0.3.7"
 tauri-plugin-window-state = "2"
+tauri-plugin-shell = "2"
 

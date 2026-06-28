@@ -5,6 +5,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use tauri_plugin_shell::process::{CommandChild, CommandEvent};
+use tauri_plugin_shell::ShellExt;
+use tauri::Manager;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct FileEntry {
@@ -15,6 +18,8 @@ pub struct FileEntry {
 }
 
 pub struct VfsState(pub Arc<Mutex<HashMap<String, String>>>);
+
+pub struct SidecarState(pub Arc<Mutex<Option<CommandChild>>>);
 
 #[tauri::command]
 async fn read_file_vfs(state: tauri::State<'_, VfsState>, path: String) -> Result<String, String> {
@@ -460,11 +465,57 @@ async fn search_project(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(VfsState(Arc::new(Mutex::new(HashMap::new()))))
+        .manage(SidecarState(Arc::new(Mutex::new(None))))
+        .setup(|app| {
+            // Only spawn the bundled sidecar in release builds; in dev the
+            // user runs it manually for hot-reload.
+            if !cfg!(debug_assertions) {
+                let resource_path = app
+                    .path()
+                    .resolve("sidecar/server.js", tauri::path::BaseDirectory::Resource)?;
+
+                let sidecar = app
+                    .shell()
+                    .sidecar("node")
+                    .expect("failed to resolve `node` sidecar binary");
+
+                let (mut rx, child) = sidecar
+                    .args([resource_path.to_string_lossy().to_string()])
+                    .spawn()
+                    .expect("failed to spawn agent sidecar");
+
+                // Store the child handle so we can kill it on exit.
+                let state = app.state::<SidecarState>();
+                *state.0.lock().unwrap() = Some(child);
+
+                // Forward sidecar stdout/stderr to the host console.
+                tauri::async_runtime::spawn(async move {
+                    while let Some(event) = rx.recv().await {
+                        match event {
+                            CommandEvent::Stdout(bytes) => {
+                                println!("[sidecar] {}", String::from_utf8_lossy(&bytes).trim());
+                            }
+                            CommandEvent::Stderr(bytes) => {
+                                eprintln!("[sidecar] {}", String::from_utf8_lossy(&bytes).trim());
+                            }
+                            CommandEvent::Terminated(status) => {
+                                println!("[sidecar] process exited: {:?}", status);
+                                break;
+                            }
+                            _ => {}
+                        }
+                    }
+                });
+            }
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             log_to_terminal,
             read_file_vfs,
@@ -508,7 +559,20 @@ pub fn run() {
             git::git_reset_to_commit,
             git::git_blame,
             git::git_get_file_commit_history
-        ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        ]);
+
+    let app = builder
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        if let tauri::RunEvent::Exit = event {
+            // Kill the sidecar process on app exit.
+            if let Some(state) = app_handle.try_state::<SidecarState>() {
+                if let Some(child) = state.0.lock().unwrap().take() {
+                    let _ = child.kill();
+                }
+            }
+        }
+    });
 }

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:sidecar": "cd agent-sidecar && npm run build && cp dist/server.js ../src-tauri/resources/sidecar/server.js",
     "preview": "vite preview",
     "tauri": "tauri"
   },

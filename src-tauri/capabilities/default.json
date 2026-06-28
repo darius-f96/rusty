@@ -11,6 +11,16 @@
     "dialog:default",
     "dialog:allow-ask",
     "dialog:allow-confirm",
-    "dialog:allow-message"
+    "dialog:allow-message",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "node",
+          "sidecar": true,
+          "args": true
+        }
+      ]
+    }
   ]
 }
