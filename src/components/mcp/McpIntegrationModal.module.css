@@ -410,16 +410,25 @@
 
 .btn {
   display: inline-flex;
+  flex-direction: row;
   align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  font-size: 12px;
-  font-weight: 700;
+  justify-content: center;
+  gap: 0;
+  padding: 10px 24px;
+  font-size: 13px;
+  font-weight: 600;
   font-family: inherit;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
   transition: all 0.15s ease;
   border: 1px solid transparent;
+  white-space: nowrap;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  min-width: 100px;
+  text-align: center;
+  box-sizing: border-box;
+  box-shadow: none;
 }
 
 .btnSecondary {
@@ -459,6 +468,22 @@
 }
 
 .btnGhost:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btnTest {
+  color: var(--accent-color);
+  background: transparent;
+  border: 1px solid var(--border-color);
+}
+
+.btnTest:hover {
+  background: var(--accent-bg);
+  border-color: var(--accent-color);
+}
+
+.btnTest:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }

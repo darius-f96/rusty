@@ -12,8 +12,6 @@ import {
   X,
   Plus,
   Trash2,
-  Save,
-  Zap,
   AlertCircle,
   CheckCircle2,
   Loader2,
@@ -867,24 +865,30 @@ export const McpIntegrationModal: React.FC<McpIntegrationModalProps> = ({
           <div className={styles.footerLeft}>
             <button
               type="button"
-              className={styles.btnGhost}
+              className={`${styles.btn} ${styles.btnTest}`}
               onClick={handleTest}
               disabled={test.status === "testing"}
             >
               {test.status === "testing" ? (
                 <Loader2 size={14} className={styles.spin} />
               ) : (
-                <Zap size={14} />
+                "Test connection"
               )}
-              Test connection
             </button>
           </div>
           <div className={styles.footerRight}>
-            <button type="button" className={styles.btnSecondary} onClick={onCancel}>
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnSecondary}`}
+              onClick={onCancel}
+            >
               Cancel
             </button>
-            <button type="submit" className={styles.btnPrimary}>
-              <Save size={14} /> Save
+            <button
+              type="submit"
+              className={`${styles.btn} ${styles.btnPrimary}`}
+            >
+              Save
             </button>
           </div>
         </div>
