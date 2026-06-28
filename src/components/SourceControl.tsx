@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { GitBranch, Plus, Minus, RotateCcw, Check, AlertCircle, ArrowUp, ArrowDown, GitCommit, ChevronDown } from "lucide-react";
+import { GitBranch, Plus, Minus, RotateCcw, Check, AlertCircle, ArrowUp, ArrowDown, GitCommit, ChevronDown, GitMerge, GitPullRequest } from "lucide-react";
 import { useWorkspaceStore } from "../store";
 import { invoke } from "@tauri-apps/api/core";
 import { CustomSelect } from "./CustomSelect";
+import { BranchDialog } from "./BranchDialog";
 
 export const SourceControl: React.FC = () => {
   const rootPath = useWorkspaceStore((state) => state.rootPath);
@@ -27,6 +28,9 @@ export const SourceControl: React.FC = () => {
   const [branches, setBranches] = useState<string[]>([]);
   const [isHistoryExpanded, setIsHistoryExpanded] = useState(true);
   const [historyCommits, setHistoryCommits] = useState<any[]>([]);
+  const [branchDialog, setBranchDialog] = useState<"create" | "merge" | "rebase" | null>(null);
+  const lastRename = useWorkspaceStore((state) => state.lastRename);
+  const setLastRename = useWorkspaceStore((state) => state.setLastRename);
 
   // Fetch recent commits for the sidebar
   const fetchHistory = async () => {
@@ -257,6 +261,105 @@ export const SourceControl: React.FC = () => {
     }
   };
 
+  const handleCreateBranch = async (branchName: string, checkout: boolean) => {
+    if (!rootPath) return;
+    try {
+      await invoke("git_create_branch", { rootDir: rootPath, branchName, checkout });
+      await fetchBranches();
+      if (checkout) {
+        await loadGitStatus();
+        await fetchHistory();
+        const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
+        useWorkspaceStore.getState().setFileTree(tree);
+      }
+      setBranchDialog(null);
+    } catch (err: any) {
+      alert(`Failed to create branch: ${err}`);
+    }
+  };
+
+  const handleMergeBranch = async (branchName: string) => {
+    if (!rootPath) return;
+    try {
+      const result = await invoke("git_merge_branch", { rootDir: rootPath, branchName });
+      await loadGitStatus();
+      await fetchBranches();
+      await fetchHistory();
+      const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
+      useWorkspaceStore.getState().setFileTree(tree);
+      setBranchDialog(null);
+      alert(result || `Merged ${branchName} into current branch.`);
+    } catch (err: any) {
+      // Check if it's a merge conflict
+      const errMsg = String(err);
+      if (errMsg.includes("conflict") || errMsg.includes("CONFLICT")) {
+        alert(`Merge conflicts detected. Resolve them and commit, or run "Abort merge" from the branch menu.`);
+      } else {
+        alert(`Merge failed: ${err}`);
+      }
+      setBranchDialog(null);
+    }
+  };
+
+  const handleRebaseBranch = async (branchName: string) => {
+    if (!rootPath) return;
+    try {
+      const result = await invoke("git_rebase_branch", { rootDir: rootPath, branchName });
+      await loadGitStatus();
+      await fetchBranches();
+      await fetchHistory();
+      const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
+      useWorkspaceStore.getState().setFileTree(tree);
+      setBranchDialog(null);
+      alert(result || `Rebased current branch onto ${branchName}.`);
+    } catch (err: any) {
+      const errMsg = String(err);
+      if (errMsg.includes("conflict") || errMsg.includes("CONFLICT")) {
+        alert(`Rebase conflicts detected. Resolve them and continue, or run "Abort rebase" from the branch menu.`);
+      } else {
+        alert(`Rebase failed: ${err}`);
+      }
+      setBranchDialog(null);
+    }
+  };
+
+  const handleAbortPending = async () => {
+    if (!rootPath) return;
+    try {
+      // Try both abort types
+      try {
+        await invoke("git_abort_pending", { rootDir: rootPath, operation: "rebase" });
+      } catch {
+        await invoke("git_abort_pending", { rootDir: rootPath, operation: "merge" });
+      }
+      await loadGitStatus();
+      await fetchHistory();
+      const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
+      useWorkspaceStore.getState().setFileTree(tree);
+      alert("Aborted pending operation.");
+    } catch (err: any) {
+      alert(`Abort failed: ${err}`);
+    }
+  };
+
+  const handleUndoRename = async () => {
+    if (!rootPath || !lastRename) return;
+    try {
+      await invoke("git_undo_last_rename", {
+        rootDir: rootPath,
+        originalPath: lastRename.originalPath,
+        newPath: lastRename.newPath,
+      });
+      await loadGitStatus();
+      const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
+      useWorkspaceStore.getState().setFileTree(tree);
+      setLastRename(null);
+      alert("Move/rename has been undone.");
+    } catch (err: any) {
+      alert(`Undo failed: ${err}`);
+    }
+  };
+
   // Helper to open side-by-side Monaco diff panel in the workspace tabs
   const handleOpenFileDiff = (filePath: string, fileName: string, diffType: "staged" | "unstaged") => {
     const titleSuffix = diffType === "staged" ? "Index" : "Workspace";
@@ -278,13 +381,55 @@ export const SourceControl: React.FC = () => {
         return { char: "D", colorClass: "text-rose-500 font-bold" };
       case "untracked":
         return { char: "U", colorClass: "text-emerald-400 opacity-80" };
+      case "renamed":
+        return { char: "R", colorClass: "text-sky-400 font-bold" };
       case "modified":
       default:
         return { char: "M", colorClass: "text-amber-400 font-bold" };
     }
   };
 
-  const totalChanges = (gitStatus?.staged.length || 0) + (gitStatus?.unstaged.length || 0);
+  // Build a merged unstaged list that collapses rename/move pairs (deleted + untracked) into a single "renamed" entry
+  const buildUnstagedList = () => {
+    if (!gitStatus) return [];
+    if (!lastRename) return gitStatus.unstaged;
+
+    const { originalPath, newPath } = lastRename;
+    const hasDeleted = gitStatus.unstaged.some(f => f.path === originalPath);
+    const hasUntracked = gitStatus.unstaged.some(f => f.path === newPath);
+
+    // Only collapse if BOTH entries exist in the unstaged list
+    if (!hasDeleted || !hasUntracked) {
+      return gitStatus.unstaged;
+    }
+
+    // Filter out both the old (deleted) and new (untracked) paths, add synthetic "renamed" entry
+    const filtered = gitStatus.unstaged.filter(
+      (f) => f.path !== originalPath && f.path !== newPath
+    );
+    return [
+      ...filtered,
+      {
+        path: newPath,
+        name: `${originalPath.split("/").pop()} → ${newPath.split("/").pop()}`,
+        status_type: "renamed",
+      },
+    ];
+  };
+
+  const unstagedList = buildUnstagedList();
+
+  // Clear stale lastRename when neither path appears in git status anymore
+  useEffect(() => {
+    if (!lastRename || !gitStatus) return;
+    const { originalPath, newPath } = lastRename;
+    const stillExists = gitStatus.unstaged.some(f => f.path === originalPath || f.path === newPath)
+      || gitStatus.staged.some(f => f.path === originalPath || f.path === newPath);
+    if (!stillExists) {
+      setLastRename(null);
+    }
+  }, [gitStatus, lastRename, setLastRename]);
+  const totalChanges = (gitStatus?.staged.length || 0) + unstagedList.length;
 
   return (
     <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-[var(--bg-sidebar)] font-sans text-xs select-none">
@@ -302,15 +447,50 @@ export const SourceControl: React.FC = () => {
           </button>
         </div>
         {gitStatus && (
-          <div className="flex items-center space-x-1 bg-[var(--accent-bg)]/35 text-[var(--accent-color)] px-2 py-0.5 rounded font-mono text-[10px] border border-[var(--accent-color)]/25 relative hover:border-[var(--accent-color)]/50 transition-all cursor-pointer min-w-[100px]">
-            <GitBranch size={10} className="flex-shrink-0 mr-1" />
-            <CustomSelect
-              value={gitStatus.currentBranch}
-              onChange={handleSwitchBranch}
-              options={branches.map((b) => ({ id: b, name: b }))}
-              buttonClassName="bg-transparent border-none text-[var(--accent-color)] font-mono text-[10px] focus:outline-none cursor-pointer outline-none font-bold p-0 flex items-center justify-between w-full"
-              className="flex-1"
-            />
+          <div className="flex items-center space-x-1.5">
+            {/* Branch management buttons */}
+            <button
+              type="button"
+              onClick={() => setBranchDialog("create")}
+              className="p-1 rounded hover:bg-[var(--border-color)]/60 text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer"
+              title="Create Branch"
+            >
+              <Plus size={12} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setBranchDialog("merge")}
+              className="p-1 rounded hover:bg-[var(--border-color)]/60 text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer"
+              title="Merge Branch"
+            >
+              <GitMerge size={12} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setBranchDialog("rebase")}
+              className="p-1 rounded hover:bg-[var(--border-color)]/60 text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer"
+              title="Rebase"
+            >
+              <GitPullRequest size={12} />
+            </button>
+            <button
+              type="button"
+              onClick={handleAbortPending}
+              className="p-1 rounded hover:bg-rose-500/10 text-[var(--text-muted)] hover:text-rose-400 transition-colors cursor-pointer"
+              title="Abort Merge/Rebase"
+            >
+              <RotateCcw size={12} />
+            </button>
+            <div className="flex items-center space-x-1 bg-[var(--accent-bg)]/35 text-[var(--accent-color)] px-2 py-0.5 rounded font-mono text-[10px] border border-[var(--accent-color)]/25 relative hover:border-[var(--accent-color)]/50 transition-all cursor-pointer min-w-[100px]">
+              <GitBranch size={10} className="flex-shrink-0 mr-1" />
+              <CustomSelect
+                value={gitStatus.currentBranch}
+                onChange={handleSwitchBranch}
+                options={branches.map((b) => ({ id: b, name: b }))}
+                buttonClassName="bg-transparent border-none text-[var(--accent-color)] font-mono text-[10px] focus:outline-none cursor-pointer outline-none font-bold p-0 flex items-center justify-between w-full"
+                className="flex-1"
+              />
+            </div>
           </div>
         )}
       </div>
@@ -422,13 +602,13 @@ export const SourceControl: React.FC = () => {
         )}
 
         {/* 2. Unstaged Changes List */}
-        {gitStatus && gitStatus.unstaged.length > 0 && (
+        {gitStatus && unstagedList.length > 0 && (
           <div className="space-y-1">
             <div className="px-2 py-1 flex items-center justify-between text-[10px] font-mono font-bold text-[var(--text-muted)] uppercase tracking-wider">
               <div className="flex items-center space-x-1.5">
                 <span>Changes</span>
                 <span className="bg-[var(--border-color)] px-1.5 py-0.2 rounded-full text-[9px] text-[var(--text-normal)]">
-                  {gitStatus.unstaged.length}
+                  {unstagedList.length}
                 </span>
               </div>
               <button
@@ -442,14 +622,17 @@ export const SourceControl: React.FC = () => {
             </div>
 
             <div className="space-y-0.5">
-              {gitStatus.unstaged.map((file) => {
+              {unstagedList.map((file) => {
                 const indicator = getStatusIndicator(file.status_type);
-                const relativeDir = file.path.substring(rootPath.length + 1, file.path.length - file.name.length - 1);
+                const isRenamed = file.status_type === "renamed";
+                const relativeDir = isRenamed
+                  ? ""
+                  : file.path.substring(rootPath.length + 1, file.path.length - file.name.length - 1);
 
                 return (
                   <div
                     key={`unstaged-${file.path}`}
-                    onClick={() => handleOpenFileDiff(file.path, file.name, "unstaged")}
+                    onClick={() => !isRenamed && handleOpenFileDiff(file.path, file.name, "unstaged")}
                     className="group flex items-center justify-between px-2.5 py-1.5 rounded hover:bg-[var(--accent-bg)]/20 cursor-pointer transition-colors"
                   >
                     <div className="flex flex-col min-w-0 flex-1">
@@ -464,8 +647,19 @@ export const SourceControl: React.FC = () => {
                     </div>
 
                     <div className="flex items-center space-x-1.5">
+                      {/* Rollback Rename Button */}
+                      {isRenamed && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleUndoRename(); }}
+                          className="opacity-0 group-hover:opacity-100 p-1 text-[var(--text-muted)] hover:text-sky-400 hover:bg-black/20 rounded transition-all cursor-pointer"
+                          title="Undo rename/move"
+                        >
+                          <RotateCcw size={11} />
+                        </button>
+                      )}
+
                       {/* Discard Hover Button */}
-                      {file.status_type !== "untracked" && (
+                      {!isRenamed && file.status_type !== "untracked" && (
                         <button
                           onClick={(e) => handleDiscardChanges(e, file.path, file.name)}
                           className="opacity-0 group-hover:opacity-100 p-1 text-[var(--text-muted)] hover:text-amber-400 hover:bg-black/20 rounded transition-all cursor-pointer"
@@ -476,13 +670,15 @@ export const SourceControl: React.FC = () => {
                       )}
                       
                       {/* Stage Hover Button */}
-                      <button
-                        onClick={(e) => handleStageFile(e, file.path)}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-[var(--text-muted)] hover:text-emerald-400 hover:bg-black/20 rounded transition-all cursor-pointer"
-                        title="Stage changes"
-                      >
-                        <Plus size={11} />
-                      </button>
+                      {!isRenamed && (
+                        <button
+                          onClick={(e) => handleStageFile(e, file.path)}
+                          className="opacity-0 group-hover:opacity-100 p-1 text-[var(--text-muted)] hover:text-emerald-400 hover:bg-black/20 rounded transition-all cursor-pointer"
+                          title="Stage changes"
+                        >
+                          <Plus size={11} />
+                        </button>
+                      )}
 
                       <span className={`w-4 text-center text-[10px] font-mono select-none ${indicator.colorClass}`}>
                         {indicator.char}
@@ -568,6 +764,21 @@ export const SourceControl: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Branch Dialog */}
+      {branchDialog && gitStatus && (
+        <BranchDialog
+          mode={branchDialog}
+          currentBranch={gitStatus.currentBranch}
+          branches={branches}
+          onConfirm={(name, extra) => {
+            if (branchDialog === "create") handleCreateBranch(name, extra || false);
+            else if (branchDialog === "merge") handleMergeBranch(name);
+            else if (branchDialog === "rebase") handleRebaseBranch(name);
+          }}
+          onCancel={() => setBranchDialog(null)}
+        />
+      )}
     </div>
   );
 };

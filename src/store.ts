@@ -127,6 +127,8 @@ export interface WorkspaceState {
   activeCustomProviderId: string | null;
   activeModel: string;
   gitStatus: GitStatusResult | null;
+  lastRename: { originalPath: string; newPath: string } | null;
+  setLastRename: (rename: { originalPath: string; newPath: string } | null) => void;
   collapseAllTrigger?: number;
   expandedPaths: Record<string, boolean>;
   selectedEdgeId: string | null;
@@ -382,6 +384,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   activeCustomProviderId: "opencode",
   activeModel: "",
   gitStatus: null,
+  lastRename: null,
+  setLastRename: (rename) => set({ lastRename: rename }),
   devLogs: [],
   showDevConsole: false,
   skills: [

@@ -390,7 +390,94 @@ pub async fn git_checkout_branch(root_dir: String, branch_name: String) -> Resul
     }
 }
 
-/// Returns the content of the file as staged in the Git index database.
+/// Creates a new branch and optionally checks it out.
+#[tauri::command]
+pub async fn git_create_branch(root_dir: String, branch_name: String, checkout: bool) -> Result<(), String> {
+    let args = if checkout {
+        vec!["checkout", "-b", &branch_name]
+    } else {
+        vec!["branch", &branch_name]
+    };
+    let output = Command::new("git")
+        .args(&args)
+        .current_dir(&root_dir)
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).into_owned())
+    }
+}
+
+/// Merges a branch into the current branch.
+#[tauri::command]
+pub async fn git_merge_branch(root_dir: String, branch_name: String) -> Result<String, String> {
+    let output = Command::new("git")
+        .args(&["merge", &branch_name])
+        .current_dir(&root_dir)
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+
+    if output.status.success() {
+        Ok(stdout)
+    } else {
+        Err(if stderr.is_empty() { stdout } else { stderr })
+    }
+}
+
+/// Rebases the current branch onto the specified branch.
+#[tauri::command]
+pub async fn git_rebase_branch(root_dir: String, branch_name: String) -> Result<String, String> {
+    let output = Command::new("git")
+        .args(&["rebase", &branch_name])
+        .current_dir(&root_dir)
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+
+    if output.status.success() {
+        Ok(stdout)
+    } else {
+        Err(if stderr.is_empty() { stdout } else { stderr })
+    }
+}
+
+/// Aborts an ongoing rebase or merge.
+#[tauri::command]
+pub async fn git_abort_pending(root_dir: String, operation: String) -> Result<(), String> {
+    let op = match operation.as_str() {
+        "rebase" => "rebase",
+        _ => "merge",
+    };
+    let output = Command::new("git")
+        .args(&[op, "--abort"])
+        .current_dir(&root_dir)
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).into_owned())
+    }
+}
+
+/// Undoes a file move/rename by moving the file back to its original location.
+#[tauri::command]
+pub async fn git_undo_last_rename(_root_dir: String, original_path: String, new_path: String) -> Result<(), String> {
+    if !std::path::Path::new(&new_path).exists() {
+        return Err("File at new path no longer exists".into());
+    }
+    std::fs::rename(&new_path, &original_path).map_err(|e| e.to_string())?;
+    Ok(())
+}
 /// Used to diff against HEAD (for staged files) or current VFS (for unstaged files).
 /// Falls back to the HEAD version if not explicitly modified in the index.
 #[tauri::command]

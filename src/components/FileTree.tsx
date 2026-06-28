@@ -147,11 +147,15 @@ export const FileTree: React.FC<FileTreeProps> = ({ entries }) => {
 
   const handleMove = async (destPath: string) => {
     if (!moveDialogNode) return;
+    const originalPath = moveDialogNode.path;
     try {
-      await invoke("move_file_or_dir", { src: moveDialogNode.path, dest: destPath });
+      await invoke("move_file_or_dir", { src: originalPath, dest: destPath });
       await refreshTree();
       const state = useWorkspaceStore.getState();
-      state.closeTab(`file_${moveDialogNode.path.replace(/[^a-zA-Z0-9]/g, "_")}`);
+      state.closeTab(`file_${originalPath.replace(/[^a-zA-Z0-9]/g, "_")}`);
+      // Track for undo
+      state.setLastRename({ originalPath, newPath: destPath });
+      state.loadGitStatus();
     } catch (err: any) {
       alert(`Move failed: ${err}`);
     }
@@ -422,6 +426,9 @@ const FileTreeNode: React.FC<{
       await refreshTree();
       const state = useWorkspaceStore.getState();
       state.closeTab(`file_${node.path.replace(/[^a-zA-Z0-9]/g, "_")}`);
+      // Track for undo
+      state.setLastRename({ originalPath: node.path, newPath });
+      state.loadGitStatus();
     } catch (err: any) {
       alert(`Rename failed: ${err}`);
     }
