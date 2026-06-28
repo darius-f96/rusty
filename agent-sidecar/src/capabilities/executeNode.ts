@@ -13,7 +13,7 @@ import { createListFilesTool, createSearchCodebaseTool } from "../services/tools
 import { createMcpTools, McpServerConfig } from "../services/mcpClient";
 
 export async function executeNode(ws: WebSocket, data: any): Promise<void> {
-  const { nodeId, instructions, model, workspaceRoot, inputFiles, customProvider, globalContext, contextDescriptions, chatHistory, skill, mcpContext } = data;
+  const { nodeId, instructions, model, workspaceRoot, inputFiles, customProvider, globalContext, contextDescriptions, chatHistory, skill, mcpContext, upstreamTaskContext } = data;
   console.log(`WebSocket [Server] execute_node task starting`, {
     nodeId,
     model,
@@ -21,7 +21,8 @@ export async function executeNode(ws: WebSocket, data: any): Promise<void> {
     inputFilesCount: inputFiles?.length || 0,
     chatHistoryCount: chatHistory?.length || 0,
     hasSkill: !!skill,
-    mcpContextCount: mcpContext?.length || 0
+    mcpContextCount: mcpContext?.length || 0,
+    upstreamTasksCount: upstreamTaskContext?.length || 0
   });
 
   const modifiedFiles = new Set<string>();
@@ -175,6 +176,15 @@ ${inputFiles.map((f: any) => `- ${f.path}`).join("\n")}
 Please read them first if you need to modify or inspect them.`
       : `No input files are directly connected to this task node. You can read/write any files in the workspace.`;
 
+    const upstreamSection = Array.isArray(upstreamTaskContext) && upstreamTaskContext.length > 0
+      ? upstreamTaskContext.map((t: any) => {
+          const fileBlocks = (t.files || [])
+            .map((f: any) => `--- File: ${f.path} ---\n${f.content}`)
+            .join("\n\n");
+          return `[Upstream Task: ${t.taskName}]\nPrevious instructions: ${t.prompt || "(none)"}\nGenerated code:\n${fileBlocks || "(no files captured)"}`;
+        }).join("\n\n")
+      : "";
+
     const defaultSystemPrompt = `You are an AI coding agent operating inside a spatial canvas.
 Update files according to these user instructions: ${instructions}
 
@@ -182,6 +192,7 @@ Workspace directory root: ${workspaceRoot || "unknown"}
 ${filesList}
 ${globalContext ? `\n--- GLOBAL ARCHITECTURAL GUIDELINES ---\n${globalContext}\n` : ""}
 ${contextDescriptions && contextDescriptions.length > 0 ? `\n--- CONNECTED CONTEXT DESCRIPTIONS ---\n${contextDescriptions.join("\n")}\n` : ""}
+${upstreamSection ? `\n--- UPSTREAM TASK OUTPUT (inherit and build upon this code) ---\nThe following tasks ran before this one and are directly connected to it. Their generated code is the starting point for your work. Read, respect, and extend it instead of re-implementing from scratch.\n${upstreamSection}\n` : ""}
 ${mcpToolDescriptions.length > 0 ? `\n--- MCP TOOL INTEGRATIONS ---\nThe following tools connect to external MCP servers. Use them to fetch the information requested in the connected MCP context descriptions.\n${mcpToolDescriptions.join("\n")}\n` : ""}
 Remember:
 ${toolListText}
@@ -190,7 +201,7 @@ ${toolListText}
 CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
 1. STRICT SCOPE CONTROL: Focus strictly on implementing ONLY what is requested in the user instructions. Do NOT edit, create, or delete any files or configurations that are not directly requested (for example, do not configure RedisConfig, properties files, or build dependencies unless explicitly asked to).
 2. MINIMIZE CODEBASE EXPLORATION: Do not spend tool rounds reading unrelated files or listing directories unless they are directly relevant to the classes/methods you need to write. Avoid scanning the entire codebase.
-3. USE PROVIDED CONTEXT FIRST: If code examples, templates, or snippets are provided in the "<Context>" or "CONNECTED CONTEXT DESCRIPTIONS", use them directly. Do not invent alternative patterns or waste rounds search-matching them. Implement them exactly as specified.
+3. USE PROVIDED CONTEXT FIRST: If code examples, templates, or snippets are provided in the "<Context>", "CONNECTED CONTEXT DESCRIPTIONS", or "UPSTREAM TASK OUTPUT", use them directly. Do not invent alternative patterns or waste rounds search-matching them. Implement them exactly as specified. When upstream task output is provided, treat that code as the current state of the files and modify it rather than recreating it.
 4. TARGETED WRITING: Go straight to creating or modifying the requested files as quickly as possible. Do not get sidetracked by other improvements or warnings in the codebase.
 5. TERMINATE PROMPTLY: Once you have successfully written or updated all requested files, do NOT run redundant tools (like search_codebase, list_files, or read_file) to double-check or verify your work. Stop calling tools immediately and provide your final response summarizing the changes made.
 `;

@@ -69,7 +69,7 @@ export const Workspace: React.FC = () => {
   };
 
   // WebSocket execution runner
-  const executeNode = (nodeId: string, customPrompt?: string) => {
+  const executeNode = async (nodeId: string, customPrompt?: string) => {
     const storeState = useWorkspaceStore.getState();
     
     // Find the canvas context containing this node
@@ -167,7 +167,43 @@ export const Workspace: React.FC = () => {
       (c) => `[MCP: ${c.server.displayName || c.server.name}] ${c.description || "Fetch relevant information from this MCP server."}`
     );
 
-    console.log("WebSocket [executeNode] starting task execution", { nodeId, inputFiles, mcpContext: mcpContext.length });
+    // Gather context from upstream task nodes connected via task-out -> task-in edges.
+    // These are previously-executed tasks whose generated code this task should build
+    // upon. We read the actual file contents they produced from the VFS so the agent
+    // sees the prior work directly instead of re-implementing from scratch.
+    const upstreamTaskNodes = connectedEdges
+      .filter((edge) => edge.sourceHandle === "task-out" && edge.targetHandle === "task-in")
+      .map((edge) => currentNodes.find((n) => n.id === edge.source))
+      .filter((n): n is Exclude<typeof n, undefined> => n !== undefined && n.type === "taskNode");
+
+    const upstreamTaskContext: {
+      taskId: string;
+      taskName: string;
+      prompt: string;
+      files: { path: string; content: string }[];
+    }[] = [];
+
+    for (const tNode of upstreamTaskNodes) {
+      const tData = tNode.data as any;
+      const modifiedPaths: string[] = Array.isArray(tData.modifiedFiles) ? tData.modifiedFiles : [];
+      const files: { path: string; content: string }[] = [];
+      for (const filePath of modifiedPaths) {
+        try {
+          const content = await invoke<string>("read_file_vfs", { path: filePath });
+          files.push({ path: filePath, content: content || "" });
+        } catch (err: any) {
+          console.warn(`[executeNode] could not read upstream file ${filePath}:`, err);
+        }
+      }
+      upstreamTaskContext.push({
+        taskId: tNode.id,
+        taskName: tData.name || "AI Executor Node",
+        prompt: tData.prompt || "",
+        files,
+      });
+    }
+
+    console.log("WebSocket [executeNode] starting task execution", { nodeId, inputFiles, mcpContext: mcpContext.length, upstreamTasks: upstreamTaskContext.length });
 
     clearLogs(nodeId);
     setNodeStatus(nodeId, "running");
@@ -178,6 +214,15 @@ export const Workspace: React.FC = () => {
         inputFiles.map((f) => f.name).join(", ") || "none"
       }`
     );
+    if (upstreamTaskContext.length > 0) {
+      const totalFiles = upstreamTaskContext.reduce((sum, t) => sum + t.files.length, 0);
+      addLog(
+        nodeId,
+        `Inheriting context from ${upstreamTaskContext.length} upstream task(s): ${
+          upstreamTaskContext.map((t) => t.taskName).join(", ")
+        } (${totalFiles} generated file(s))`
+      );
+    }
 
     // Setup chat messages for prompt chat
     const store = useWorkspaceStore.getState();
@@ -206,6 +251,15 @@ export const Workspace: React.FC = () => {
       if (contextDescriptions.length > 0 || mcpDescriptions.length > 0) {
         formattedPrompt += `<Context>\n${[...contextDescriptions, ...mcpDescriptions].join("\n")}\n</Context>`;
       }
+      if (upstreamTaskContext.length > 0) {
+        const upstreamBlocks = upstreamTaskContext.map((t) => {
+          const fileSections = t.files
+            .map((f) => `  [File: ${f.path}]\n${f.content}`)
+            .join("\n\n");
+          return `[Upstream Task: ${t.taskName}]\nInstructions: ${t.prompt || "(none)"}\nGenerated code:\n${fileSections || "(no files captured)"}`;
+        });
+        formattedPrompt += `<UpstreamTasks>\nThe following tasks ran before this one and produced code that this task should build upon.\n${upstreamBlocks.join("\n\n")}\n</UpstreamTasks>\n`;
+      }
 
       const userMsg = {
         role: "user" as const,
@@ -232,10 +286,11 @@ export const Workspace: React.FC = () => {
           model: nodeModel,
           workspaceRoot: rootPath,
           inputFiles,
-          globalContext: globalContextSummary || "",
-          contextDescriptions,
-          mcpContext,
-          chatHistory: chatHistoryToSend,
+            globalContext: globalContextSummary || "",
+            contextDescriptions,
+            mcpContext,
+            upstreamTaskContext,
+            chatHistory: chatHistoryToSend,
           customProvider:
             provider &&
             (provider.id !== "anthropic" && provider.id !== "openai" || !!provider.apiKey)
