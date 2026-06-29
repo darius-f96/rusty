@@ -1,17 +1,26 @@
 import React, { useState, useRef, useEffect, memo, useContext } from "react";
 import { Handle, Position } from "@xyflow/react";
-import { Folder, Pencil, Check, X, Info, Trash2 } from "lucide-react";
+import { Folder, Pencil, Check, X, Info, Trash2, Search } from "lucide-react";
 import { FileIcon } from "../../services/fileTypeService";
 import { useWorkspaceStore } from "../../store";
 import { CanvasTabContext } from "../tabs/canvas/CanvasTabContext";
+import { searchService, SearchMatch } from "../../services/searchService";
 
 export const ContextNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) => {
   const { tabId } = useContext(CanvasTabContext);
   const updateNode = useWorkspaceStore((state) => state.updateTaskNode); // Uses the store's update action
   const openTab = useWorkspaceStore((state) => state.openTab);
   const deleteNode = useWorkspaceStore((state) => state.deleteNode);
+  const rootPath = useWorkspaceStore((state) => state.rootPath);
   const edges = useWorkspaceStore((state) => (state.canvasContexts[tabId] || { edges: [] }).edges);
   const [isEditing, setIsEditing] = useState(false);
+
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchMatch[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const activeEdges = edges.filter((e) => e.source === id);
   const isTopConnected = activeEdges.some((e) => e.sourceHandle === "context-out-top");
@@ -31,6 +40,80 @@ export const ContextNode: React.FC<{ id: string; data: any }> = memo(({ id, data
   const [tempName, setTempName] = useState(data.name || "");
   const [dragOver, setDragOver] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Search file when query changes
+  useEffect(() => {
+    if (!showSearch || !rootPath) return;
+
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      setSelectedIndex(0);
+      return;
+    }
+
+    setSearching(true);
+    const delayDebounce = setTimeout(async () => {
+      try {
+        const matches = await searchService.searchProject({
+          rootDir: rootPath,
+          query: searchQuery,
+          matchCase: false,
+          wholeWord: false,
+          isRegex: false,
+        });
+        setSearchResults(matches);
+        setSelectedIndex(0);
+      } catch (err) {
+        console.error("Search failed:", err);
+      } finally {
+        setSearching(false);
+      }
+    }, 150);
+
+    return () => clearTimeout(delayDebounce);
+  }, [searchQuery, showSearch, rootPath]);
+
+  // Auto-focus search input when shown
+  useEffect(() => {
+    if (showSearch && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [showSearch]);
+
+  const handleSearchSelect = (match: SearchMatch) => {
+    updateNode(id, {
+      path: match.path,
+      fileName: match.name,
+      isDir: false,
+      name: !data.name ? `Context: ${match.name}` : data.name
+    });
+    setShowSearch(false);
+    setSearchQuery("");
+    setSearchResults([]);
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      setShowSearch(false);
+      setSearchQuery("");
+      setSearchResults([]);
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setSelectedIndex((prev) => Math.min(prev + 1, searchResults.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setSelectedIndex((prev) => Math.max(prev - 1, 0));
+    } else if (e.key === "Enter" && searchResults.length > 0) {
+      e.preventDefault();
+      handleSearchSelect(searchResults[selectedIndex]);
+    }
+  };
+
+  const handleSearchClose = () => {
+    setShowSearch(false);
+    setSearchQuery("");
+    setSearchResults([]);
+  };
 
   // Sync temp name with data changes
   useEffect(() => {
@@ -157,6 +240,17 @@ export const ContextNode: React.FC<{ id: string; data: any }> = memo(({ id, data
             </button>
           ) : (
             <>
+              {!data.path && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowSearch(true); }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  className="nodrag text-[var(--text-muted)] hover:text-emerald-400 p-0.5 rounded transition-colors"
+                  title="Search and attach file"
+                >
+                  <Search size={12} />
+                </button>
+              )}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -251,6 +345,72 @@ export const ContextNode: React.FC<{ id: string; data: any }> = memo(({ id, data
           />
         </div>
       </div>
+
+      {/* File Search Overlay */}
+      {showSearch && (
+        <div className="absolute inset-0 z-50 bg-[var(--bg-sidebar)]/98 backdrop-blur-sm flex flex-col rounded-xl overflow-hidden">
+          <div className="flex items-center space-x-2 px-3 py-2 border-b border-[var(--border-color)] bg-black/20">
+            <Search size={13} className="text-emerald-400 flex-shrink-0" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              placeholder="Search files..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              className="flex-1 bg-[var(--bg-app)] border border-[var(--border-color)] rounded px-2 py-1 text-xs text-[var(--text-light)] focus:border-emerald-400 focus:outline-none"
+            />
+            <button
+              onClick={handleSearchClose}
+              className="text-[var(--text-muted)] hover:text-[var(--text-light)] p-0.5"
+            >
+              <X size={13} />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+            {searching && (
+              <div className="py-4 text-center text-[10px] text-[var(--text-muted)]">
+                Searching...
+              </div>
+            )}
+            {!searching && searchResults.length === 0 && searchQuery && (
+              <div className="py-4 text-center text-[10px] text-[var(--text-muted)]">
+                No files found
+              </div>
+            )}
+            {!searching && searchResults.length === 0 && !searchQuery && (
+              <div className="py-4 text-center text-[10px] text-[var(--text-muted)]">
+                Type to search files
+              </div>
+            )}
+            {searchResults.slice(0, 20).map((match, idx) => {
+              const relPath = rootPath ? match.path.replace(rootPath, "") : match.path;
+              return (
+                <button
+                  key={match.path + idx}
+                  onClick={() => handleSearchSelect(match)}
+                  className={`w-full text-left px-2.5 py-2 rounded-lg text-[11px] flex items-center space-x-2 transition-colors ${
+                    selectedIndex === idx
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                      : "text-[var(--text-normal)] hover:bg-[var(--accent-bg)]"
+                  }`}
+                >
+                  <FileIcon fileName={match.name} size={13} className="flex-shrink-0" />
+                  <div className="flex flex-col min-w-0 flex-1">
+                    <span className="font-medium truncate">{match.name}</span>
+                    <span className="text-[9px] text-[var(--text-muted)] truncate font-mono">{relPath}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <div className="px-3 py-1.5 border-t border-[var(--border-color)] bg-black/10 text-[9px] text-[var(--text-muted)] flex items-center justify-between">
+            <span>↑↓ navigate</span>
+            <span>↵ select</span>
+            <span>esc close</span>
+          </div>
+        </div>
+      )}
 
       {/* Handles */}
       {!isBottomConnected && (

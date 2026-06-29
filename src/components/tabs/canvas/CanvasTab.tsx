@@ -241,10 +241,9 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
 
   const onNodeClick = (_event: React.MouseEvent, node: any) => {
     if (node.type === "contextNode" || node.type === "mcpNode" || node.type === "stickyNode" || node.type === "boundaryNode") {
-      setSelectedNodeId(null);
-    } else {
-      setSelectedNodeId(node.id);
+      return;
     }
+    setSelectedNodeId(node.id);
   };
 
   const onPaneClick = () => {
