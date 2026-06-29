@@ -14,6 +14,7 @@ import { DiffTabContent } from "./components/DiffTabContent";
 import { ConsoleTabContent } from "./components/ConsoleTabContent";
 import { ExplorerChatContent } from "./components/ExplorerChatContent";
 import { PromptChatContent } from "./components/PromptChatContent";
+import { CustomSelect } from "../CustomSelect";
 
 const EMPTY_ARRAY: any[] = [];
 
@@ -176,10 +177,26 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
 
       {/* Footer controls for executing node */}
       {selectedNode.type === "taskNode" && activeTab !== "chat" && (
-        <div className="p-3 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/20 flex items-center justify-between">
+        <div className="p-3 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/20 flex items-center justify-between gap-3">
           <span className="text-[10px] uppercase font-mono text-[var(--text-muted)]">
             Status: <span className="font-bold text-[var(--text-normal)]">{nodeStatus}</span>
           </span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] uppercase font-mono text-[var(--text-muted)]">Model:</span>
+            <CustomSelect
+              value={(selectedNode.data as any).model || ""}
+              onChange={(val) => {
+                const updateTaskNode = useWorkspaceStore.getState().updateTaskNode;
+                updateTaskNode(selectedNode.id, { model: val });
+              }}
+              options={useWorkspaceStore.getState().customProviders.flatMap((p) => p.models).map((m) => ({
+                id: m.id,
+                name: `${m.name}`,
+              }))}
+              placeholder="Select model"
+              className="w-36"
+            />
+          </div>
           <button
             onClick={() => onExecuteNode(selectedNode.id)}
             disabled={nodeStatus === "running"}
