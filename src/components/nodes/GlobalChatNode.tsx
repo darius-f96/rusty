@@ -8,13 +8,13 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
   const { tabId } = useContext(CanvasTabContext);
   const updateNode = useWorkspaceStore((state) => state.updateTaskNode);
   const deleteNode = useWorkspaceStore((state) => state.deleteNode);
-  const globalContextSummary = useWorkspaceStore((state) => state.globalContextSummary);
   const mcpServers = useWorkspaceStore((state) => state.mcpServers);
   const nodeStatus = useWorkspaceStore((state) => (state.canvasContexts[tabId] || { nodeStatus: {} }).nodeStatus[id] || "idle");
 
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(data.name || "Task Auditor");
   const [mcpMenuOpen, setMcpMenuOpen] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   // Resize state
   const [width, setWidth] = useState(data.width || 384);
@@ -72,7 +72,17 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
     error: "border-rose-500/60 shadow-[0_0_10px_rgba(244,63,94,0.15)]"
   };
 
-  const summaryText = data.summary || globalContextSummary;
+  const summaryText = data.summary;
+
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+    const handleWheel = (e: WheelEvent) => {
+      e.stopPropagation();
+    };
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, []);
 
   return (
     <div 
@@ -145,8 +155,11 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
         </div>
       </div>
 
-      {/* Node Content */}
-      <div className="p-3 flex-1 flex flex-col min-h-0 overflow-hidden">
+      {/* Node Content - scrollable */}
+      <div 
+        ref={contentRef}
+        className="p-3 flex-1 flex flex-col min-h-0 overflow-y-auto scrollbar-wider"
+      >
         {/* MCP server selector — route requests through Jira, Confluence, etc */}
         <div className="flex-shrink-0 mb-2">
           <div className="relative">
@@ -202,7 +215,7 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
               Background Context
             </div>
             <div
-              className="nodrag text-xs font-sans font-medium text-[var(--text-light)] leading-relaxed flex-1 overflow-y-auto whitespace-pre-wrap bg-[var(--bg-app)]/50 rounded-lg p-2.5 border border-[var(--border-color)] w-full antialiased subpixel-antialiased select-text"
+              className="nodrag text-xs font-sans font-medium text-[var(--text-light)] leading-relaxed flex-1 whitespace-pre-wrap bg-[var(--bg-app)]/50 rounded-lg p-2.5 border border-[var(--border-color)] w-full antialiased subpixel-antialiased select-text overflow-hidden"
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
             >

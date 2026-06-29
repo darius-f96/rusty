@@ -406,7 +406,6 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
           className="flex-1 flex flex-col h-full relative bg-[var(--bg-canvas)]"
           id="rf-canvas"
           onDragOver={onDragOver}
-          onDrop={onDrop}
         >
           {/* Top Right Dropdowns */}
           <div className="absolute top-4 right-4 z-10 flex items-center space-x-2">
@@ -655,7 +654,6 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
             className="flex-1 w-full relative min-h-0"
             onDoubleClick={onPaneDoubleClick}
             onDragOver={onDragOver}
-            onDrop={onDrop}
           >
             <ReactFlow
               nodes={flowNodes}
