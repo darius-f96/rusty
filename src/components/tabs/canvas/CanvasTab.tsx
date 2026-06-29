@@ -549,18 +549,16 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
                   <div className="border-t border-[var(--border-color)] my-1" />
                   <button
                     onClick={() => {
-                      if (allWiresReconciled && !isPipelineApplied) {
+                      if (!isPipelineApplied) {
                         handleApplyChanges();
                         setActionMenuOpen(false);
                       }
                     }}
-                    disabled={!allWiresReconciled || isPipelineApplied}
+                    disabled={isPipelineApplied}
                     className={`w-full text-left px-3 py-2 flex items-center space-x-2 transition-colors ${
                       isPipelineApplied
                         ? "text-emerald-400 cursor-not-allowed opacity-90"
-                        : allWiresReconciled
-                        ? "hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] cursor-pointer"
-                        : "text-[var(--text-muted)] cursor-not-allowed opacity-50"
+                        : "hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] cursor-pointer"
                     }`}
                   >
                     {isPipelineApplied ? (

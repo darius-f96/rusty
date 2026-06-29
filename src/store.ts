@@ -574,15 +574,19 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   
   onNodesChange: (changes) => set((state) => {
     const activeTabId = getActiveCanvasTabId(state);
+    const structural = changes.some((c: any) => c.type === "add" || c.type === "remove");
     return updateContextAndSync(state, activeTabId, (ctx) => ({
-      nodes: applyNodeChanges(changes, ctx.nodes)
+      nodes: applyNodeChanges(changes, ctx.nodes),
+      ...(!structural ? { isPipelineApplied: ctx.isPipelineApplied } : {})
     }));
   }),
-  
+
   onEdgesChange: (changes) => set((state) => {
     const activeTabId = getActiveCanvasTabId(state);
+    const structural = changes.some((c: any) => c.type === "add" || c.type === "remove");
     return updateContextAndSync(state, activeTabId, (ctx) => ({
-      edges: applyEdgeChanges(changes, ctx.edges)
+      edges: applyEdgeChanges(changes, ctx.edges),
+      ...(!structural ? { isPipelineApplied: ctx.isPipelineApplied } : {})
     }));
   }),
   
@@ -600,14 +604,18 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   }),
 
   onNodesChangeForTab: (tabId, changes) => set((state) => {
+    const structural = changes.some((c: any) => c.type === "add" || c.type === "remove");
     return updateContextAndSync(state, tabId, (ctx) => ({
-      nodes: applyNodeChanges(changes, ctx.nodes)
+      nodes: applyNodeChanges(changes, ctx.nodes),
+      ...(!structural ? { isPipelineApplied: ctx.isPipelineApplied } : {})
     }));
   }),
 
   onEdgesChangeForTab: (tabId, changes) => set((state) => {
+    const structural = changes.some((c: any) => c.type === "add" || c.type === "remove");
     return updateContextAndSync(state, tabId, (ctx) => ({
-      edges: applyEdgeChanges(changes, ctx.edges)
+      edges: applyEdgeChanges(changes, ctx.edges),
+      ...(!structural ? { isPipelineApplied: ctx.isPipelineApplied } : {})
     }));
   }),
 
@@ -649,6 +657,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     }
     
     let newGroups = state.editorGroups;
+    let newCanvasContexts = state.canvasContexts;
     if (!tabExists) {
       newGroups = state.editorGroups.map((group) => {
         if (group.id === targetGroupId) {
@@ -660,6 +669,18 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         }
         return group;
       });
+      newCanvasContexts = {
+        ...state.canvasContexts,
+        [tabId]: {
+          nodes: data.nodes || [],
+          edges: data.edges || [],
+          nodeLogs: data.nodeLogs || {},
+          nodeStatus: data.nodeStatus || {},
+          globalChatHistory: data.globalChatHistory || {},
+          edgeReconciliationStatus: data.edgeReconciliationStatus || {},
+          isPipelineApplied: data.isPipelineApplied || false
+        }
+      };
     } else {
       newGroups = state.editorGroups.map((group) => {
         if (group.id === targetGroupId) {
@@ -670,20 +691,19 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         }
         return group;
       });
+      newCanvasContexts = {
+        ...state.canvasContexts,
+        [tabId]: {
+          nodes: data.nodes || [],
+          edges: data.edges || [],
+          nodeLogs: data.nodeLogs || {},
+          nodeStatus: data.nodeStatus || {},
+          globalChatHistory: data.globalChatHistory || {},
+          edgeReconciliationStatus: data.edgeReconciliationStatus || {},
+          isPipelineApplied: data.isPipelineApplied || false
+        }
+      };
     }
-    
-    const newCanvasContexts = {
-      ...state.canvasContexts,
-      [tabId]: {
-        nodes: data.nodes || [],
-        edges: data.edges || [],
-        nodeLogs: data.nodeLogs || {},
-        nodeStatus: data.nodeStatus || {},
-        globalChatHistory: data.globalChatHistory || {},
-        edgeReconciliationStatus: data.edgeReconciliationStatus || {},
-        isPipelineApplied: data.isPipelineApplied || false
-      }
-    };
     
     const tempState = {
       ...state,
@@ -1126,7 +1146,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
           return { ...node, data: { ...node.data, ...data } };
         }
         return node;
-      })
+      }),
+      isPipelineApplied: ctx.isPipelineApplied
     }));
   }),
 
@@ -1138,7 +1159,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
           return { ...node, position: { x, y } };
         }
         return node;
-      })
+      }),
+      isPipelineApplied: ctx.isPipelineApplied
     }));
   }),
 
