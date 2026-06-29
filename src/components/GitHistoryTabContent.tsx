@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useWorkspaceStore } from "../store";
 import { RotateCcw, ArrowUp, ArrowDown, Copy, Check, GitCommit, GitBranch, Tag, User, Calendar, ExternalLink } from "lucide-react";
 import { notify } from "../notificationStore";
+import { useConfirm } from "./useConfirm";
 
 interface GitCommitInfo {
   hash: string;
@@ -43,6 +44,8 @@ export const GitHistoryTabContent: React.FC<{ tab?: any }> = ({ tab }) => {
   const [loadingFiles, setLoadingFiles] = useState(false);
   const openTab = useWorkspaceStore((state) => state.openTab);
 
+  const { confirm, ConfirmModalComponent } = useConfirm();
+
   const handleToggleExpand = async (commitHash: string) => {
     if (expandedCommit === commitHash) {
       setExpandedCommit(null);
@@ -77,12 +80,14 @@ export const GitHistoryTabContent: React.FC<{ tab?: any }> = ({ tab }) => {
   };
 
   const handleRevertCommit = async (commitHash: string) => {
-    const confirmRevert = window.confirm(
-      `Are you sure you want to revert commit ${commitHash.substring(0, 7)}? This will create a new commit undoing its modifications.`
-    );
-    if (!confirmRevert) return;
-
     try {
+      const confirmRevert = await confirm({
+        title: "Revert Commit",
+        message: `Are you sure you want to revert commit ${commitHash.substring(0, 7)}? This will create a new commit undoing its modifications.`,
+        kind: "warning",
+      });
+      if (!confirmRevert) return;
+
       console.log(`Git Graph: Reverting commit ${commitHash}`);
       await invoke("git_revert_commit", { rootDir: rootPath, commitHash });
       await handleRefresh();
@@ -97,12 +102,14 @@ export const GitHistoryTabContent: React.FC<{ tab?: any }> = ({ tab }) => {
   };
 
   const handleResetToCommit = async (commitHash: string) => {
-    const confirmReset = window.confirm(
-      `WARNING: Are you sure you want to HARD RESET your current branch to commit ${commitHash.substring(0, 7)}? ALL uncommitted modifications and commits after this point will be DESTROYED.`
-    );
-    if (!confirmReset) return;
-
     try {
+      const confirmReset = await confirm({
+        title: "Hard Reset",
+        message: `WARNING: Are you sure you want to HARD RESET your current branch to commit ${commitHash.substring(0, 7)}? ALL uncommitted modifications and commits after this point will be DESTROYED.`,
+        kind: "danger",
+      });
+      if (!confirmReset) return;
+
       console.log(`Git Graph: Resetting branch to ${commitHash}`);
       await invoke("git_reset_to_commit", { rootDir: rootPath, commitHash });
       await handleRefresh();
@@ -559,6 +566,9 @@ export const GitHistoryTabContent: React.FC<{ tab?: any }> = ({ tab }) => {
           </div>
         )}
       </div>
+
+      {/* Confirmation Modal */}
+      {ConfirmModalComponent}
     </div>
   );
 };

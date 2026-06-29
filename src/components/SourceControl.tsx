@@ -5,6 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { CustomSelect } from "./CustomSelect";
 import { BranchDialog } from "./BranchDialog";
 import { notify } from "../notificationStore";
+import { useConfirm } from "./useConfirm";
 
 export const SourceControl: React.FC = () => {
   const rootPath = useWorkspaceStore((state) => state.rootPath);
@@ -33,6 +34,8 @@ export const SourceControl: React.FC = () => {
   const [branchDialog, setBranchDialog] = useState<"create" | "merge" | "rebase" | "delete" | null>(null);
   const lastRename = useWorkspaceStore((state) => state.lastRename);
   const setLastRename = useWorkspaceStore((state) => state.setLastRename);
+
+  const { confirm, ConfirmModalComponent } = useConfirm();
 
   // Fetch recent commits for the sidebar
   const fetchHistory = async () => {
@@ -214,10 +217,14 @@ export const SourceControl: React.FC = () => {
   // Discard file changes
   const handleDiscardChanges = async (e: React.MouseEvent, filePath: string, fileName: string) => {
     e.stopPropagation(); // Avoid opening the diff tab on button click
-    const confirmDiscard = window.confirm(`Are you sure you want to discard all unstaged changes in "${fileName}"? This cannot be undone.`);
-    if (!confirmDiscard) return;
-
     try {
+      const confirmDiscard = await confirm({
+        title: "Discard Changes",
+        message: `Are you sure you want to discard all unstaged changes in "${fileName}"? This cannot be undone.`,
+        kind: "warning",
+      });
+      if (!confirmDiscard) return;
+
       await invoke("git_discard_changes", { rootDir: rootPath, filePath });
       await loadGitStatus();
       await fetchHistory();
@@ -231,12 +238,14 @@ export const SourceControl: React.FC = () => {
 
   // Discard all changes in the working tree
   const handleDiscardAllChanges = async () => {
-    const confirmDiscard = window.confirm(
-      "Are you sure you want to discard ALL unstaged modifications and untracked files? This action CANNOT BE UNDONE."
-    );
-    if (!confirmDiscard) return;
-
     try {
+      const confirmDiscard = await confirm({
+        title: "Discard All Changes",
+        message: "Are you sure you want to discard ALL unstaged modifications and untracked files? This action CANNOT BE UNDONE.",
+        kind: "danger",
+      });
+      if (!confirmDiscard) return;
+
       console.log(`Git: Discarding all unstaged changes in ${rootPath}`);
       await invoke("git_discard_all_changes", { rootDir: rootPath });
       await loadGitStatus();
@@ -829,6 +838,9 @@ export const SourceControl: React.FC = () => {
           onCancel={() => setBranchDialog(null)}
         />
       )}
+
+      {/* Confirmation Modal */}
+      {ConfirmModalComponent}
     </div>
   );
 };

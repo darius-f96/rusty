@@ -20,6 +20,7 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { MoveDialog } from "./MoveDialog";
 import { CreateDialog } from "./CreateDialog";
 import { notify } from "../notificationStore";
+import { useConfirm } from "./useConfirm";
 
 interface FileEntry {
   name: string;
@@ -103,6 +104,8 @@ export const FileTree: React.FC<FileTreeProps> = ({ entries }) => {
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [createDialog, setCreateDialog] = useState<{ type: "file" | "folder"; dir: string; name: string } | null>(null);
 
+  const { confirm, ConfirmModalComponent } = useConfirm();
+
   const handleDropOnRoot = async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -164,8 +167,14 @@ export const FileTree: React.FC<FileTreeProps> = ({ entries }) => {
   };
 
   const handleDelete = async (node: any) => {
-    const confirmDelete = window.confirm(`Are you sure you want to permanently delete "${node.name}"?`);
-    if (!confirmDelete) return;
+    const confirmed = await confirm({
+      title: "Confirm Delete",
+      message: `Are you sure you want to permanently delete "${node.name}"?`,
+      confirmLabel: "Delete",
+      cancelLabel: "Cancel",
+      kind: "danger",
+    });
+    if (!confirmed) return;
     try {
       await invoke("delete_file_or_dir", { path: node.path });
       await refreshTree();
@@ -265,6 +274,9 @@ export const FileTree: React.FC<FileTreeProps> = ({ entries }) => {
           onCancel={() => setCreateDialog(null)}
         />
       )}
+
+      {/* Confirmation Modal */}
+      {ConfirmModalComponent}
     </div>
   );
 };
