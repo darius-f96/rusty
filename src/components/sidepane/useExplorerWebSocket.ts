@@ -66,7 +66,16 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       const currentExploreModel = selectedNode?.data?.exploreModel || currentActiveModel;
       const chatHistory = useWorkspaceStore.getState().globalChatHistory[selectedNodeId] || [];
 
-      // Resolve an MCP server selected on the Global Explorer node, if any.
+      // Always use task-auditor skill for this node type.
+      const skills = useWorkspaceStore.getState().skills;
+      const auditorSkill = skills.find((s: any) => s.id === "skill_task_auditor");
+      const skillData = auditorSkill ? {
+        systemPrompt: auditorSkill.systemPrompt,
+        enabledTools: auditorSkill.enabledTools,
+        preferredModel: auditorSkill.preferredModel,
+      } : null;
+
+      // Resolve an MCP server selected on the node, if any.
       const mcpServerName = selectedNode?.data?.mcpServerName as string | undefined;
       const mcpServersMap = useWorkspaceStore.getState().mcpServers;
       const mcpServers = mcpServerName && mcpServersMap[mcpServerName]
@@ -86,6 +95,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
           (prov.id !== "anthropic" && prov.id !== "openai" || !!prov.apiKey)
             ? prov
             : null,
+        skill: skillData,
       }));
     };
 
@@ -218,6 +228,15 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       const currentActiveModel = useWorkspaceStore.getState().activeModel;
       const currentSummarizeModel = selectedNode?.data?.summarizeModel || currentActiveModel;
 
+      // Always use task-auditor skill for this node type.
+      const skills = useWorkspaceStore.getState().skills;
+      const auditorSkill = skills.find((s: any) => s.id === "skill_task_auditor");
+      const skillData = auditorSkill ? {
+        systemPrompt: auditorSkill.systemPrompt,
+        enabledTools: auditorSkill.enabledTools,
+        preferredModel: auditorSkill.preferredModel,
+      } : null;
+
       socket.send(JSON.stringify({
         type: "global_explore",
         nodeId: selectedNodeId,
@@ -230,6 +249,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
           (prov.id !== "anthropic" && prov.id !== "openai" || !!prov.apiKey)
             ? prov
             : null,
+        skill: skillData,
       }));
     };
 

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, memo, useContext } from "react";
-import { Globe, Pencil, Check, Trash2, Sparkles, X, Loader2, Plug, ChevronDown } from "lucide-react";
+import { Pencil, Check, Trash2, Sparkles, X, Loader2, Plug, ChevronDown, Lightbulb } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
 import { processResponse } from "../../services/responseProcessingService";
 import { CanvasTabContext } from "../tabs/canvas/CanvasTabContext";
@@ -13,7 +13,7 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
   const nodeStatus = useWorkspaceStore((state) => (state.canvasContexts[tabId] || { nodeStatus: {} }).nodeStatus[id] || "idle");
 
   const [isEditing, setIsEditing] = useState(false);
-  const [tempName, setTempName] = useState(data.name || "Global Explorer");
+  const [tempName, setTempName] = useState(data.name || "Task Auditor");
   const [mcpMenuOpen, setMcpMenuOpen] = useState(false);
 
   // Resize state
@@ -80,9 +80,9 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
       className={`rounded-xl border bg-[var(--bg-sidebar)] text-[var(--text-normal)] overflow-hidden flex flex-col transition-[border-color,box-shadow] duration-300 shadow-xl relative ${statusBorder[nodeStatus]}`}
     >
       {/* Node Header */}
-      <div className="flex items-center justify-between border-b border-[var(--border-color)] bg-gradient-to-r from-violet-600/15 to-transparent px-3 py-2 select-none cursor-move flex-shrink-0">
+      <div className="flex items-center justify-between border-b border-[var(--border-color)] bg-gradient-to-r from-amber-600/15 to-transparent px-3 py-2 select-none cursor-move flex-shrink-0">
         <div className="flex items-center space-x-2 flex-1 mr-2 min-w-0">
-          <Globe size={14} className={`text-violet-400 flex-shrink-0 ${nodeStatus === "running" ? "animate-spin" : ""}`} />
+          <Lightbulb size={14} className={`text-amber-400 flex-shrink-0 ${nodeStatus === "running" ? "animate-spin" : ""}`} />
           {isEditing ? (
             <input
               type="text"
@@ -95,11 +95,11 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
                 if (e.key === "Enter") handleNameSave();
                 if (e.key === "Escape") setIsEditing(false);
               }}
-              className="nodrag bg-[var(--bg-app)] border border-[var(--border-color)] rounded px-1.5 py-0.5 font-sans text-xs text-[var(--text-light)] focus:outline-none focus:border-violet-400 w-full"
+              className="nodrag bg-[var(--bg-app)] border border-[var(--border-color)] rounded px-1.5 py-0.5 font-sans text-xs text-[var(--text-light)] focus:outline-none focus:border-amber-400 w-full"
               autoFocus
             />
           ) : (
-            <span className="font-sans text-xs font-semibold text-[var(--text-light)] truncate">{data.name || "Global Explorer"}</span>
+            <span className="font-sans text-xs font-semibold text-[var(--text-light)] truncate">{data.name || "Task Auditor"}</span>
           )}
         </div>
 
@@ -147,15 +147,15 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
 
       {/* Node Content */}
       <div className="p-3 flex-1 flex flex-col min-h-0 overflow-hidden">
-        {/* MCP server selector — lets the explorer call MCP tools */}
+        {/* MCP server selector — route requests through Jira, Confluence, etc */}
         <div className="flex-shrink-0 mb-2">
           <div className="relative">
             <button
               onClick={(e) => { e.stopPropagation(); setMcpMenuOpen(!mcpMenuOpen); }}
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
-              className="nodrag w-full bg-[var(--bg-app)]/60 border border-[var(--border-color)] rounded-lg px-2 py-1.5 text-[10px] font-sans text-left flex items-center justify-between hover:border-violet-500/50 transition-colors"
-              title="Route exploration through an MCP server"
+              className="nodrag w-full bg-[var(--bg-app)]/60 border border-[var(--border-color)] rounded-lg px-2 py-1.5 text-[10px] font-sans text-left flex items-center justify-between hover:border-amber-500/50 transition-colors"
+              title="Route requests through an MCP server (Jira, Confluence, etc)"
             >
               <span className="flex items-center space-x-1.5 min-w-0">
                 <Plug size={11} className="text-sky-400 flex-shrink-0" />
@@ -198,8 +198,8 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
 
         {summaryText ? (
           <div className="flex flex-col flex-1 min-h-0 space-y-1.5">
-            <div className="text-[9px] uppercase font-bold text-violet-400 font-sans tracking-wide flex-shrink-0">
-              Global Context Summary
+            <div className="text-[9px] uppercase font-bold text-amber-400 font-sans tracking-wide flex-shrink-0">
+              Background Context
             </div>
             <div
               className="nodrag text-xs font-sans font-medium text-[var(--text-light)] leading-relaxed flex-1 overflow-y-auto whitespace-pre-wrap bg-[var(--bg-app)]/50 rounded-lg p-2.5 border border-[var(--border-color)] w-full antialiased subpixel-antialiased select-text"
@@ -211,8 +211,8 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
           </div>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-center text-xs font-sans text-[var(--text-muted)] p-4 select-none">
-            <Globe size={24} className="mx-auto text-violet-500/40 mb-2" />
-            <span>Select this node to start codebase exploration in the inspector pane on the left.</span>
+            <Lightbulb size={24} className="mx-auto text-amber-500/40 mb-2" />
+            <span>Select this node to discuss tasks and build context for TaskNodes.</span>
           </div>
         )}
       </div>

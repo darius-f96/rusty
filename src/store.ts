@@ -435,6 +435,18 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       icon: "help",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
+    },
+    {
+      id: "skill_task_auditor",
+      name: "task-auditor",
+      description: "Analyze tasks and suggest changes, approaches, and execution plans. Do not write code.",
+      systemPrompt: "You are an AI task auditing agent specialized in analyzing requirements, suggesting changes, and planning task execution. You do NOT write code or make changes - you only discuss, analyze, and propose.\n\nGuidelines:\n- Understand the task or goal through dialogue\n- Analyze the codebase to understand the current state\n- Identify what changes would be needed and where\n- Suggest alternative approaches and trade-offs\n- Break down tasks into clear, executable steps\n- Estimate effort and complexity for each step\n- Do NOT write, modify, or create any code\n- Do NOT execute commands or make file changes\n- Focus on planning, analysis, and recommendation\n- Ask clarifying questions to fully understand the desired outcome\n- Once you understand the task, provide a detailed execution plan",
+      enabledTools: ["read_file", "list_files", "search_codebase"],
+      mcpServers: [],
+      isBuiltIn: true,
+      icon: "lightbulb",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     }
   ],
   activeSkillId: null,
@@ -1029,11 +1041,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       position: { x: finalX, y: finalY },
       data: {
         id,
-        name: "Global Explorer",
+        name: "Task Auditor",
         status: "idle",
         summary: "",
         width: 384,
-        height: 220
+        height: 220,
+        skillId: "skill_task_auditor"
       }
     };
     return updateContextAndSync(state, targetTabId, (ctx) => ({

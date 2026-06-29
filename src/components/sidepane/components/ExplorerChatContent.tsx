@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from "react";
-import { Settings, X, Globe, Send, Sparkles, FileText } from "lucide-react";
+import { Settings, X, Send, Sparkles, FileText, Lightbulb } from "lucide-react";
 import { CustomSelect } from "../../CustomSelect";
 import { useWorkspaceStore } from "../../../store";
 import { processResponse } from "../../../services/responseProcessingService";
@@ -288,10 +288,10 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
       >
         {globalChatHistory.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center text-[var(--text-muted)] space-y-2 select-none">
-            <Globe size={32} className="text-violet-400 mb-2 animate-pulse" />
-            <span className="font-semibold text-sm">Global Workspace Explorer</span>
+            <Lightbulb size={32} className="text-amber-400 mb-2 animate-pulse" />
+            <span className="font-semibold text-sm">Task Auditor</span>
             <span className="max-w-[280px]">
-              Ask the explorer agent to analyze patterns, codebase architecture, and conventions. Type @ to reference files.
+              Discuss tasks, suggest changes, and plan approaches. This auditor does not write code - it helps you understand and plan. Type @ to reference files.
             </span>
           </div>
         ) : (
@@ -307,7 +307,7 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
               <span className={`font-mono text-[9px] uppercase font-bold ${
                 msg.role === "user" ? "text-[var(--accent-color)]" : "text-violet-400"
               }`}>
-                {msg.role === "user" ? "You" : "Explorer"} · {msg.timestamp}
+                {msg.role === "user" ? "You" : "Auditor"} · {msg.timestamp}
               </span>
               <span className="leading-relaxed whitespace-pre-wrap text-[var(--text-normal)]">
                 {msg.role === "user" ? renderMessageContent(msg.content) : processResponse(msg.content)}
@@ -332,7 +332,7 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
             <input
               ref={inputRef}
               type="text"
-              placeholder="Explore codebase... (type @ to reference files)"
+              placeholder="Discuss task, plan changes... (type @ to reference files)"
               value={explorerInput}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
