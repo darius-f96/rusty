@@ -251,7 +251,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
     addAgentMessage(tab.id, consoleMessage);
     consoleMessageIdRef.current = consoleMessageId;
     consoleBufferRef.current = "";
-    saveChatHistory(true);
+    saveChatHistory();
     refreshHistoryAfterSave();
 
     const messageToSend = message;
@@ -354,6 +354,8 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
         }
 
         if (msg.type === "agent_chat_complete" && msg.tabId === tab.id) {
+          console.log(`[AgentTab] Received agent_chat_complete, response length: ${msg.response?.length || 0}`);
+
           const files = msg.modifiedFiles || [];
           setModifiedFiles(files);
 
@@ -374,16 +376,25 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
             });
           }
 
+          const responseContent = msg.response || "Agent complete.";
           addAgentMessage(tab.id, {
             id: `msg_${Date.now()}`,
             role: "assistant" as const,
-            content: msg.response || "Agent complete.",
+            content: responseContent,
             timestamp: new Date().toISOString(),
           });
+
+          // Clear the console message since we have the final response
+          if (consoleMessageIdRef.current) {
+            updateAgentMessage(tab.id, consoleMessageIdRef.current, "");
+          }
+
           setIsStreaming(false);
-          socket.close();
-          saveChatHistory(true);
+          saveChatHistory();
           refreshHistoryAfterSave();
+
+          // Don't close socket here - let onclose handle it naturally
+          return;
         }
 
         if (msg.type === "permission_request" && msg.tabId === tab.id) {
@@ -429,6 +440,30 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
 
     socket.onclose = (event) => {
       console.log(`[AgentTab] WebSocket closed (code: ${event.code})`);
+
+      // If we were streaming and have console content, use it as the response
+      if (isStreaming && consoleBufferRef.current && consoleBufferRef.current.trim()) {
+        const consoleContent = consoleBufferRef.current.trim();
+        // Only use console content if it looks like a meaningful response (not just logs)
+        if (consoleContent.length > 50) {
+          addAgentMessage(tab.id, {
+            id: `msg_${Date.now()}`,
+            role: "assistant" as const,
+            content: consoleContent,
+            timestamp: new Date().toISOString(),
+          });
+          // Clear the console message since we used its content
+          if (consoleMessageIdRef.current) {
+            updateAgentMessage(tab.id, consoleMessageIdRef.current, "");
+          }
+          setIsStreaming(false);
+          saveChatHistory();
+          refreshHistoryAfterSave();
+          agentSocketRef.current = null;
+          return;
+        }
+      }
+
       if (isStreaming) {
         addAgentMessage(tab.id, {
           id: `msg_${Date.now()}`,
@@ -597,7 +632,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
     setCollapsedConsoles((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const saveChatHistory = async (forceNew = false) => {
+  const saveChatHistory = async () => {
     if (chatSaveTimeoutRef.current) {
       clearTimeout(chatSaveTimeoutRef.current);
     }
@@ -607,7 +642,8 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
         const chats = useWorkspaceStore.getState().agentChats[tab.id] || [];
         const payload = JSON.stringify({ tabId: tab.id, messages: chats, savedAt: new Date().toISOString() });
 
-        if (forceNew || !savedChatPathRef.current) {
+        // Only create new file if we don't have a session path yet
+        if (!savedChatPathRef.current) {
           const result = await invoke("save_chat_history", {
             rootDir: rootPath,
             chatId: `agent_${tab.id}`,
@@ -615,6 +651,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
           });
           savedChatPathRef.current = result as string;
         } else {
+          // Update existing session file
           await invoke("write_file_disk", { path: savedChatPathRef.current, content: payload });
         }
       } catch (e) {

@@ -182,12 +182,18 @@ Guidelines:
 
     sendLog("Agent complete.");
 
+    // Small delay to ensure message is sent before closing
+    await new Promise(resolve => setTimeout(resolve, 50));
+
     safeSend(ws, {
       type: "agent_chat_complete",
       tabId,
       response: responseText,
       modifiedFiles: Array.from(modifiedFiles)
     });
+
+    // Ensure the message is sent before returning
+    await new Promise(resolve => setTimeout(resolve, 100));
   } catch (err: any) {
     console.error("WebSocket [Server] agent_chat error:", err);
     sendLog(`Agent error: ${err.message}`);
