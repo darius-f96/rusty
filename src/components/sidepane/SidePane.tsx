@@ -47,7 +47,7 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
   const explorer = useExplorerWebSocket(selectedNode);
 
   // Diff content hook
-  const { originalCode, modifiedCode } = useDiffContent(selectedNodeId, activeDiffFile, nodeStatus);
+  const { originalCode, modifiedCode, isLoading: isDiffLoading } = useDiffContent(selectedNodeId, activeDiffFile, nodeStatus);
 
   // Sync width when storageKey changes (different node type selected)
   useEffect(() => {
@@ -143,6 +143,7 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
             setActiveDiffFile={setActiveDiffFile}
             originalCode={originalCode}
             modifiedCode={modifiedCode}
+            isDiffLoading={isDiffLoading}
           />
         )}
 

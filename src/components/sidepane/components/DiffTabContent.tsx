@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import { DiffEditor } from "@monaco-editor/react";
 import { CustomSelect } from "../../CustomSelect";
 import { invoke } from "@tauri-apps/api/core";
@@ -13,6 +13,7 @@ interface DiffTabContentProps {
   setActiveDiffFile: (file: string) => void;
   originalCode: string;
   modifiedCode: string;
+  isDiffLoading?: boolean;
 }
 
 const getEditorLanguage = (filePath: string): string => {
@@ -45,13 +46,16 @@ export const DiffTabContent: React.FC<DiffTabContentProps> = ({
   activeDiffFile,
   setActiveDiffFile,
   originalCode,
-  modifiedCode
+  modifiedCode,
+  isDiffLoading
 }) => {
   const [editedCode, setEditedCode] = useState<string>("");
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const diffEditorRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const contentChangeDisposableRef = useRef<any>(null);
+  const lastActiveFileRef = useRef<string>("");
   const { viewMode, isAutoMode, toggleViewMode, enableAutoMode, renderSideBySide } = useDiffViewMode(containerRef);
 
   const diffOptions = modifiedFiles.map((file) => ({
@@ -60,15 +64,44 @@ export const DiffTabContent: React.FC<DiffTabContentProps> = ({
   }));
 
   const handleEditorMount = useCallback((editor: any) => {
+    if (contentChangeDisposableRef.current) {
+      contentChangeDisposableRef.current.dispose();
+    }
+
     diffEditorRef.current = editor;
     const modifiedEditor = editor.getModifiedEditor();
     modifiedEditor.updateOptions({ readOnly: false });
-    modifiedEditor.onDidChangeModelContent(() => {
+
+    const listener = () => {
       const newContent = modifiedEditor.getValue();
       setEditedCode(newContent);
       setIsDirty(newContent !== modifiedCode);
-    });
-  }, [modifiedCode]);
+    };
+    contentChangeDisposableRef.current = modifiedEditor.onDidChangeModelContent(listener);
+
+    lastActiveFileRef.current = activeDiffFile;
+  }, [modifiedCode, activeDiffFile]);
+
+  useEffect(() => {
+    if (!diffEditorRef.current) return;
+
+    const editor = diffEditorRef.current;
+    const originalModel = editor.getOriginalEditor().getModel();
+    const modifiedModel = editor.getModifiedEditor().getModel();
+
+    if (originalModel && modifiedModel) {
+      const currentValue = originalModel.getValue();
+      if (currentValue !== originalCode && !originalCode.startsWith("// Loading")) {
+        originalModel.setValue(originalCode);
+      }
+
+      const modifiedValue = modifiedModel.getValue();
+      if (modifiedValue !== modifiedCode && !modifiedCode.startsWith("// Loading")) {
+        modifiedModel.setValue(modifiedCode);
+        lastActiveFileRef.current = activeDiffFile;
+      }
+    }
+  }, [originalCode, modifiedCode, activeDiffFile]);
 
   const handleSave = async () => {
     if (!activeDiffFile || !isDirty) return;
@@ -121,11 +154,11 @@ export const DiffTabContent: React.FC<DiffTabContentProps> = ({
       {selectedNode.type === "taskNode" && activeDiffFile && (
         <div className="px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/50 flex items-center justify-end space-x-2 flex-shrink-0">
           <span className="text-[10px] text-[var(--text-muted)] font-mono mr-auto">
-            {isDirty ? "Modified (unsaved)" : "Editable"}
+            {isDiffLoading ? "Loading..." : isDirty ? "Modified (unsaved)" : "Editable"}
           </span>
           <button
             onClick={handleReset}
-            disabled={!isDirty || isSaving}
+            disabled={!isDirty || isSaving || isDiffLoading}
             className="flex items-center space-x-1 px-2 py-1 text-[10px] font-mono text-[var(--text-muted)] hover:text-[var(--text-light)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             title="Reset changes"
           >
@@ -134,7 +167,7 @@ export const DiffTabContent: React.FC<DiffTabContentProps> = ({
           </button>
           <button
             onClick={handleSave}
-            disabled={!isDirty || isSaving}
+            disabled={!isDirty || isSaving || isDiffLoading}
             className="flex items-center space-x-1 px-2 py-1 text-[10px] font-mono bg-emerald-600/80 hover:bg-emerald-600 disabled:bg-[var(--bg-sidebar)] disabled:text-[var(--text-muted)] text-white rounded transition-colors"
             title="Save changes to VFS"
           >

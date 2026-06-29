@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 export const useDiffContent = (
@@ -8,11 +8,16 @@ export const useDiffContent = (
 ) => {
   const [originalCode, setOriginalCode] = useState("// Loading original content...");
   const [modifiedCode, setModifiedCode] = useState("// Loading modified content...");
+  const [isLoading, setIsLoading] = useState(false);
+  const loadingFileRef = useRef<string | null>(null);
 
   useEffect(() => {
     let active = true;
     const fetchDiffContent = async () => {
       if (!selectedNodeId || !activeDiffFile) return;
+
+      setIsLoading(true);
+      loadingFileRef.current = activeDiffFile;
 
       try {
         console.log(`SidePane [fetchDiffContent] loading paths`, { activeDiffFile });
@@ -26,15 +31,17 @@ export const useDiffContent = (
           original = "";
         }
 
-        if (active) {
+        if (active && loadingFileRef.current === activeDiffFile) {
           setOriginalCode(original);
           setModifiedCode(modified);
+          setIsLoading(false);
         }
       } catch (e: any) {
         console.error("SidePane [fetchDiffContent] failed to read content:", e);
-        if (active) {
+        if (active && loadingFileRef.current === activeDiffFile) {
           setOriginalCode(`// Error reading file: ${e.message}`);
           setModifiedCode(`// Error reading file: ${e.message}`);
+          setIsLoading(false);
         }
       }
     };
@@ -45,5 +52,5 @@ export const useDiffContent = (
     };
   }, [selectedNodeId, activeDiffFile, nodeStatus]);
 
-  return { originalCode, modifiedCode };
+  return { originalCode, modifiedCode, isLoading };
 };
