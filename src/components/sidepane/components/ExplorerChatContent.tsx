@@ -81,7 +81,7 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
     const value = e.target.value;
     setExplorerInput(value);
 
-    const cursorPos = e.target.selectionStart;
+    const cursorPos = e.target.selectionStart ?? 0;
     const textBeforeCursor = value.substring(0, cursorPos);
     const atIndex = textBeforeCursor.lastIndexOf("@");
 
@@ -180,7 +180,7 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
     const input = inputRef.current;
     if (!input) return;
 
-    const cursorPos = input.selectionStart;
+    const cursorPos = input.selectionStart ?? 0;
     const textBeforeCursor = explorerInput.substring(0, cursorPos);
     const atIndex = textBeforeCursor.lastIndexOf("@");
 

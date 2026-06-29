@@ -113,17 +113,6 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
     });
   }, [edges]);
 
-  // Check if all sequence wires are reconciled (or there are none)
-  const allWiresReconciled = useMemo(() => {
-    const sequenceEdges = edges.filter(
-      (e) => e.sourceHandle === "task-out" && e.targetHandle === "task-in"
-    );
-    if (sequenceEdges.length === 0) return true;
-    return sequenceEdges.every(
-      (e) => edgeReconciliationStatus[e.id] === "reconciled"
-    );
-  }, [edges, edgeReconciliationStatus]);
-
   // Reconciliate Graph: mark all sequence wires as unreconciled to trigger checks
   const handleReconciliateGraph = useCallback(() => {
     const sequenceEdges = edges.filter(
