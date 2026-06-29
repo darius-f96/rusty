@@ -133,6 +133,7 @@ export interface WorkspaceState {
   setLastRename: (rename: { originalPath: string; newPath: string } | null) => void;
   collapseAllTrigger?: number;
   expandedPaths: Record<string, boolean>;
+  revealPath: string | null;
   selectedEdgeId: string | null;
   edgeReconciliationStatus: Record<string, "idle" | "unreconciled" | "reconciled">;
   
@@ -226,6 +227,8 @@ export interface WorkspaceState {
   setPathExpanded: (path: string, expanded: boolean) => void;
   togglePathExpanded: (path: string) => void;
   collapseAllFolders: () => void;
+  revealFileInTree: (filePath: string) => void;
+  clearRevealPath: () => void;
   addAndConnectContextNode: (x: number, y: number, taskId: string, taskHandleId: string, tabId?: string) => void;
   getGlobalChatHistory: (nodeId: string) => GlobalChatMessage[];
   setSelectedEdgeId: (id: string | null) => void;
@@ -356,6 +359,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   nodeLogs: {},
   nodeStatus: {},
   expandedPaths: {},
+  revealPath: null,
   globalContextSummary: "",
   globalChatHistory: {},
   selectedEdgeId: null,
@@ -525,6 +529,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         }
       },
       expandedPaths: {},
+  revealPath: null,
       nodes: [],
       edges: [],
       selectedNodeId: null,
@@ -1595,6 +1600,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     expandedPaths: {},
     collapseAllTrigger: Date.now()
   }),
+  revealFileInTree: (filePath) => set((state) => {
+    const parts = filePath.split("/");
+    const newExpanded: Record<string, boolean> = { ...state.expandedPaths };
+    let currentPath = "";
+    for (let i = 0; i < parts.length - 1; i++) {
+      currentPath += (i > 0 ? "/" : "") + parts[i];
+      newExpanded[currentPath] = true;
+    }
+    return { expandedPaths: newExpanded, revealPath: filePath };
+  }),
+  clearRevealPath: () => set({ revealPath: null }),
 
   addAndConnectContextNode: (x, y, taskId, taskHandleId, tabId) => set((state) => {
     const targetTabId = tabId || findTabIdByNodeId(state, taskId);

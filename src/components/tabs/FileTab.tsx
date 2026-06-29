@@ -4,7 +4,7 @@ import { useWorkspaceStore } from "../../store";
 import { invoke } from "@tauri-apps/api/core";
 import { getFileTypeDetails } from "../../services/fileTypeService";
 import { themes, defineMonacoTheme } from "../../theme";
-import { GitBranch, History } from "lucide-react";
+import { GitBranch, History, TreePine } from "lucide-react";
 
 // Register custom Monaco theme once
 loader.init().then((monaco) => {
@@ -30,6 +30,7 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
   const editorGroups = useWorkspaceStore((state) => state.editorGroups);
   const rootPath = useWorkspaceStore((state) => state.rootPath);
   const openTab = useWorkspaceStore((state) => state.openTab);
+  const revealFileInTree = useWorkspaceStore((state) => state.revealFileInTree);
   
   const targetGroup = editorGroups.find((g) => g.id === groupId);
   const isActive = targetGroup ? targetGroup.activeTabId === tab.id : false;
@@ -190,6 +191,16 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
         >
           <GitBranch size={10} />
           <span>{showBlame ? "Blame: On" : "Blame"}</span>
+        </button>
+
+        {/* Reveal in Tree Button */}
+        <button
+          onClick={() => revealFileInTree(tab.key)}
+          className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-light)] hover:border-[var(--border-active)] p-1.5 rounded-md text-[10px] font-mono font-bold transition-all shadow-md cursor-pointer flex items-center space-x-1"
+          title="Reveal in File Tree"
+        >
+          <TreePine size={10} />
+          <span>Reveal</span>
         </button>
       </div>
 

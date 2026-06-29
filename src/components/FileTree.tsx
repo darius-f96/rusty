@@ -11,7 +11,8 @@ import {
   Pencil,
   FolderInput,
   ExternalLink,
-  FilePlus
+  FilePlus,
+  TreePine
 } from "lucide-react";
 import { useWorkspaceStore } from "../store";
 import { FileIcon } from "../services/fileTypeService";
@@ -103,8 +104,26 @@ export const FileTree: React.FC<FileTreeProps> = ({ entries }) => {
   const [moveDialogNode, setMoveDialogNode] = useState<any | null>(null);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [createDialog, setCreateDialog] = useState<{ type: "file" | "folder"; dir: string; name: string } | null>(null);
+  const treeContainerRef = useRef<HTMLDivElement>(null);
+  const revealPath = useWorkspaceStore((state) => state.revealPath);
+  const clearRevealPath = useWorkspaceStore((state) => state.clearRevealPath);
+  const editorGroups = useWorkspaceStore((state) => state.editorGroups);
+  const activeGroupId = useWorkspaceStore((state) => state.activeGroupId);
+  const revealFileInTree = useWorkspaceStore((state) => state.revealFileInTree);
 
   const { confirm, ConfirmModalComponent } = useConfirm();
+
+  useEffect(() => {
+    if (revealPath && treeContainerRef.current) {
+      setTimeout(() => {
+        const el = treeContainerRef.current?.querySelector(`[data-file-path="${CSS.escape(revealPath)}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+        clearRevealPath();
+      }, 100);
+    }
+  }, [revealPath, clearRevealPath]);
 
   const handleDropOnRoot = async (e: React.DragEvent) => {
     e.preventDefault();
@@ -225,10 +244,29 @@ export const FileTree: React.FC<FileTreeProps> = ({ entries }) => {
 
   return (
     <div 
+      ref={treeContainerRef}
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleDropOnRoot}
-      className="space-y-[1px] select-none font-sans text-xs text-[var(--text-normal)] w-full min-h-[300px] overflow-hidden"
+      className="space-y-[1px] select-none font-sans text-xs text-[var(--text-normal)] w-full min-h-[300px] overflow-y-auto"
     >
+      {/* Header with reveal button */}
+      <div className="flex items-center justify-between px-2 py-1.5 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/50 sticky top-0 z-10">
+        <span className="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wide">Files</span>
+        <button
+          onClick={() => {
+            const activeGroup = editorGroups.find((g) => g.id === activeGroupId);
+            const activeTab = activeGroup?.openTabs.find((t) => t.id === activeGroup.activeTabId);
+            if (activeTab?.key) {
+              revealFileInTree(activeTab.key);
+            }
+          }}
+          className="text-[9px] font-mono text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)] px-1.5 py-0.5 rounded transition-colors cursor-pointer flex items-center space-x-1"
+          title="Reveal active file in tree"
+        >
+          <TreePine size={10} />
+          <span>Reveal</span>
+        </button>
+      </div>
       {entries.map((entry) => (
         <FileTreeNode 
           key={entry.path} 
@@ -570,9 +608,10 @@ const FileTreeNode: React.FC<{
       onDragStart={handleDragStart}
       onDoubleClick={isRenaming ? undefined : handleDoubleClick}
       onContextMenu={(e) => onContextMenu(e, node)}
+      data-file-path={node.path}
       style={{ WebkitUserDrag: "element" } as React.CSSProperties}
       className={`group relative flex items-center justify-between py-1 px-1.5 pl-[18px] transition-all cursor-grab active:cursor-grabbing font-sans text-xs w-full border rounded-md ${
-        isActiveFile 
+        isActiveFile
           ? "bg-zinc-800/40 border-zinc-700/30 text-[var(--text-light)] font-medium shadow-sm"
           : "hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] border-transparent hover:border-[var(--border-color)]/20 " + (gitState ? gitState.colorClass : "text-[var(--text-normal)]")
       }`}
