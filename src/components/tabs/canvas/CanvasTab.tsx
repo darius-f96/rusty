@@ -248,6 +248,12 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
   };
 
   const onPaneClick = () => {
+    const selectedNodeId = useWorkspaceStore.getState().selectedNodeId;
+    const nodes = useWorkspaceStore.getState().nodes;
+    const selectedNode = nodes.find((n) => n.id === selectedNodeId);
+    if (selectedNode?.type === "globalChatNode") {
+      return;
+    }
     setSelectedNodeId(null);
     setContextMenu(null);
   };
