@@ -14,6 +14,7 @@ import { DiffTabContent } from "./components/DiffTabContent";
 import { ConsoleTabContent } from "./components/ConsoleTabContent";
 import { ExplorerChatContent } from "./components/ExplorerChatContent";
 import { PromptChatContent } from "./components/PromptChatContent";
+import { VfsExplorer } from "./components/VfsExplorer";
 import { CustomSelect } from "../CustomSelect";
 
 const EMPTY_ARRAY: any[] = [];
@@ -22,9 +23,10 @@ interface SidePaneProps {
   onClose: () => void;
   onExecuteNode: (nodeId: string, customPrompt?: string) => void;
   onStopExecution: (nodeId: string) => void;
+  tabId?: string;
 }
 
-export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onStopExecution }) => {
+export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onStopExecution, tabId }) => {
   const selectedNodeId = useWorkspaceStore((state) => state.selectedNodeId);
   const nodes = useWorkspaceStore((state) => state.nodes);
   const nodeStatus = useWorkspaceStore((state) => state.nodeStatus[selectedNodeId || ""] || "idle");
@@ -32,7 +34,7 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
   const modifiedFiles = (selectedNode?.data?.modifiedFiles as string[]) || EMPTY_ARRAY;
 
-  const [activeTab, setActiveTab] = useState<"diff" | "chat" | "console">("diff");
+  const [activeTab, setActiveTab] = useState<"diff" | "chat" | "console" | "vfs">("diff");
   const [activeDiffFile, setActiveDiffFile] = useState<string>("");
 
   const nodeType = selectedNode?.type || "default";
@@ -173,6 +175,12 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
               onExecuteNode={onExecuteNode}
             />
           )
+        )}
+
+        {activeTab === "vfs" && (
+          <div className="h-full" style={{ width: `${width - 8}px` }}>
+            <VfsExplorer tabId={tabId} />
+          </div>
         )}
       </div>
 

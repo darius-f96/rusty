@@ -1,0 +1,199 @@
+import React, { useState, useEffect } from "react";
+import { Folder, Trash2, RefreshCw, X, ChevronRight, ChevronDown } from "lucide-react";
+import { vfsService, NodeFilesResponse } from "../../../services/vfsService";
+import { useWorkspaceStore } from "../../../store";
+
+interface VfsExplorerProps {
+  onClose?: () => void;
+  tabId?: string;
+}
+
+export const VfsExplorer: React.FC<VfsExplorerProps> = ({ onClose, tabId }) => {
+  const [nodeFiles, setNodeFiles] = useState<NodeFilesResponse[]>([]);
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(false);
+
+  const loadNodeFiles = async () => {
+    setLoading(true);
+    try {
+      const files = await vfsService.getAllNodeVfsFiles();
+      setNodeFiles(files);
+    } catch (err) {
+      console.error(`[VfsExplorer] Failed to load node files:`, err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadNodeFiles();
+  }, []);
+
+  const toggleNode = (nodeId: string) => {
+    const newExpanded = new Set(expandedNodes);
+    if (newExpanded.has(nodeId)) {
+      newExpanded.delete(nodeId);
+    } else {
+      newExpanded.add(nodeId);
+    }
+    setExpandedNodes(newExpanded);
+  };
+
+  const deleteNodeFiles = async (nodeId: string) => {
+    try {
+      await vfsService.deleteNodeVfsFiles(nodeId);
+      await loadNodeFiles();
+    } catch (err) {
+      console.error(`[VfsExplorer] Failed to delete node files:`, err);
+    }
+  };
+
+  const deleteAllNodeFiles = async () => {
+    try {
+      for (const nf of nodeFiles) {
+        await vfsService.deleteNodeVfsFiles(nf.node_id);
+      }
+      await loadNodeFiles();
+    } catch (err) {
+      console.error(`[VfsExplorer] Failed to delete all node files:`, err);
+    }
+  };
+
+  const getNodeName = (nodeId: string): string => {
+    const state = useWorkspaceStore.getState();
+    if (tabId) {
+      const canvasCtx = state.canvasContexts[tabId];
+      if (canvasCtx) {
+        const node = canvasCtx.nodes.find((n: any) => n.id === nodeId);
+        if (node?.data?.name) return String(node.data.name);
+      }
+    }
+    const topNode = state.nodes.find((n: any) => n.id === nodeId);
+    if (topNode?.data?.name) return String(topNode.data.name);
+    return nodeId.length > 12 ? `${nodeId.substring(0, 12)}...` : nodeId;
+  };
+
+  const getFileName = (path: string): string => {
+    const parts = path.replace(/\\/g, "/").split("/");
+    return parts[parts.length - 1] || path;
+  };
+
+  const getFileDir = (path: string): string => {
+    const parts = path.replace(/\\/g, "/").split("/");
+    parts.pop();
+    return parts.join("/") || "/";
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-[var(--bg-sidebar)] border-l border-[var(--border-color)]">
+      {/* Header */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)] bg-[var(--bg-header)]">
+        <div className="flex items-center space-x-2">
+          <Folder size={14} className="text-amber-400" />
+          <span className="text-xs font-semibold text-[var(--text-light)]">VFS Explorer</span>
+          <span className="text-[10px] text-[var(--text-muted)]">({nodeFiles.length} nodes)</span>
+        </div>
+        <div className="flex items-center space-x-1">
+          <button
+            onClick={loadNodeFiles}
+            className="p-1 text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
+          </button>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="p-1 text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors"
+              title="Close"
+            >
+              <X size={12} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto p-2">
+        {nodeFiles.length === 0 ? (
+          <div className="text-center text-[10px] text-[var(--text-muted)] py-8">
+            No VFS files tracked yet.
+            <br />
+            <span className="text-[9px]">Files created by TaskNodes will appear here.</span>
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {nodeFiles.map((nf) => {
+              const isExpanded = expandedNodes.has(nf.node_id);
+              const nodeName = getNodeName(nf.node_id);
+              const isNodePresent = (tabId ? useWorkspaceStore.getState().canvasContexts[tabId]?.nodes.some((n: any) => n.id === nf.node_id) : false)
+                || useWorkspaceStore.getState().nodes.some((n: any) => n.id === nf.node_id);
+              return (
+                <div key={nf.node_id} className="border border-[var(--border-color)] rounded-lg overflow-hidden">
+                  {/* Node header */}
+                  <div className={`flex items-center justify-between px-2 py-1.5 ${!isNodePresent ? "bg-rose-900/20" : "bg-[var(--bg-app)]"}`}>
+                    <div className="flex items-center space-x-1.5 flex-1 min-w-0">
+                      <button
+                        onClick={() => toggleNode(nf.node_id)}
+                        className="p-0.5 text-[var(--text-muted)] hover:text-[var(--text-light)] flex-shrink-0"
+                      >
+                        {isExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                      </button>
+                      <Folder size={11} className="text-amber-400 flex-shrink-0" />
+                      <span className="text-[10px] font-medium text-[var(--text-light)] truncate" title={nf.node_id}>
+                        {nodeName}
+                      </span>
+                      {!isNodePresent && (
+                        <span className="text-[8px] px-1 py-0.5 bg-rose-600/30 text-rose-300 rounded flex-shrink-0">deleted</span>
+                      )}
+                    </div>
+                    <div className="flex items-center space-x-1 flex-shrink-0 ml-2">
+                      <span className="text-[9px] text-[var(--text-muted)]">{nf.files.length} files</span>
+                      <button
+                        onClick={() => deleteNodeFiles(nf.node_id)}
+                        className="p-1 text-rose-500 hover:text-rose-400 transition-colors"
+                        title="Delete all files for this node"
+                      >
+                        <Trash2 size={10} />
+                      </button>
+                    </div>
+                  </div>
+                  {/* File list */}
+                  {isExpanded && (
+                    <div className="bg-[var(--bg-sidebar)] border-t border-[var(--border-color)]">
+                      {nf.files.map((filePath, idx) => (
+                        <div key={idx} className="flex items-center justify-between px-3 py-1 pl-6 border-b border-[var(--border-color)]/50 last:border-b-0">
+                          <div className="flex flex-col min-w-0">
+                            <span className="text-[9px] font-medium text-[var(--text-normal)] truncate" title={filePath}>
+                              {getFileName(filePath)}
+                            </span>
+                            <span className="text-[8px] text-[var(--text-muted)] truncate" title={getFileDir(filePath)}>
+                              {getFileDir(filePath)}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      {nodeFiles.length > 0 && (
+        <div className="px-3 py-2 border-t border-[var(--border-color)]">
+          <button
+            onClick={deleteAllNodeFiles}
+            className="w-full text-[10px] font-medium text-rose-400 hover:text-rose-300 py-1.5 px-2 rounded border border-rose-500/30 hover:border-rose-500/50 transition-colors flex items-center justify-center space-x-1.5"
+          >
+            <Trash2 size={10} />
+            <span>Delete All VFS Files</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};

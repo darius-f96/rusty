@@ -1,6 +1,7 @@
 import React, { useRef, useEffect } from "react";
 import { useWorkspaceStore } from "../store";
 import { invoke } from "@tauri-apps/api/core";
+import { vfsService } from "../services/vfsService";
 import { TabBar } from "./TabBar";
 import { CanvasTab } from "./tabs/canvas/CanvasTab";
 import { FileTab } from "./tabs/FileTab";
@@ -288,6 +289,9 @@ export const Workspace: React.FC = () => {
     socket.onopen = () => {
       console.log("WebSocket connection opened to sidecar");
       addLog(nodeId, "Connection established. Dispatching task execution details...");
+      vfsService.setCurrentExecutingNode(nodeId).catch(err => {
+        console.error(`[Workspace] Failed to set current executing node:`, err);
+      });
 
       socket.send(
         JSON.stringify({
@@ -345,7 +349,7 @@ export const Workspace: React.FC = () => {
         if (data.type === "write_file") {
           try {
             console.log(`WebSocket [write_file] intercept for: ${data.path}`);
-            await invoke("write_file_vfs", { path: data.path, content: data.content });
+            await invoke("write_file_vfs", { path: data.path, content: data.content, nodeId });
             socket.send(JSON.stringify({ type: "write_file_response", requestId: data.requestId }));
           } catch (err: any) {
             console.error("WebSocket [write_file] intercept error:", err);
@@ -422,6 +426,9 @@ export const Workspace: React.FC = () => {
       if (currentStatus === "running") {
         setNodeStatus(nodeId, "error");
       }
+      vfsService.setCurrentExecutingNode(null).catch(err => {
+        console.error(`[Workspace] Failed to clear current executing node:`, err);
+      });
     };
   };
 
@@ -433,6 +440,9 @@ export const Workspace: React.FC = () => {
     }
     setNodeStatus(nodeId, "idle");
     addLog(nodeId, "Execution stopped by user.");
+    vfsService.setCurrentExecutingNode(null).catch(err => {
+      console.error(`[Workspace] Failed to clear current executing node on stop:`, err);
+    });
   };
 
   const renderTabPanel = (tabsList: any[], activeId: string | null, groupId: string) => {

@@ -697,6 +697,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode, onStop
             onClose={() => setSelectedNodeId(null)}
             onExecuteNode={onExecuteNode}
             onStopExecution={onStopExecution}
+            tabId={tab.id}
           />
         )}
 

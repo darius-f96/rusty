@@ -13,6 +13,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { themes, applyThemeProperties, defineMonacoTheme } from "./theme";
 import { loader } from "@monaco-editor/react";
 import { skillsService } from "./services/skillsService";
+import { vfsService } from "./services/vfsService";
 import { McpServerConfig } from "./components/mcp/types";
 
 export interface CustomProvider {
@@ -1185,6 +1186,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   deleteNode: (id) => set((state) => {
     const targetTabId = findTabIdByNodeId(state, id);
     const updates = updateContextAndSync(state, targetTabId, (ctx) => {
+      const nodeToDelete = ctx.nodes.find((node) => node.id === id);
+      const isTaskNode = nodeToDelete?.type === "taskNode";
+
+      if (isTaskNode) {
+        vfsService.deleteNodeVfsFiles(id).catch(err => {
+          console.error(`[store] Failed to delete VFS files for node ${id}:`, err);
+        });
+      }
+
       const newNodes = ctx.nodes.filter((node) => node.id !== id);
       const newEdges = ctx.edges.filter((edge) => edge.source !== id && edge.target !== id);
       const newNodeLogs = { ...ctx.nodeLogs };

@@ -1,10 +1,10 @@
 import React from "react";
-import { Code, MessageSquare, Terminal } from "lucide-react";
+import { Code, MessageSquare, Terminal, Folder } from "lucide-react";
 
 interface SidePaneTabsProps {
   selectedNode: any;
-  activeTab: "diff" | "chat" | "console";
-  setActiveTab: (tab: "diff" | "chat" | "console") => void;
+  activeTab: "diff" | "chat" | "console" | "vfs";
+  setActiveTab: (tab: "diff" | "chat" | "console" | "vfs") => void;
   nodeStatus: string;
 }
 
@@ -56,6 +56,19 @@ export const SidePaneTabs: React.FC<SidePaneTabsProps> = ({
             {nodeStatus === "running" && (
               <span className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-[var(--accent-color)] animate-ping" />
             )}
+          </button>
+        )}
+        {(selectedNode.type === "taskNode" || selectedNode.type === "globalChatNode") && (
+          <button
+            onClick={() => setActiveTab("vfs")}
+            className={`flex items-center space-x-1.5 px-4 py-2.5 border-b-2 transition-all ${
+              activeTab === "vfs"
+                ? "border-[var(--accent-color)] text-[var(--text-light)] bg-[var(--accent-bg)] font-semibold"
+                : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-light)]"
+            }`}
+          >
+            <Folder size={14} />
+            <span>VFS</span>
           </button>
         )}
       </div>
