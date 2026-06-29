@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { DiffEditor } from "@monaco-editor/react";
-import { Terminal, MessageSquare, Code, Play, Sparkles, Save, RotateCcw } from "lucide-react";
+import { Terminal, MessageSquare, Code, Play, Sparkles, Save, RotateCcw, Octagon } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
 import { CustomSelect } from "../CustomSelect";
 import { invoke } from "@tauri-apps/api/core";
@@ -14,10 +14,11 @@ const EMPTY_ARRAY: any[] = [];
 interface TaskTabProps {
   tab: any;
   onExecuteNode: (nodeId: string, customPrompt?: string) => void;
+  onStopExecution: (nodeId: string) => void;
   groupId: string;
 }
 
-export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, groupId }) => {
+export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, onStopExecution, groupId }) => {
   const nodes = useWorkspaceStore((state) => state.nodes);
   const editorGroups = useWorkspaceStore((state) => state.editorGroups);
   const customProviders = useWorkspaceStore((state) => state.customProviders);
@@ -389,14 +390,23 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, groupId })
             <span className="text-[10px] uppercase font-mono text-[var(--text-muted)]">
               Status: <span className="font-bold text-[var(--text-normal)]">{nodeStatus}</span>
             </span>
-            <button
-              onClick={() => onExecuteNode(taskNodeId)}
-              disabled={nodeStatus === "running"}
-              className="bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 disabled:bg-[var(--bg-sidebar)] disabled:text-[var(--text-muted)] text-white text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all glow-btn shadow-md cursor-pointer"
-            >
-              <Sparkles size={14} className={nodeStatus === "running" ? "animate-spin" : ""} />
-              <span>{nodeStatus === "running" ? "Running..." : "Run Executor"}</span>
-            </button>
+            {nodeStatus === "running" ? (
+              <button
+                onClick={() => onStopExecution(taskNodeId)}
+                className="bg-rose-600 hover:bg-rose-500 text-white text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer"
+              >
+                <Octagon size={14} />
+                <span>Stop</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => onExecuteNode(taskNodeId)}
+                className="bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 text-white text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all glow-btn shadow-md cursor-pointer"
+              >
+                <Sparkles size={14} />
+                <span>Run Executor</span>
+              </button>
+            )}
           </div>
         )}
       </div>

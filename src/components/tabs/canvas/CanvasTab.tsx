@@ -47,9 +47,10 @@ const edgeTypes = {
 interface CanvasTabProps {
   tab: { id: string; title: string };
   onExecuteNode: (nodeId: string) => void;
+  onStopExecution: (nodeId: string) => void;
 }
 
-export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
+export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode, onStopExecution }) => {
   const rootPath = useWorkspaceStore((state) => state.rootPath);
   
   // Resolve tab-specific context from the store
@@ -695,6 +696,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode }) => {
           <SidePane
             onClose={() => setSelectedNodeId(null)}
             onExecuteNode={onExecuteNode}
+            onStopExecution={onStopExecution}
           />
         )}
 

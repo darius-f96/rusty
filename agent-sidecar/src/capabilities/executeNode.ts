@@ -296,7 +296,7 @@ CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
           tools,
           workspaceRoot,
           sendLog,
-          30,
+          200,
           chatHistory || []
         );
         runResult = { status: "success", modified: Array.from(modifiedFiles), response: responseText };

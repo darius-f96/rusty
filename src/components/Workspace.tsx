@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useRef, useEffect } from "react";
 import { useWorkspaceStore } from "../store";
 import { invoke } from "@tauri-apps/api/core";
 import { TabBar } from "./TabBar";
@@ -31,6 +31,17 @@ export const Workspace: React.FC = () => {
 
   const socketRef = useRef<WebSocket | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: CustomEvent) => {
+      const nodeId = e.detail?.nodeId as string | undefined;
+      if (nodeId) {
+        stopExecution(nodeId);
+      }
+    };
+    window.addEventListener("tasknode-stop-request", handler as EventListener);
+    return () => window.removeEventListener("tasknode-stop-request", handler as EventListener);
+  }, []);
 
   const handleMouseDown = (e: React.MouseEvent, index: number) => {
     e.preventDefault();
@@ -414,6 +425,16 @@ export const Workspace: React.FC = () => {
     };
   };
 
+  const stopExecution = (nodeId: string) => {
+    console.log(`[Workspace] Stopping execution for node: ${nodeId}`);
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      socketRef.current.close(1000, "User requested stop");
+      socketRef.current = null;
+    }
+    setNodeStatus(nodeId, "idle");
+    addLog(nodeId, "Execution stopped by user.");
+  };
+
   const renderTabPanel = (tabsList: any[], activeId: string | null, groupId: string) => {
     return tabsList.map((tab) => {
       const isActive = tab.id === activeId;
@@ -430,13 +451,13 @@ export const Workspace: React.FC = () => {
           className={`${isActive ? "w-full h-full" : "absolute -left-[99999px] top-0 w-full h-full"} ${bgClass} overflow-hidden`}
         >
           {tab.type === "canvas" && (
-            <CanvasTab tab={tab} onExecuteNode={executeNode} />
+            <CanvasTab tab={tab} onExecuteNode={executeNode} onStopExecution={stopExecution} />
           )}
           {tab.type === "file" && (
             <FileTab tab={tab} groupId={groupId} />
           )}
           {tab.type === "task" && (
-            <TaskTab tab={tab} onExecuteNode={executeNode} groupId={groupId} />
+            <TaskTab tab={tab} onExecuteNode={executeNode} onStopExecution={stopExecution} groupId={groupId} />
           )}
           {tab.type === "git-diff" && (
             <GitDiffTab tab={tab} groupId={groupId} />

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Octagon } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
 
 // Hooks
@@ -21,9 +21,10 @@ const EMPTY_ARRAY: any[] = [];
 interface SidePaneProps {
   onClose: () => void;
   onExecuteNode: (nodeId: string, customPrompt?: string) => void;
+  onStopExecution: (nodeId: string) => void;
 }
 
-export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) => {
+export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onStopExecution }) => {
   const selectedNodeId = useWorkspaceStore((state) => state.selectedNodeId);
   const nodes = useWorkspaceStore((state) => state.nodes);
   const nodeStatus = useWorkspaceStore((state) => state.nodeStatus[selectedNodeId || ""] || "idle");
@@ -197,14 +198,23 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode }) =>
               className="w-36"
             />
           </div>
-          <button
-            onClick={() => onExecuteNode(selectedNode.id)}
-            disabled={nodeStatus === "running"}
-            className="bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 disabled:bg-[var(--bg-sidebar)] disabled:text-[var(--text-muted)] text-white text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all glow-btn shadow-md cursor-pointer"
-          >
-            <Sparkles size={14} className={nodeStatus === "running" ? "animate-spin" : ""} />
-            <span>{nodeStatus === "running" ? "Running..." : "Run Executor"}</span>
-          </button>
+          {nodeStatus === "running" ? (
+            <button
+              onClick={() => onStopExecution(selectedNode.id)}
+              className="bg-rose-600 hover:bg-rose-500 text-white text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer"
+            >
+              <Octagon size={14} />
+              <span>Stop</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => onExecuteNode(selectedNode.id)}
+              className="bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 disabled:bg-[var(--bg-sidebar)] disabled:text-[var(--text-muted)] text-white text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all glow-btn shadow-md cursor-pointer"
+            >
+              <Sparkles size={14} />
+              <span>Run Executor</span>
+            </button>
+          )}
         </div>
       )}
     </div>

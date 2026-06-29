@@ -160,6 +160,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
             ? prov
             : null,
         skill: skillData,
+        planOnly: true,
       }));
     };
 

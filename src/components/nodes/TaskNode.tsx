@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, memo, useContext } from "react";
 import { Handle, Position } from "@xyflow/react";
-import { Sparkles, AlertCircle, CheckCircle2, Loader2, Pencil, Check, Trash2 } from "lucide-react";
+import { Sparkles, AlertCircle, CheckCircle2, Loader2, Pencil, Check, Trash2, Octagon } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
 import { CanvasTabContext } from "../tabs/canvas/CanvasTabContext";
 
@@ -115,6 +115,20 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
               >
                 <Trash2 size={12} />
               </button>
+              {nodeStatus === "running" && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    window.dispatchEvent(new CustomEvent("tasknode-stop-request", { detail: { nodeId: id } }));
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  className="nodrag text-rose-400 hover:text-rose-300 p-0.5 rounded transition-colors"
+                  title="Stop execution"
+                >
+                  <Octagon size={12} />
+                </button>
+              )}
             </>
           )}
 

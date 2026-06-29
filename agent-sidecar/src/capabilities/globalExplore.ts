@@ -15,7 +15,7 @@ import { callLlmWithToolsMultiRound, LlmConfig } from "../services/llm";
 import { createMcpTools, McpServerConfig } from "../services/mcpClient";
 
 export async function globalExplore(ws: WebSocket, data: any): Promise<void> {
-  const { nodeId, prompt, workspaceRoot, model, chatHistory, customProvider, mcpServers } = data;
+  const { nodeId, prompt, workspaceRoot, model, chatHistory, customProvider, mcpServers, planOnly } = data;
   console.log(`WebSocket [Server] global_explore starting`, { nodeId, workspaceRoot, model, mcpCount: mcpServers?.length || 0 });
 
   const sendLog = (message: string) => {
@@ -99,6 +99,18 @@ export async function globalExplore(ws: WebSocket, data: any): Promise<void> {
       }
     }
 
+    const PLAN_ONLY_INSTRUCTIONS = `<model Instructions>
+You are a PLANNING AND ANALYSIS assistant. You MUST follow these rules strictly:
+1. NEVER write, generate, or suggest any code, code snippets, file paths, or implementation details
+2. NEVER provide import statements, function signatures, or class definitions
+3. ONLY provide: structured plans, step-by-step descriptions, architecture analysis, dependency mapping, risk assessment
+4. ALWAYS structure your response with clear section headers and bullet points
+5. Focus on WHAT needs to be done and WHY, never HOW to implement it in code
+6. Your entire response must be descriptive planning content only - absolutely no code
+<model Instructions>
+<user prompt>
+`;
+
     const systemPrompt = `You are a codebase exploration assistant inside a spatial development canvas called Axiom.
 Your job is to analyze the workspace and provide architectural summaries, patterns, and guidelines.
 
@@ -171,10 +183,17 @@ IMPORTANT: End your response with a section marked "--- SUMMARY ---" that contai
 
       console.log(`WebSocket [Server] Calling LLM: ${llmConfig.model} at ${llmConfig.baseUrl}`);
 
+      const augmentedPrompt = planOnly
+        ? `${PLAN_ONLY_INSTRUCTIONS}${prompt}\n<user prompt>`
+        : prompt;
+
+      console.log(`WebSocket [Server] planOnly=${planOnly}, original prompt length=${prompt.length}, augmented length=${augmentedPrompt.length}`);
+      console.log(`WebSocket [Server] augmented prompt preview: ${augmentedPrompt.substring(0, 300)}...`);
+
       const responseText = await callLlmWithToolsMultiRound(
         llmConfig,
         systemPrompt,
-        prompt,
+        augmentedPrompt,
         tools,
         workspaceRoot,
         sendLog,

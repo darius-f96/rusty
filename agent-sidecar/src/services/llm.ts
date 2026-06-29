@@ -179,6 +179,12 @@ export async function callLlmWithToolsMultiRound(
     { role: "user", content: userMessage }
   ];
 
+  if (userMessage.includes('<model Instructions>')) {
+    console.log(`\n=== WebSocket [Server] USER PROMPT WITH PLAN-ONLY INSTRUCTIONS ===`);
+    console.log(userMessage);
+    console.log(`=== END USER PROMPT ===\n`);
+  }
+
   const openaiTools = tools.map(tool => ({
     type: "function" as const,
     function: {
