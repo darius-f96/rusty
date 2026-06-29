@@ -654,7 +654,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   }),
 
   loadCanvasTab: (data) => set((state) => {
-    const tabId = data.id || `canvas_${Date.now()}`;
+    const tabId = data.id ? `${data.id}_${Date.now()}` : `canvas_${Date.now()}`;
     const title = data.title || "Untitled Pipeline";
     const newTab = {
       id: tabId,

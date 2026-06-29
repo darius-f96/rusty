@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 export const useDiffContent = (
@@ -10,6 +10,36 @@ export const useDiffContent = (
   const [modifiedCode, setModifiedCode] = useState("// Loading modified content...");
   const [isLoading, setIsLoading] = useState(false);
   const loadingFileRef = useRef<string | null>(null);
+  const prevNodeStatusRef = useRef<string>("");
+
+  const refreshContent = useCallback(async () => {
+    if (!selectedNodeId || !activeDiffFile) return;
+
+    setIsLoading(true);
+    loadingFileRef.current = activeDiffFile;
+
+    try {
+      console.log(`SidePane [fetchDiffContent] loading paths`, { activeDiffFile });
+      const modified: string = await invoke("read_file_vfs", { path: activeDiffFile });
+
+      let original = "";
+      try {
+        original = await invoke("read_file_disk", { path: activeDiffFile });
+      } catch (diskErr) {
+        console.log(`SidePane [fetchDiffContent] File not on disk yet (treating as new file)`);
+        original = "";
+      }
+
+      setOriginalCode(original);
+      setModifiedCode(modified);
+      setIsLoading(false);
+    } catch (e: any) {
+      console.error("SidePane [fetchDiffContent] failed to read content:", e);
+      setOriginalCode(`// Error reading file: ${e.message}`);
+      setModifiedCode(`// Error reading file: ${e.message}`);
+      setIsLoading(false);
+    }
+  }, [selectedNodeId, activeDiffFile]);
 
   useEffect(() => {
     let active = true;
@@ -52,5 +82,13 @@ export const useDiffContent = (
     };
   }, [selectedNodeId, activeDiffFile, nodeStatus]);
 
-  return { originalCode, modifiedCode, isLoading };
+  useEffect(() => {
+    if (prevNodeStatusRef.current === "running" && nodeStatus === "success") {
+      console.log(`SidePane [fetchDiffContent] execution completed, refreshing content`);
+      refreshContent();
+    }
+    prevNodeStatusRef.current = nodeStatus;
+  }, [nodeStatus, refreshContent]);
+
+  return { originalCode, modifiedCode, isLoading, refreshContent };
 };
