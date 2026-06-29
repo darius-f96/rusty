@@ -306,7 +306,7 @@ CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
     console.log(`WebSocket [Server] Task complete. Sending success payload...`);
     mcpDisposers.forEach((d) => d());
     safeSend(ws, {
-      type: "execution_success",
+      type: "execution_complete",
       nodeId,
       result: runResult
     });
