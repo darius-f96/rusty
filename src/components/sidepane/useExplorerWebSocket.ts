@@ -69,7 +69,14 @@ export const useExplorerWebSocket = (selectedNode: any) => {
   const activeModel = useWorkspaceStore((state) => state.activeModel);
   const providers = useWorkspaceStore((state) => state.customProviders);
   const activeCustomProviderId = useWorkspaceStore((state) => state.activeCustomProviderId);
-  const activeProvider = providers.find((p) => p.id === activeCustomProviderId);
+  const isProviderActive = (prov: any) => {
+    if (prov.id === "anthropic" || prov.id === "openai") {
+      return !!prov.apiKey;
+    }
+    return true;
+  };
+  const filteredProviders = providers.filter(isProviderActive);
+  const activeProvider = filteredProviders.find((p) => p.id === activeCustomProviderId);
   const availableModels = activeProvider ? activeProvider.models : [];
 
   const exploreModel = (selectedNode?.data?.exploreModel as string) || activeModel;
@@ -412,7 +419,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
     handleExplorerSummarize,
     exploreModel,
     summarizeModel,
-    providers,
+    providers: filteredProviders,
     activeCustomProviderId,
     availableModels
   };

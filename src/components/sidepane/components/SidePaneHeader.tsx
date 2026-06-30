@@ -1,17 +1,13 @@
 import React from "react";
-import { X, Settings } from "lucide-react";
+import { X } from "lucide-react";
 
 interface SidePaneHeaderProps {
   selectedNode: any;
-  showSettings: boolean;
-  setShowSettings: (val: boolean) => void;
   onClose: () => void;
 }
 
 export const SidePaneHeader: React.FC<SidePaneHeaderProps> = ({
   selectedNode,
-  showSettings,
-  setShowSettings,
   onClose
 }) => {
   return (
@@ -27,15 +23,6 @@ export const SidePaneHeader: React.FC<SidePaneHeaderProps> = ({
         </span>
       </div>
       <div className="flex items-center space-x-1">
-        {selectedNode.type === "globalChatNode" && (
-          <button
-            onClick={() => setShowSettings(!showSettings)}
-            className="text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors p-1.5 rounded-lg hover:bg-[var(--bg-sidebar)] cursor-pointer"
-            title="Explorer settings"
-          >
-            <Settings size={15} />
-          </button>
-        )}
         <button
           onClick={onClose}
           className="text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors p-1 rounded-lg hover:bg-[var(--bg-sidebar)] cursor-pointer"

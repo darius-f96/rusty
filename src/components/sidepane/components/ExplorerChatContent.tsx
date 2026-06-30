@@ -1,6 +1,5 @@
 import React, { useRef, useEffect, useState } from "react";
-import { Settings, X, Send, Sparkles, FileText, Lightbulb } from "lucide-react";
-import { CustomSelect } from "../../CustomSelect";
+import { Send, Sparkles, FileText, Lightbulb } from "lucide-react";
 import { useWorkspaceStore } from "../../../store";
 import { processResponse } from "../../../services/responseProcessingService";
 import { searchService } from "../../../services/searchService";
@@ -16,15 +15,10 @@ interface ExplorerChatContentProps {
   explorerInput: string;
   setExplorerInput: (val: string) => void;
   isSummarizing: boolean;
-  showSettings: boolean;
-  setShowSettings: (val: boolean) => void;
   handleExplorerSendMessage: () => void;
   handleExplorerSummarize: () => void;
   exploreModel: string;
   summarizeModel: string;
-  providers: any[];
-  activeCustomProviderId: string | null;
-  availableModels: any[];
 }
 
 const EMPTY_ARRAY: any[] = [];
@@ -35,20 +29,14 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
   explorerInput,
   setExplorerInput,
   isSummarizing,
-  showSettings,
-  setShowSettings,
   handleExplorerSendMessage,
   handleExplorerSummarize,
   exploreModel,
   summarizeModel,
-  providers,
-  activeCustomProviderId,
-  availableModels,
 }) => {
   const globalChatHistory = useWorkspaceStore(
     (state) => state.globalChatHistory[selectedNode?.id || ""] || EMPTY_ARRAY
   );
-  const updateNode = useWorkspaceStore((state) => state.updateTaskNode);
   const rootPath = useWorkspaceStore((state) => state.rootPath);
 
   const chatScrollRef = useRef<HTMLDivElement>(null);
@@ -213,72 +201,14 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-[var(--bg-app)]">
-      {/* Chat sub-header with model status and settings toggle */}
+      {/* Chat sub-header with model status */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/20 select-none flex-shrink-0">
         <div className="flex items-center space-x-2 text-[10px] font-mono text-[var(--text-muted)]">
           <span>Chat: <strong className="text-violet-400">{(exploreModel || "").split("/").pop() || "None"}</strong></span>
           <span>•</span>
           <span>Summ: <strong className="text-amber-400">{(summarizeModel || "").split("/").pop() || "None"}</strong></span>
         </div>
-        <button
-          onClick={() => setShowSettings(!showSettings)}
-          className="flex items-center space-x-1 text-[11px] font-medium text-violet-400 hover:text-violet-300 transition-colors cursor-pointer"
-        >
-          <Settings size={12} />
-          <span>Configure Models</span>
-        </button>
       </div>
-
-      {/* Explorer settings configuration drawer inside chat */}
-      {showSettings && (
-        <div className="bg-[var(--bg-sidebar)]/80 border-b border-[var(--border-color)] p-3.5 space-y-3 text-xs font-sans select-none animate-fadeIn flex-shrink-0">
-          <div className="flex items-center justify-between">
-            <span className="font-semibold text-[var(--text-light)] flex items-center space-x-1.5">
-              <Settings size={12} className="text-violet-400" />
-              <span>Explorer Settings</span>
-            </span>
-            <button onClick={() => setShowSettings(false)} className="text-[var(--text-muted)] hover:text-[var(--text-light)] cursor-pointer">
-              <X size={14} />
-            </button>
-          </div>
-          <div className="grid grid-cols-2 gap-3.5 font-mono text-[11px]">
-            <div className="flex flex-col space-y-1 col-span-2 border-b border-[var(--border-color)] pb-2 mb-1">
-              <span className="text-[var(--text-muted)] font-sans">Active LLM Provider:</span>
-              <CustomSelect
-                value={activeCustomProviderId || ""}
-                onChange={(newProviderId) => {
-                  useWorkspaceStore.getState().setActiveCustomProviderId(newProviderId);
-                  const prov = providers.find((p) => p.id === newProviderId);
-                  if (prov && prov.models && prov.models.length > 0) {
-                    useWorkspaceStore.getState().setActiveModel(prov.models[0].id);
-                    updateNode(selectedNode.id, {
-                      exploreModel: prov.models[0].id,
-                      summarizeModel: prov.models[0].id,
-                    });
-                  }
-                }}
-                options={providers.map((p: any) => ({ id: p.id, name: p.name }))}
-              />
-            </div>
-            <div className="flex flex-col space-y-1">
-              <span className="text-[var(--text-muted)] font-sans">Exploration Model:</span>
-              <CustomSelect
-                value={exploreModel}
-                onChange={(val) => updateNode(selectedNode.id, { exploreModel: val })}
-                options={availableModels.length > 0 ? availableModels : [{ id: exploreModel, name: (exploreModel || "").split("/").pop() || exploreModel || "None" }]}
-              />
-            </div>
-            <div className="flex flex-col space-y-1">
-              <span className="text-[var(--text-muted)] font-sans">Summarization Model:</span>
-              <CustomSelect
-                value={summarizeModel}
-                onChange={(val) => updateNode(selectedNode.id, { summarizeModel: val })}
-                options={availableModels.length > 0 ? availableModels : [{ id: summarizeModel, name: (summarizeModel || "").split("/").pop() || summarizeModel || "None" }]}
-              />
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Explorer Chat History */}
       <div

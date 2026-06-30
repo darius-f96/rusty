@@ -69,6 +69,17 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
     }
   }, [storageKey, setWidth, containerRef]);
 
+  // Close sidepane on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   // Set default active tab based on selected node type
   useEffect(() => {
     if (!selectedNode) return;
@@ -120,8 +131,6 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
       {/* Pane Header */}
       <SidePaneHeader
         selectedNode={selectedNode}
-        showSettings={explorer.showSettings}
-        setShowSettings={explorer.setShowSettings}
         onClose={onClose}
       />
 
@@ -159,15 +168,10 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
               explorerInput={explorer.explorerInput}
               setExplorerInput={explorer.setExplorerInput}
               isSummarizing={explorer.isSummarizing}
-              showSettings={explorer.showSettings}
-              setShowSettings={explorer.setShowSettings}
               handleExplorerSendMessage={explorer.handleExplorerSendMessage}
               handleExplorerSummarize={explorer.handleExplorerSummarize}
               exploreModel={explorer.exploreModel}
               summarizeModel={explorer.summarizeModel}
-              providers={explorer.providers}
-              activeCustomProviderId={explorer.activeCustomProviderId}
-              availableModels={explorer.availableModels}
             />
           ) : (
             <PromptChatContent

@@ -133,9 +133,22 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode, onStop
 
   const [rfInstance, setRfInstance] = useState<any>(null);
   const connectionStartRef = useRef<any>(null);
+  const initRef = useRef(false);
 
   const onConnectStart = useCallback((_: any, { nodeId, handleId, handleType }: any) => {
     connectionStartRef.current = { nodeId, handleId, handleType };
+  }, []);
+
+  const onInit = useCallback((instance: any) => {
+    setRfInstance(instance);
+    if (!initRef.current) {
+      initRef.current = true;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          instance.fitView({ maxZoom: 1.2 });
+        });
+      });
+    }
   }, []);
 
   const onConnectEnd = useCallback(
@@ -262,7 +275,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode, onStop
     (event: any) => {
       event.preventDefault();
       const bounds = document.getElementById("rf-canvas")?.getBoundingClientRect();
-      if (bounds && rfInstance) {
+      if (bounds) {
         setContextMenu({
           x: event.clientX - bounds.left,
           y: event.clientY - bounds.top,
@@ -271,7 +284,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode, onStop
         });
       }
     },
-    [rfInstance]
+    []
   );
 
   const onNodeContextMenu = useCallback(
@@ -279,7 +292,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode, onStop
       if (node.type !== "boundaryNode") return;
       event.preventDefault();
       const bounds = document.getElementById("rf-canvas")?.getBoundingClientRect();
-      if (bounds && rfInstance) {
+      if (bounds) {
         setContextMenu({
           x: event.clientX - bounds.left,
           y: event.clientY - bounds.top,
@@ -288,7 +301,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode, onStop
         });
       }
     },
-    [rfInstance]
+    []
   );
 
   const handleAddNodeFromContextMenu = useCallback(
@@ -407,9 +420,9 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode, onStop
 
   return (
     <CanvasTabContext.Provider value={{ tabId: tab.id }}>
-      <div className="w-full h-full flex relative">
+      <div className="w-full h-full flex flex-row relative">
         <div
-          className="flex-1 flex flex-col h-full relative bg-[var(--bg-canvas)]"
+          className="flex-1 min-h-0 relative bg-[var(--bg-canvas)]"
           id="rf-canvas"
           onDragOver={onDragOver}
         >
@@ -657,11 +670,12 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode, onStop
 
           {/* React Flow Board */}
           <div
-            className="flex-1 w-full relative min-h-0"
+            className="absolute inset-0"
             onDoubleClick={onPaneDoubleClick}
             onDragOver={onDragOver}
           >
             <ReactFlow
+              style={{ width: "100%", height: "100%" }}
               nodes={flowNodes}
               edges={styledEdges}
               onNodesChange={onNodesChange}
@@ -673,7 +687,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode, onStop
               onPaneClick={onPaneClick}
               onPaneContextMenu={onPaneContextMenu}
               onNodeContextMenu={onNodeContextMenu}
-              onInit={setRfInstance}
+              onInit={onInit}
               onDragOver={onDragOver}
               onDrop={onDrop}
               onConnectStart={onConnectStart}
@@ -682,8 +696,6 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode, onStop
               proOptions={{ hideAttribution: true }}
               maxZoom={1.2}
               minZoom={0.2}
-              fitView
-              fitViewOptions={{ maxZoom: 1.2 }}
               elevateNodesOnSelect={false}
             >
               <Background color="#1f2937" gap={16} size={1} variant={BackgroundVariant.Dots} />
