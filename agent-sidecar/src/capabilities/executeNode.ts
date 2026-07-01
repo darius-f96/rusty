@@ -68,7 +68,7 @@ export async function executeNode(ws: WebSocket, data: any): Promise<void> {
         const resolvedPath = path.isAbsolute(filePath) ? filePath : path.join(workspaceRoot, filePath);
         return new Promise((resolve, reject) => {
           const requestId = getNextId();
-          registerPendingRequest(requestId, (res) => {
+          registerPendingRequest(requestId, ws, (res) => {
             if (res.error) {
               const errorMsg = String(res.error).toLowerCase();
               if (errorMsg.includes("not found") || errorMsg.includes("no such file") || errorMsg.includes("exist")) {
@@ -107,7 +107,7 @@ export async function executeNode(ws: WebSocket, data: any): Promise<void> {
         
         return new Promise((resolve, reject) => {
           const requestId = getNextId();
-          registerPendingRequest(requestId, (res) => {
+          registerPendingRequest(requestId, ws, (res) => {
             if (res.error) {
               console.error(`WebSocket [Server] write_file failed for: ${resolvedPath}`, res.error);
               reject(new Error(res.error));

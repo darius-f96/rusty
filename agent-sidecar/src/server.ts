@@ -150,9 +150,9 @@ wss.on("connection", (ws: WebSocket) => {
     // Pair request callbacks returning from frontend VFS
     if (data.type === "read_file_response" || data.type === "write_file_response") {
       console.log(`WebSocket [Server] Resolving pending request: ${data.requestId}`, { hasError: !!data.error });
-      const resolver = pendingRequests.get(data.requestId);
-      if (resolver) {
-        resolver(data);
+      const pending = pendingRequests.get(data.requestId);
+      if (pending) {
+        pending.resolver(data);
         pendingRequests.delete(data.requestId);
       }
       return;
@@ -180,7 +180,7 @@ wss.on("connection", (ws: WebSocket) => {
 
   ws.on("close", (code, reason) => {
     console.log(`WebSocket [Server] Client disconnected (code: ${code}, reason: "${reason ? reason.toString() : ""}"`);
-    cleanupPendingRequests();
+    cleanupPendingRequests(ws);
   });
 });
 

@@ -56,7 +56,7 @@ export async function globalExplore(ws: WebSocket, data: any): Promise<void> {
         sendLog(`Reading file: ${filePath}`);
         return new Promise((resolve, reject) => {
           const requestId = getNextId();
-          registerPendingRequest(requestId, (res) => {
+          registerPendingRequest(requestId, ws, (res) => {
             if (res.error) {
               const errorMsg = String(res.error).toLowerCase();
               if (errorMsg.includes("not found") || errorMsg.includes("no such file") || errorMsg.includes("exist")) {

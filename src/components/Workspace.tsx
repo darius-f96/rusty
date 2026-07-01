@@ -2,6 +2,7 @@ import React, { useRef, useEffect } from "react";
 import { useWorkspaceStore } from "../store";
 import { invoke } from "@tauri-apps/api/core";
 import { vfsService } from "../services/vfsService";
+import { notify } from "../notificationStore";
 import { TabBar } from "./TabBar";
 import { AxiomTab } from "./tabs/canvas/AxiomTab";
 import { FileTab } from "./tabs/FileTab";
@@ -290,8 +291,21 @@ export const Workspace: React.FC = () => {
       currentInstructions = formattedPrompt;
     }
 
-    const socket = new WebSocket("ws://localhost:4000");
-    socketRef.current = socket;
+    let socket: WebSocket;
+    try {
+      socket = new WebSocket("ws://localhost:4000");
+      socketRef.current = socket;
+    } catch (err: any) {
+      console.error("Failed to construct WebSocket:", err);
+      addLog(nodeId, `Fatal: Failed to construct WebSocket: ${err.message}`);
+      setNodeStatus(nodeId, "error");
+      notify(
+        "Sidecar Connection Error",
+        `Failed to create WebSocket connection to sidecar: ${err.message || String(err)}. Ensure the agent sidecar is running on port 4000.`,
+        "error"
+      );
+      return;
+    }
 
     socket.onopen = () => {
       console.log("WebSocket connection opened to sidecar");
@@ -415,12 +429,18 @@ export const Workspace: React.FC = () => {
 
           setNodeStatus(nodeId, "error");
           socket.close();
+          notify("Execution Error", `The sidecar returned an execution error: ${data.error}`, "error");
         }
       } catch (err: any) {
         console.error("WebSocket onmessage processing error:", err);
         addLog(
           nodeId,
           `Client Error: failed to parse/execute sidecar message: ${err.message}`
+        );
+        notify(
+          "Sidecar Communication Error",
+          `Error processing message from sidecar: ${err.message || String(err)}`,
+          "error"
         );
       }
     };
@@ -432,6 +452,11 @@ export const Workspace: React.FC = () => {
         "Fatal: Agent sidecar connection closed unexpectedly. Ensure Express server is running on port 4000."
       );
       setNodeStatus(nodeId, "error");
+      notify(
+        "Sidecar Connection Failed",
+        "Connection to agent sidecar closed unexpectedly. Ensure Express server is running on port 4000.",
+        "error"
+      );
     };
 
     socket.onclose = (event) => {
@@ -440,6 +465,11 @@ export const Workspace: React.FC = () => {
       const currentStatus = useWorkspaceStore.getState().nodeStatus[nodeId];
       if (currentStatus === "running") {
         setNodeStatus(nodeId, "error");
+        notify(
+          "Connection Lost",
+          `The sidecar connection was closed abnormally (code: ${event.code}). Please retry the execution.`,
+          "error"
+        );
       }
       vfsService.setCurrentExecutingNode(null).catch(err => {
         console.error(`[Workspace] Failed to clear current executing node:`, err);

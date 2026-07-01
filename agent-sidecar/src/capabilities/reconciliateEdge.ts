@@ -38,7 +38,7 @@ export async function reconciliateEdge(ws: WebSocket, data: any): Promise<void> 
         const resolvedPath = path.isAbsolute(filePath) ? filePath : path.join(workspaceRoot, filePath);
         return new Promise((resolve, reject) => {
           const requestId = getNextId();
-          registerPendingRequest(requestId, (res) => {
+          registerPendingRequest(requestId, ws, (res) => {
             if (res.error) {
               const errorMsg = String(res.error).toLowerCase();
               if (errorMsg.includes("not found") || errorMsg.includes("no such file") || errorMsg.includes("exist")) {
@@ -63,7 +63,7 @@ export async function reconciliateEdge(ws: WebSocket, data: any): Promise<void> 
         const resolvedPath = path.isAbsolute(filePath) ? filePath : path.join(workspaceRoot, filePath);
         return new Promise((resolve, reject) => {
           const requestId = getNextId();
-          registerPendingRequest(requestId, (res) => {
+          registerPendingRequest(requestId, ws, (res) => {
             if (res.error) reject(new Error(res.error));
             else resolve(`File successfully written to: ${resolvedPath}`);
           });

@@ -128,8 +128,27 @@ export const useExplorerWebSocket = (selectedNode: any) => {
     addLog(selectedNodeId, `User prompt: ${userMessage.content}`);
 
     console.log(`[SidePane] Connecting to ws://localhost:4000...`);
-    const socket = new WebSocket("ws://localhost:4000");
-    explorerSocketRef.current = socket;
+    let socket: WebSocket;
+    try {
+      socket = new WebSocket("ws://localhost:4000");
+      explorerSocketRef.current = socket;
+    } catch (err: any) {
+      console.error("Failed to construct Explorer WebSocket:", err);
+      addLog(selectedNodeId, `Fatal: Failed to construct Explorer WebSocket: ${err.message}`);
+      setNodeStatus(selectedNodeId, "error");
+      const errorMsg = {
+        role: "assistant" as const,
+        content: `Connection failed: ${err.message || String(err)}`,
+        timestamp: new Date().toLocaleTimeString()
+      };
+      addGlobalChatMessage(selectedNodeId, errorMsg);
+      notify(
+        "Sidecar Connection Error",
+        `Failed to create WebSocket connection to sidecar: ${err.message || String(err)}. Ensure the agent sidecar is running on port 4000.`,
+        "error"
+      );
+      return;
+    }
 
     socket.onopen = () => {
       console.log(`[SidePane] WebSocket connected!`);
@@ -252,10 +271,12 @@ export const useExplorerWebSocket = (selectedNode: any) => {
           setNodeStatus(selectedNodeId, "error");
           addLog(selectedNodeId, `Global exploration error: ${msg.error}`);
           socket.close();
+          notify("Exploration Error", `Exploration failed with error: ${msg.error}`, "error");
         }
       } catch (err: any) {
         console.error(`[SidePane] Parse error:`, err);
         addLog(selectedNodeId, `Parse error: ${err.message}`);
+        notify("Sidecar Communication Error", `Error processing message from sidecar: ${err.message || String(err)}`, "error");
       }
     };
 
@@ -269,6 +290,11 @@ export const useExplorerWebSocket = (selectedNode: any) => {
         timestamp: new Date().toLocaleTimeString()
       };
       addGlobalChatMessage(selectedNodeId, errorMsg);
+      notify(
+        "Sidecar Connection Failed",
+        "Connection to agent sidecar closed unexpectedly. Ensure agent sidecar is running on port 4000.",
+        "error"
+      );
     };
 
     socket.onclose = (event) => {
@@ -284,6 +310,11 @@ export const useExplorerWebSocket = (selectedNode: any) => {
           timestamp: new Date().toLocaleTimeString()
         };
         addGlobalChatMessage(selectedNodeId, errorMsg);
+        notify(
+          "Connection Lost",
+          `The sidecar connection was closed abnormally (code: ${event.code}).`,
+          "error"
+        );
       }
       explorerSocketRef.current = null;
     };
@@ -302,8 +333,22 @@ export const useExplorerWebSocket = (selectedNode: any) => {
     setNodeStatus(selectedNodeId, "running");
     addLog(selectedNodeId, "Summarizing conversation (focused on recent discussion)...");
 
-    const socket = new WebSocket("ws://localhost:4000");
-    explorerSocketRef.current = socket;
+    let socket: WebSocket;
+    try {
+      socket = new WebSocket("ws://localhost:4000");
+      explorerSocketRef.current = socket;
+    } catch (err: any) {
+      console.error("Failed to construct Summarize WebSocket:", err);
+      addLog(selectedNodeId, `Fatal: Failed to construct Summarize WebSocket: ${err.message}`);
+      setNodeStatus(selectedNodeId, "error");
+      setIsSummarizing(false);
+      notify(
+        "Sidecar Connection Error",
+        `Failed to create WebSocket connection to sidecar: ${err.message || String(err)}. Ensure the agent sidecar is running on port 4000.`,
+        "error"
+      );
+      return;
+    }
 
     // Focus on the most recent portion of the discussion. The user typically
     // iterates over many topics and acts on the latest one, so the summary
@@ -401,10 +446,12 @@ export const useExplorerWebSocket = (selectedNode: any) => {
           addLog(selectedNodeId, `Summarize error: ${msg.error}`);
           setIsSummarizing(false);
           socket.close();
+          notify("Summarize Error", `Summarization failed with error: ${msg.error}`, "error");
         }
       } catch (err: any) {
         addLog(selectedNodeId, `Parse error: ${err.message}`);
         setIsSummarizing(false);
+        notify("Sidecar Communication Error", `Error processing message from sidecar: ${err.message || String(err)}`, "error");
       }
     };
 
@@ -413,6 +460,11 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       addLog(selectedNodeId, "Connection to sidecar failed during summarization.");
       setNodeStatus(selectedNodeId, "error");
       setIsSummarizing(false);
+      notify(
+        "Sidecar Connection Failed",
+        "Connection to agent sidecar closed unexpectedly during summarization. Ensure agent sidecar is running on port 4000.",
+        "error"
+      );
     };
 
     socket.onclose = (event) => {
@@ -422,6 +474,11 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       const currentStatus = useWorkspaceStore.getState().nodeStatus[selectedNodeId];
       if (currentStatus === "running") {
         setNodeStatus(selectedNodeId, "error");
+        notify(
+          "Connection Lost",
+          `The sidecar connection was closed abnormally during summarization (code: ${event.code}).`,
+          "error"
+        );
       }
       setIsSummarizing(false);
       explorerSocketRef.current = null;

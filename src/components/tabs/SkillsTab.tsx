@@ -3,6 +3,7 @@ import { useWorkspaceStore, Skill } from "../../store";
 import { skillsService } from "../../services/skillsService";
 import { Cpu, Plus, Trash2, Save, Wand2, Plug } from "lucide-react";
 import { CustomSelect } from "../CustomSelect";
+import { notify } from "../../notificationStore";
 
 const AVAILABLE_TOOLS = [
   { id: "read_file", label: "Read Files" },
@@ -134,7 +135,20 @@ export const SkillsTab: React.FC = () => {
         p.models.some((m) => m.id === model)
       );
 
-      wsRef.current = new WebSocket("ws://localhost:4000");
+      try {
+        wsRef.current = new WebSocket("ws://localhost:4000");
+      } catch (err: any) {
+        console.error("Failed to construct Skills WebSocket:", err);
+        setGenerateError(`WebSocket connection failed: ${err.message || String(err)}`);
+        setIsGenerating(false);
+        notify(
+          "Sidecar Connection Error",
+          `Failed to create WebSocket connection to sidecar: ${err.message || String(err)}. Ensure the agent sidecar is running on port 4000.`,
+          "error"
+        );
+        return;
+      }
+
       wsRef.current.onopen = () => {
         wsRef.current?.send(JSON.stringify({
           type: "generate_skill",
@@ -160,6 +174,7 @@ export const SkillsTab: React.FC = () => {
               });
             } catch {
               setGenerateError("Failed to parse generated skill. Please try again.");
+              notify("Parse Error", "Failed to parse generated skill specification.", "error");
             }
             wsRef.current?.close();
             setIsGenerating(false);
@@ -167,28 +182,37 @@ export const SkillsTab: React.FC = () => {
             setGenerateError(msg.error || "Generation failed");
             wsRef.current?.close();
             setIsGenerating(false);
+            notify("Generation Error", `Skill generation failed with error: ${msg.error}`, "error");
           }
-        } catch {
+        } catch (err: any) {
           setGenerateError("Invalid response from sidecar");
           wsRef.current?.close();
           setIsGenerating(false);
+          notify("Sidecar Communication Error", `Error processing message from sidecar: ${err.message || String(err)}`, "error");
         }
       };
 
       wsRef.current.onerror = () => {
         setGenerateError("WebSocket connection failed. Is the sidecar running?");
         setIsGenerating(false);
+        notify(
+          "Sidecar Connection Failed",
+          "Connection to agent sidecar closed unexpectedly. Ensure agent sidecar is running on port 4000.",
+          "error"
+        );
       };
 
       setTimeout(() => {
         if (wsRef.current?.readyState === WebSocket.OPEN) {
           wsRef.current.close();
           setIsGenerating(false);
+          notify("Timeout", "Skill generation request timed out after 60 seconds.", "info");
         }
       }, 60000);
-    } catch (err) {
+    } catch (err: any) {
       setGenerateError(String(err));
       setIsGenerating(false);
+      notify("Exception", `An unexpected exception occurred: ${err.message || String(err)}`, "error");
     }
   };
 

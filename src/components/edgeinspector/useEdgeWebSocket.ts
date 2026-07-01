@@ -9,6 +9,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useWorkspaceStore } from "../../store";
 import { invoke } from "@tauri-apps/api/core";
+import { notify } from "../../notificationStore";
 
 export const useEdgeWebSocket = (
   edgeId: string | null,
@@ -52,7 +53,23 @@ export const useEdgeWebSocket = (
     setChatInput("");
     setIsResolving(true);
 
-    const socket = new WebSocket("ws://localhost:4000");
+    let socket: WebSocket;
+    try {
+      socket = new WebSocket("ws://localhost:4000");
+    } catch (err: any) {
+      console.error("Failed to construct Edge WebSocket:", err);
+      setChatMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: `Connection failed: ${err.message || String(err)}` },
+      ]);
+      setIsResolving(false);
+      notify(
+        "Sidecar Connection Error",
+        `Failed to create WebSocket connection to sidecar: ${err.message || String(err)}. Ensure the agent sidecar is running on port 4000.`,
+        "error"
+      );
+      return;
+    }
 
     socket.onopen = () => {
       const rootPath = useWorkspaceStore.getState().rootPath;
@@ -89,22 +106,26 @@ export const useEdgeWebSocket = (
         if (msg.type === "read_file") {
           invoke("read_file_vfs", { path: msg.path })
             .then((content: any) => {
-              socket.send(
-                JSON.stringify({
-                  type: "read_file_response",
-                  requestId: msg.requestId,
-                  content,
-                })
-              );
+              if (socket.readyState === WebSocket.OPEN) {
+                socket.send(
+                  JSON.stringify({
+                    type: "read_file_response",
+                    requestId: msg.requestId,
+                    content,
+                  })
+                );
+              }
             })
             .catch((err: any) => {
-              socket.send(
-                JSON.stringify({
-                  type: "read_file_response",
-                  requestId: msg.requestId,
-                  error: err.message || String(err),
-                })
-              );
+              if (socket.readyState === WebSocket.OPEN) {
+                socket.send(
+                  JSON.stringify({
+                    type: "read_file_response",
+                    requestId: msg.requestId,
+                    error: err.message || String(err),
+                  })
+                );
+              }
             });
           return;
         }
@@ -112,18 +133,22 @@ export const useEdgeWebSocket = (
         if (msg.type === "write_file") {
           invoke("write_file_vfs", { path: msg.path, content: msg.content })
             .then(() => {
-              socket.send(
-                JSON.stringify({ type: "write_file_response", requestId: msg.requestId })
-              );
+              if (socket.readyState === WebSocket.OPEN) {
+                socket.send(
+                  JSON.stringify({ type: "write_file_response", requestId: msg.requestId })
+                );
+              }
             })
             .catch((err: any) => {
-              socket.send(
-                JSON.stringify({
-                  type: "write_file_response",
-                  requestId: msg.requestId,
-                  error: err.message || String(err),
-                })
-              );
+              if (socket.readyState === WebSocket.OPEN) {
+                socket.send(
+                  JSON.stringify({
+                    type: "write_file_response",
+                    requestId: msg.requestId,
+                    error: err.message || String(err),
+                  })
+                );
+              }
             });
           return;
         }
@@ -145,9 +170,11 @@ export const useEdgeWebSocket = (
           ]);
           setIsResolving(false);
           socket.close();
+          notify("Reconciliation Error", `Reconciliation failed with error: ${msg.error}`, "error");
         }
       } catch (err: any) {
         console.error("EdgeInspector parse error:", err);
+        notify("Sidecar Communication Error", `Error processing message from sidecar: ${err.message || String(err)}`, "error");
       }
     };
 
@@ -158,6 +185,11 @@ export const useEdgeWebSocket = (
         { role: "assistant", content: "Failed to connect to sidecar. Ensure the sidecar server is running." },
       ]);
       setIsResolving(false);
+      notify(
+        "Sidecar Connection Failed",
+        "Connection to agent sidecar closed unexpectedly. Ensure agent sidecar is running on port 4000.",
+        "error"
+      );
     };
 
     socket.onclose = (event) => {
@@ -168,6 +200,11 @@ export const useEdgeWebSocket = (
           { role: "assistant", content: `Connection closed unexpectedly (WebSocket code: ${event.code}).` }
         ]);
         setIsResolving(false);
+        notify(
+          "Connection Lost",
+          `The sidecar connection was closed abnormally (code: ${event.code}).`,
+          "error"
+        );
       }
     };
   };

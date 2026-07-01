@@ -40,7 +40,7 @@ export const SidePaneTabs: React.FC<SidePaneTabsProps> = ({
           }`}
         >
           <MessageSquare size={14} />
-          <span>{selectedNode.type === "globalChatNode" ? "Explorer Chat" : "Prompt Chat"}</span>
+          <span>{selectedNode.type === "globalChatNode" ? "Explorer Chat" : "Chat"}</span>
         </button>
         {selectedNode.type !== "contextNode" && (
           <button

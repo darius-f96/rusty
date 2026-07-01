@@ -10,7 +10,12 @@ import fs from "fs";
 import path from "path";
 
 // Map to track active websocket callbacks for tool requests
-export const pendingRequests = new Map<string, (response: any) => void>();
+export interface PendingRequest {
+  resolver: (response: any) => void;
+  ws: WebSocket;
+}
+
+export const pendingRequests = new Map<string, PendingRequest>();
 
 // Timeout for pending tool requests (30 seconds)
 const PENDING_REQUEST_TIMEOUT_MS = 30_000;
@@ -22,7 +27,11 @@ export function getNextId() {
 }
 
 /** Register a pending request with an automatic timeout. Returns a cleanup function. */
-export function registerPendingRequest(requestId: string, resolver: (response: any) => void): () => void {
+export function registerPendingRequest(
+  requestId: string,
+  ws: WebSocket,
+  resolver: (response: any) => void
+): () => void {
   const timer = setTimeout(() => {
     if (pendingRequests.has(requestId)) {
       console.warn(`WebSocket [Server] Pending request ${requestId} timed out after ${PENDING_REQUEST_TIMEOUT_MS}ms`);
@@ -31,9 +40,12 @@ export function registerPendingRequest(requestId: string, resolver: (response: a
     }
   }, PENDING_REQUEST_TIMEOUT_MS);
 
-  pendingRequests.set(requestId, (res) => {
-    clearTimeout(timer);
-    resolver(res);
+  pendingRequests.set(requestId, {
+    resolver: (res) => {
+      clearTimeout(timer);
+      resolver(res);
+    },
+    ws,
   });
 
   return () => {
@@ -42,18 +54,26 @@ export function registerPendingRequest(requestId: string, resolver: (response: a
   };
 }
 
-/** Clean up all pending requests (called when a WebSocket disconnects). */
-export function cleanupPendingRequests() {
+/** Clean up all pending requests for a specific client socket on disconnection. */
+export function cleanupPendingRequests(ws: WebSocket) {
   if (pendingRequests.size > 0) {
-    console.warn(`WebSocket [Server] Cleaning up ${pendingRequests.size} pending request(s) after client disconnect.`);
-    for (const [id, resolver] of pendingRequests) {
-      try {
-        resolver({ error: "WebSocket client disconnected before response was received." });
-      } catch (e) {
-        console.error(`WebSocket [Server] Error cleaning up request ${id}:`, e);
+    const toClean: string[] = [];
+    for (const [id, req] of pendingRequests) {
+      if (req.ws === ws) {
+        toClean.push(id);
+        try {
+          req.resolver({ error: "WebSocket client disconnected before response was received." });
+        } catch (e) {
+          console.error(`WebSocket [Server] Error cleaning up request ${id}:`, e);
+        }
       }
     }
-    pendingRequests.clear();
+    for (const id of toClean) {
+      pendingRequests.delete(id);
+    }
+    if (toClean.length > 0) {
+      console.warn(`WebSocket [Server] Cleaned up ${toClean.length} pending request(s) for disconnected client.`);
+    }
   }
 }
 

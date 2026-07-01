@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Plus, Send, X, FileText, Folder, Paperclip } from "lucide-react";
+import { Plus, Send, X, FileText, Folder, Paperclip, Square } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { searchService } from "../../services/searchService";
 
 interface ChatInputProps {
   value: string;
@@ -9,6 +10,8 @@ interface ChatInputProps {
   onSend: (attachments: { path: string; name: string; isDir?: boolean }[]) => void;
   placeholder?: string;
   disabled?: boolean;
+  isStreaming?: boolean;
+  onStop?: () => void;
 }
 
 interface FileItem {
@@ -23,6 +26,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onSend,
   placeholder = "Ask or prompt changes...",
   disabled = false,
+  isStreaming = false,
+  onStop,
 }) => {
   const fileTree = useWorkspaceStore((state) => state.fileTree);
   const rootPath = useWorkspaceStore((state) => state.rootPath);
@@ -35,8 +40,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
+  const autocompleteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Flatten the file tree for autocompletion
+  // Flatten the file tree for autocompletion fallback
   const getFlatFiles = (): FileItem[] => {
     const list: FileItem[] = [];
     const recurse = (entries: any[]) => {
@@ -46,7 +52,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           path: entry.path,
           isDir: !!entry.is_dir,
         });
-        if (entry.children) {
+        if (entry.children && entry.children.length > 0) {
           recurse(entry.children);
         }
       }
@@ -64,9 +70,76 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }
   }, [value]);
 
+  // Handle click outside suggestions box & clean timeouts
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (suggestionsRef.current && !suggestionsRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      if (autocompleteTimeoutRef.current) {
+        clearTimeout(autocompleteTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const searchWorkspaceFiles = async (query: string) => {
+    if (!rootPath) {
+      setShowSuggestions(false);
+      return;
+    }
+
+    if (!query) {
+      // Instant fallback for empty query
+      const flat = getFlatFiles();
+      const filtered = flat.slice(0, 10);
+      if (filtered.length > 0) {
+        setSuggestions(filtered);
+        setShowSuggestions(true);
+        setSelectedIndex(0);
+      } else {
+        setShowSuggestions(false);
+      }
+      return;
+    }
+
+    try {
+      const results = await searchService.searchProject({
+        rootDir: rootPath,
+        query,
+        matchCase: false,
+        wholeWord: false,
+        isRegex: false,
+      });
+
+      const fileMatches = results
+        .filter((r) => !r.is_content_match) // only filenames
+        .map((r) => ({
+          name: r.name,
+          path: r.path,
+          isDir: false,
+        }))
+        .slice(0, 10);
+
+      if (fileMatches.length > 0) {
+        setSuggestions(fileMatches);
+        setShowSuggestions(true);
+        setSelectedIndex(0);
+      } else {
+        setShowSuggestions(false);
+      }
+    } catch (err) {
+      console.error("Failed autocomplete search:", err);
+      setShowSuggestions(false);
+    }
+  };
+
   // Handle keydown for autocompletion suggestions
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (showSuggestions) {
+    if (showSuggestions && suggestions.length > 0) {
       if (e.key === "ArrowDown") {
         e.preventDefault();
         setSelectedIndex((prev) => (prev + 1) % suggestions.length);
@@ -103,18 +176,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       const triggerIdx = selectionStart - atMatch[0].length;
       setSuggestionTriggerIndex(triggerIdx);
 
-      const flat = getFlatFiles();
-      const filtered = flat
-        .filter((item) => item.name.toLowerCase().includes(query) || item.path.toLowerCase().includes(query))
-        .slice(0, 10); // Show max 10 suggestions
-
-      if (filtered.length > 0) {
-        setSuggestions(filtered);
-        setShowSuggestions(true);
-        setSelectedIndex(0);
-      } else {
-        setShowSuggestions(false);
+      if (autocompleteTimeoutRef.current) {
+        clearTimeout(autocompleteTimeoutRef.current);
       }
+
+      autocompleteTimeoutRef.current = setTimeout(() => {
+        searchWorkspaceFiles(query);
+      }, 150);
     } else {
       setShowSuggestions(false);
     }
@@ -270,15 +338,26 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           style={{ height: "auto", maxHeight: "200px" }}
         />
 
-        {/* Send Button */}
-        <button
-          type="button"
-          onClick={handleSend}
-          disabled={disabled || (!value.trim() && attachments.length === 0)}
-          className="p-2 rounded-lg bg-[var(--accent-color)] disabled:opacity-40 disabled:hover:bg-[var(--accent-color)] text-white hover:bg-[var(--accent-color)]/80 transition-all cursor-pointer flex-shrink-0 shadow-md flex items-center justify-center"
-        >
-          <Send size={14} />
-        </button>
+        {/* Send or Stop Button */}
+        {isStreaming && onStop ? (
+          <button
+            type="button"
+            onClick={onStop}
+            className="p-2 rounded-lg bg-rose-600 text-white hover:bg-rose-500 transition-all cursor-pointer flex-shrink-0 shadow-md flex items-center justify-center animate-pulse border-none"
+            title="Stop process"
+          >
+            <Square size={14} fill="currentColor" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={handleSend}
+            disabled={disabled || (!value.trim() && attachments.length === 0)}
+            className="p-2 rounded-lg bg-[var(--accent-color)] disabled:opacity-40 disabled:hover:bg-[var(--accent-color)] text-white hover:bg-[var(--accent-color)]/80 transition-all cursor-pointer flex-shrink-0 shadow-md flex items-center justify-center"
+          >
+            <Send size={14} />
+          </button>
+        )}
       </div>
     </div>
   );

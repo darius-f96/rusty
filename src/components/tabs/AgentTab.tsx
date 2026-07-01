@@ -1,19 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Send, MessageSquare, Shield, FileText, Loader2, ChevronRight, Terminal, Bot, CheckCircle2, FolderGit2, History, Trash2, Plus, RefreshCw, PanelLeftClose, PanelLeft } from "lucide-react";
+import { History, Trash2, Plus, RefreshCw, PanelLeftClose, PanelLeft, Shield, CheckCircle2, FolderGit2, FileText } from "lucide-react";
 import { useWorkspaceStore, AgentMessage } from "../../store";
 import { CustomSelect } from "../CustomSelect";
-import { searchService } from "../../services/searchService";
-import { processResponse } from "../../services/responseProcessingService";
 import { invoke } from "@tauri-apps/api/core";
+import { Chat } from "../ui/Chat";
+import { ChatInput } from "../ui/ChatInput";
+import { notify } from "../../notificationStore";
 
 interface AgentTabProps {
   tab: any;
   groupId: string;
-}
-
-interface FileReference {
-  path: string;
-  name: string;
 }
 
 interface SavedChat {
@@ -24,7 +20,7 @@ interface SavedChat {
   messageCount: number;
 }
 
-export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
+export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) => {
   const customProviders = useWorkspaceStore((state) => state.customProviders);
   const activeModel = useWorkspaceStore((state) => state.activeModel);
   const setActiveModel = useWorkspaceStore((state) => state.setActiveModel);
@@ -45,13 +41,8 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(activeSkillId);
   const [message, setMessage] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
-  const [fileReferences, setFileReferences] = useState<FileReference[]>([]);
-  const [showFilePicker, setShowFilePicker] = useState(false);
-  const [selectedFileIndex, setSelectedFileIndex] = useState(0);
   const [pendingPermission, setPendingPermission] = useState<any>(null);
-  const [collapsedConsoles, setCollapsedConsoles] = useState<Record<string, boolean>>({});
   const [modifiedFiles, setModifiedFiles] = useState<string[]>([]);
-  const [consoleUpdateCount, setConsoleUpdateCount] = useState(0);
 
   // Chat history panel state
   const [showHistory, setShowHistory] = useState(true);
@@ -59,61 +50,16 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [activeChatPath, setActiveChatPath] = useState<string | null>(null);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const chatContainerRef = useRef<HTMLDivElement>(null);
-  const consoleContentRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   const agentSocketRef = useRef<WebSocket | null>(null);
-  const autocompleteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const consoleMessageIdRef = useRef<string | null>(null);
   const consoleBufferRef = useRef<string>("");
-  const isAtBottomRef = useRef(true);
-  const suppressScrollRef = useRef(false);
   const savedChatPathRef = useRef<string | null>(null);
   const chatSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const editorGroups = useWorkspaceStore((state) => state.editorGroups);
-  const targetGroup = editorGroups.find((g) => g.id === groupId);
-  const isActive = targetGroup ? targetGroup.activeTabId === tab.id : false;
 
   const modelOptions = customProviders.flatMap((p) => p.models).map((m) => ({
     id: m.id,
     name: `${m.name} (${m.id})`,
   }));
-
-  useEffect(() => {
-    if (isActive && messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [agentChats, isActive]);
-
-  const scrollToBottom = () => {
-    if (messagesEndRef.current && isAtBottomRef.current && !suppressScrollRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-    if (consoleContentRef.current && consoleMessageIdRef.current) {
-      consoleContentRef.current.scrollTop = consoleContentRef.current.scrollHeight;
-    }
-  };
-
-  const handleScroll = () => {
-    if (!chatContainerRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
-    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-    isAtBottomRef.current = distanceFromBottom < 100;
-  };
-
-  useEffect(() => {
-    if (isActive && isStreaming) {
-      scrollToBottom();
-    }
-  }, [consoleUpdateCount, isActive, isStreaming]);
-
-  useEffect(() => {
-    if (isActive && !isStreaming) {
-      scrollToBottom();
-    }
-  }, [agentChats.length, isActive, isStreaming]);
 
   useEffect(() => {
     if (selectedModel !== activeModel) {
@@ -129,9 +75,6 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
     return () => {
       if (agentSocketRef.current) {
         agentSocketRef.current.close();
-      }
-      if (autocompleteTimeoutRef.current) {
-        clearTimeout(autocompleteTimeoutRef.current);
       }
     };
   }, []);
@@ -170,7 +113,6 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
       loaded.sort((a, b) => (b.savedAt || "").localeCompare(a.savedAt || ""));
       setChatHistory(loaded);
     } catch (e) {
-      // .axiom/chats may not exist yet
       setChatHistory([]);
     } finally {
       setLoadingHistory(false);
@@ -218,18 +160,24 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
     }
   };
 
-  // Refresh history after a message is saved
   const refreshHistoryAfterSave = () => {
     if (rootPath) {
       setTimeout(() => loadChatHistory(), 200);
     }
   };
 
-  const handleSendMessage = () => {
+  const handleStopExecution = () => {
+    if (agentSocketRef.current) {
+      agentSocketRef.current.close();
+    }
+    setIsStreaming(false);
+  };
+
+  const handleSendMessage = (attachedFiles: { path: string; name: string; isDir?: boolean }[]) => {
     if (!message.trim() || isStreaming) return;
 
     const now = Date.now();
-    const attachments = extractAttachments(message);
+    const attachments = attachedFiles.map(a => ({ path: a.path, name: a.name }));
 
     const userMessage = {
       id: `msg_${now}`,
@@ -257,16 +205,29 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
     const messageToSend = message;
     setMessage("");
     setIsStreaming(true);
-    setShowFilePicker(false);
-    setFileReferences([]);
-    setSelectedFileIndex(0);
 
-    const socket = new WebSocket("ws://localhost:4000");
-    agentSocketRef.current = socket;
+    let socket: WebSocket;
+    try {
+      socket = new WebSocket("ws://localhost:4000");
+      agentSocketRef.current = socket;
+    } catch (err: any) {
+      console.error("Failed to construct Agent WebSocket:", err);
+      addAgentMessage(tab.id, {
+        id: `msg_${Date.now()}`,
+        role: "assistant" as const,
+        content: `Connection failed: ${err.message || String(err)}`,
+        timestamp: new Date().toISOString(),
+      });
+      setIsStreaming(false);
+      notify(
+        "Sidecar Connection Error",
+        `Failed to create WebSocket connection to sidecar: ${err.message || String(err)}. Ensure the agent sidecar is running on port 4000.`,
+        "error"
+      );
+      return;
+    }
 
     socket.onopen = () => {
-      console.log(`[AgentTab] WebSocket connected!`);
-
       const wsRootPath = useWorkspaceStore.getState().rootPath;
       const currentProviders = useWorkspaceStore.getState().customProviders;
       const currentActiveProviderId = useWorkspaceStore.getState().activeCustomProviderId;
@@ -306,7 +267,6 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
           consoleBufferRef.current += msg.message + "\n";
           if (consoleMessageIdRef.current) {
             updateAgentMessage(tab.id, consoleMessageIdRef.current, consoleBufferRef.current);
-            setConsoleUpdateCount(c => c + 1);
           }
           saveChatHistory();
           return;
@@ -354,8 +314,6 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
         }
 
         if (msg.type === "agent_chat_complete" && msg.tabId === tab.id) {
-          console.log(`[AgentTab] Received agent_chat_complete, response length: ${msg.response?.length || 0}`);
-
           const files = msg.modifiedFiles || [];
           setModifiedFiles(files);
 
@@ -384,7 +342,6 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
             timestamp: new Date().toISOString(),
           });
 
-          // Clear the console message since we have the final response
           if (consoleMessageIdRef.current) {
             updateAgentMessage(tab.id, consoleMessageIdRef.current, "");
           }
@@ -392,8 +349,6 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
           setIsStreaming(false);
           saveChatHistory();
           refreshHistoryAfterSave();
-
-          // Don't close socket here - let onclose handle it naturally
           return;
         }
 
@@ -418,9 +373,15 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
           });
           setIsStreaming(false);
           socket.close();
+          notify("Agent Error", `The agent encountered an error: ${msg.error}`, "error");
         }
       } catch (err: any) {
         console.error(`[AgentTab] Parse error:`, err);
+        notify(
+          "Communication Error",
+          `Failed to process message from agent sidecar: ${err.message || String(err)}`,
+          "error"
+        );
       }
     };
 
@@ -436,15 +397,18 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
         timestamp: new Date().toISOString(),
       });
       setIsStreaming(false);
+      notify(
+        "Sidecar Connection Failed",
+        "Connection to agent sidecar closed unexpectedly. Ensure agent sidecar is running on port 4000.",
+        "error"
+      );
     };
 
     socket.onclose = (event) => {
       console.log(`[AgentTab] WebSocket closed (code: ${event.code})`);
 
-      // If we were streaming and have console content, use it as the response
       if (isStreaming && consoleBufferRef.current && consoleBufferRef.current.trim()) {
         const consoleContent = consoleBufferRef.current.trim();
-        // Only use console content if it looks like a meaningful response (not just logs)
         if (consoleContent.length > 50) {
           addAgentMessage(tab.id, {
             id: `msg_${Date.now()}`,
@@ -452,7 +416,6 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
             content: consoleContent,
             timestamp: new Date().toISOString(),
           });
-          // Clear the console message since we used its content
           if (consoleMessageIdRef.current) {
             updateAgentMessage(tab.id, consoleMessageIdRef.current, "");
           }
@@ -472,138 +435,14 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
           timestamp: new Date().toISOString(),
         });
         setIsStreaming(false);
+        notify(
+          "Connection Lost",
+          `The sidecar connection was closed abnormally (code: ${event.code}).`,
+          "error"
+        );
       }
       agentSocketRef.current = null;
     };
-  };
-
-  const extractAttachments = (text: string): { path: string; name: string }[] => {
-    const matches = [...text.matchAll(/@([^\s@]+)/g)];
-    return matches.map((m) => {
-      const fullPath = m[1];
-      const name = fullPath.split("/").pop() || fullPath;
-      return { path: fullPath, name };
-    });
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (showFilePicker && fileReferences.length > 0) {
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setSelectedFileIndex((prev) => (prev + 1) % fileReferences.length);
-        return;
-      }
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setSelectedFileIndex((prev) => (prev - 1 + fileReferences.length) % fileReferences.length);
-        return;
-      }
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        insertFileReference(fileReferences[selectedFileIndex]);
-        return;
-      }
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setShowFilePicker(false);
-        setFileReferences([]);
-        setSelectedFileIndex(0);
-        return;
-      }
-      if (e.key === "Tab") {
-        e.preventDefault();
-        insertFileReference(fileReferences[selectedFileIndex]);
-        return;
-      }
-    } else {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        handleSendMessage();
-      }
-    }
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const value = e.target.value;
-    setMessage(value);
-
-    const cursorPos = e.target.selectionStart;
-    const textBeforeCursor = value.substring(0, cursorPos);
-    const atIndex = textBeforeCursor.lastIndexOf("@");
-
-    if (atIndex !== -1) {
-      const searchTerm = textBeforeCursor.substring(atIndex + 1);
-      const hasSpace = searchTerm.includes(" ") || searchTerm.includes("\n");
-
-      if (!hasSpace && searchTerm.length >= 1) {
-        setShowFilePicker(true);
-        setSelectedFileIndex(0);
-        if (autocompleteTimeoutRef.current) {
-          clearTimeout(autocompleteTimeoutRef.current);
-        }
-        autocompleteTimeoutRef.current = setTimeout(() => {
-          searchFiles(searchTerm);
-        }, 150);
-      } else {
-        setShowFilePicker(false);
-        setFileReferences([]);
-        setSelectedFileIndex(0);
-      }
-    } else {
-      setShowFilePicker(false);
-      setFileReferences([]);
-      setSelectedFileIndex(0);
-    }
-  };
-
-  const searchFiles = async (query: string) => {
-    if (!rootPath || query.length < 1) {
-      setFileReferences([]);
-      return;
-    }
-
-    try {
-      const results = await searchService.searchProject({
-        rootDir: rootPath,
-        query: query,
-        matchCase: false,
-        wholeWord: false,
-        isRegex: false,
-      });
-
-      const fileMatches = results
-        .filter((r) => !r.is_content_match)
-        .map((r) => {
-          const relPath = rootPath && r.path.startsWith(rootPath) ? r.path.substring(rootPath.length + 1) : r.path;
-          return {
-            path: relPath,
-            name: r.name,
-          };
-        })
-        .slice(0, 10);
-
-      setFileReferences(fileMatches);
-      setSelectedFileIndex(0);
-    } catch (err) {
-      console.error("Failed to search files:", err);
-      setFileReferences([]);
-    }
-  };
-
-  const insertFileReference = (file: FileReference) => {
-    const input = inputRef.current;
-    if (!input) return;
-
-    const cursorPos = input.selectionStart;
-    const textBeforeCursor = message.substring(0, cursorPos);
-    const atIndex = textBeforeCursor.lastIndexOf("@");
-
-    const newMessage = message.substring(0, atIndex) + `@${file.path} ` + message.substring(cursorPos);
-    setMessage(newMessage);
-    setShowFilePicker(false);
-    setFileReferences([]);
-    setSelectedFileIndex(0);
-    input.focus();
   };
 
   const handleOpenModifiedFile = (filePath: string) => {
@@ -628,10 +467,6 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
     setPendingPermission(null);
   };
 
-  const toggleConsoleCollapse = (id: string) => {
-    setCollapsedConsoles((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
-
   const saveChatHistory = async () => {
     if (chatSaveTimeoutRef.current) {
       clearTimeout(chatSaveTimeoutRef.current);
@@ -642,7 +477,6 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
         const chats = useWorkspaceStore.getState().agentChats[tab.id] || [];
         const payload = JSON.stringify({ tabId: tab.id, messages: chats, savedAt: new Date().toISOString() });
 
-        // Only create new file if we don't have a session path yet
         if (!savedChatPathRef.current) {
           const result = await invoke("save_chat_history", {
             rootDir: rootPath,
@@ -651,105 +485,12 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
           });
           savedChatPathRef.current = result as string;
         } else {
-          // Update existing session file
           await invoke("write_file_disk", { path: savedChatPathRef.current, content: payload });
         }
       } catch (e) {
         console.error("Failed to save chat history:", e);
       }
     }, 300);
-  };
-
-  const renderMessageContent = (content: string) => {
-    const parts = content.split(/(@[^\s@]+)/g);
-    return parts.map((part, idx) => {
-      if (part.startsWith("@") && part.length > 1) {
-        const fileName = part.substring(1).split("/").pop() || part.substring(1);
-        return (
-          <span
-            key={idx}
-            className="inline-flex items-center space-x-1 px-1.5 py-0.5 mx-0.5 bg-violet-500/20 border border-violet-500/30 rounded text-violet-300 text-[11px] font-mono align-middle"
-          >
-            <FileText size={10} className="flex-shrink-0" />
-            <span>{fileName}</span>
-          </span>
-        );
-      }
-      return <span key={idx}>{part}</span>;
-    });
-  };
-
-  const renderMessage = (msg: any) => {
-    if (msg.role === "console") {
-      const isCollapsed = collapsedConsoles[msg.id];
-      const isThisStreaming = isStreaming && consoleMessageIdRef.current === msg.id;
-      return (
-        <div key={msg.id} className="mb-3">
-          <button
-            onClick={() => toggleConsoleCollapse(msg.id)}
-            className="flex items-center space-x-2 text-[10px] font-mono text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors w-full text-left py-1"
-          >
-            <ChevronRight
-              size={12}
-              className={`transition-transform ${isCollapsed ? "" : "rotate-90"}`}
-            />
-            <Terminal size={11} className="text-[var(--accent-color)]" />
-            <span className="uppercase tracking-wider">
-              {isThisStreaming ? "Agent thinking..." : "Console output"}
-            </span>
-            {isThisStreaming && <Loader2 size={10} className="animate-spin text-[var(--accent-color)]" />}
-          </button>
-          {!isCollapsed && (
-            <div
-              ref={(el) => {
-                if (isThisStreaming && el) {
-                  consoleContentRef.current = el;
-                }
-              }}
-              className="ml-4 mt-1 bg-black/40 border border-[var(--border-color)] rounded-lg p-3 max-h-56 overflow-y-auto"
-            >
-              <pre className="whitespace-pre-wrap text-[11px] font-mono text-zinc-400 leading-relaxed">
-                {msg.content || "// No output yet..."}
-              </pre>
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    if (msg.role === "user") {
-      return (
-        <div key={msg.id} className="mb-4">
-          <div className="flex items-center space-x-2 mb-1.5">
-            <div className="w-5 h-5 rounded-full bg-[var(--accent-color)] flex items-center justify-center flex-shrink-0">
-              <span className="text-[9px] font-bold text-white">U</span>
-            </div>
-            <span className="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider">You</span>
-          </div>
-          <div className="ml-7 text-xs text-[var(--text-light)] leading-relaxed whitespace-pre-wrap">
-            {renderMessageContent(msg.content)}
-          </div>
-        </div>
-      );
-    }
-
-    if (msg.role === "assistant") {
-      return (
-        <div key={msg.id} className="mb-4">
-          <div className="flex items-center space-x-2 mb-1.5">
-            <div className="w-5 h-5 rounded-full bg-violet-600 flex items-center justify-center flex-shrink-0">
-              <Bot size={11} className="text-white" />
-            </div>
-            <span className="text-[10px] font-mono text-violet-400 uppercase tracking-wider">Agent</span>
-          </div>
-          <div className="ml-7 text-xs text-[var(--text-normal)] leading-relaxed">
-            <div className="whitespace-pre-wrap">{processResponse(msg.content)}</div>
-          </div>
-        </div>
-      );
-    }
-
-    return null;
   };
 
   const renderPermissionModal = () => {
@@ -812,7 +553,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
               <button
                 onClick={loadChatHistory}
                 disabled={loadingHistory}
-                className="p-1 rounded hover:bg-[var(--accent-bg)] text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer"
+                className="p-1 rounded hover:bg-[var(--accent-bg)] text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer border-none bg-transparent"
                 title="Refresh"
               >
                 <RefreshCw size={11} className={loadingHistory ? "animate-spin" : ""} />
@@ -820,14 +561,14 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
               <button
                 onClick={handleNewChat}
                 disabled={isStreaming}
-                className="p-1 rounded hover:bg-[var(--accent-bg)] text-[var(--text-muted)] hover:text-[var(--accent-color)] transition-colors cursor-pointer disabled:opacity-40"
+                className="p-1 rounded hover:bg-[var(--accent-bg)] text-[var(--text-muted)] hover:text-[var(--text-color)] transition-colors cursor-pointer disabled:opacity-40 border-none bg-transparent"
                 title="New chat"
               >
                 <Plus size={12} />
               </button>
               <button
                 onClick={() => setShowHistory(false)}
-                className="p-1 rounded hover:bg-[var(--accent-bg)] text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer"
+                className="p-1 rounded hover:bg-[var(--accent-bg)] text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer border-none bg-transparent"
                 title="Hide history"
               >
                 <PanelLeftClose size={12} />
@@ -865,7 +606,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
                         <span className="text-[8px] font-mono text-[var(--text-muted)]">{chat.messageCount} msgs</span>
                         <button
                           onClick={(e) => handleDeleteChat(e, chat)}
-                          className="opacity-0 group-hover:opacity-100 text-rose-400/60 hover:text-rose-400 transition-all p-0.5"
+                          className="opacity-0 group-hover:opacity-100 text-rose-400/60 hover:text-rose-400 transition-all p-0.5 border-none bg-transparent cursor-pointer"
                           title="Delete chat"
                         >
                           <Trash2 size={10} />
@@ -885,146 +626,92 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId }) => {
 
       {/* Main chat column */}
       <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/50 flex-shrink-0">
-        <div className="flex items-center space-x-3">
-          {!showHistory && (
-            <button
-              onClick={() => setShowHistory(true)}
-              className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)] transition-colors cursor-pointer"
-              title="Show chat history"
-            >
-              <PanelLeft size={16} />
-            </button>
-          )}
-          <CustomSelect
-            value={selectedModel}
-            onChange={setSelectedModel}
-            options={modelOptions}
-            placeholder="Select model"
-            className="w-64"
-          />
-          <CustomSelect
-            value={selectedSkillId || ""}
-            onChange={(val) => {
-              setSelectedSkillId(val || null);
-              setActiveSkill(val || null);
-            }}
-            options={[{ id: "", name: "No skill" }, ...skills.map(s => ({ id: s.id, name: s.name }))]}
-            placeholder="Select skill"
-            className="w-48"
-          />
-          {modifiedFiles.length > 0 && (
-            <span className="flex items-center space-x-1.5 px-2.5 py-1 bg-emerald-500/15 border border-emerald-500/30 rounded-lg text-[10px] font-mono text-emerald-300">
-              <CheckCircle2 size={11} />
-              <span>{modifiedFiles.length} file{modifiedFiles.length !== 1 ? "s" : ""} modified</span>
-            </span>
-          )}
-        </div>
-        <div className="flex items-center space-x-1 text-[var(--text-muted)]">
-          {isStreaming && <Loader2 size={14} className="animate-spin text-[var(--accent-color)]" />}
-          <span className="text-[10px] font-mono">
-            {isStreaming ? "Working..." : "Ready"}
-          </span>
-        </div>
-      </div>
-
-      {/* Modified files bar */}
-      {modifiedFiles.length > 0 && (
-        <div className="flex items-center space-x-2 px-4 py-1.5 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/30 flex-shrink-0 overflow-x-auto">
-          <FolderGit2 size={12} className="text-emerald-400 flex-shrink-0" />
-          <span className="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider flex-shrink-0">Changes:</span>
-          {modifiedFiles.map((filePath) => {
-            const fileName = filePath.split("/").pop() || filePath;
-            return (
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/50 flex-shrink-0">
+          <div className="flex items-center space-x-3">
+            {!showHistory && (
               <button
-                key={filePath}
-                onClick={() => handleOpenModifiedFile(filePath)}
-                className="flex items-center space-x-1 px-2 py-0.5 bg-[var(--bg-app)] border border-[var(--border-color)] hover:border-emerald-500/50 rounded text-[10px] font-mono text-[var(--text-light)] cursor-pointer transition-colors flex-shrink-0"
+                onClick={() => setShowHistory(true)}
+                className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)] transition-colors cursor-pointer border-none bg-transparent"
+                title="Show chat history"
               >
-                <FileText size={10} className="text-emerald-400" />
-                <span>{fileName}</span>
+                <PanelLeft size={16} />
               </button>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Chat area - centered, slim */}
-      <div
-        ref={chatContainerRef}
-        onScroll={handleScroll}
-        className="flex-1 overflow-y-auto overflow-x-hidden"
-      >
-        <div className="max-w-3xl mx-auto px-6 py-6">
-          {agentChats.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-center text-[var(--text-muted)] py-24">
-              <div className="w-16 h-16 rounded-full bg-[var(--bg-sidebar)] flex items-center justify-center mb-4">
-                <MessageSquare size={24} className="text-violet-400/50" />
-              </div>
-              <p className="text-sm font-semibold mb-1">Agent Mode</p>
-              <p className="text-xs max-w-[300px]">
-                Ask the agent to analyze, modify, or implement code. Type @ to reference files.
-              </p>
-            </div>
-          ) : (
-            agentChats.map((msg: any) => renderMessage(msg))
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-      </div>
-
-      {/* Input area - centered, slim */}
-      <div className="border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/20 flex-shrink-0">
-        <div className="max-w-3xl mx-auto px-6 py-4 relative">
-          <div className="relative">
-            <textarea
-              ref={inputRef}
-              value={message}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              placeholder="Message agent... (type @ to reference files)"
-              className="w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded-lg p-3 pr-12 text-xs font-sans text-[var(--text-light)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--border-active)] resize-none"
-              rows={3}
-              disabled={isStreaming}
+            )}
+            <CustomSelect
+              value={selectedModel}
+              onChange={setSelectedModel}
+              options={modelOptions}
+              placeholder="Select model"
+              className="w-64"
             />
-            <button
-              onClick={handleSendMessage}
-              disabled={!message.trim() || isStreaming}
-              className="absolute right-2 bottom-2 w-8 h-8 bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 disabled:bg-[var(--bg-sidebar)] disabled:text-[var(--text-muted)] text-white rounded-lg flex items-center justify-center transition-colors cursor-pointer"
-            >
-              {isStreaming ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <Send size={14} />
-              )}
-            </button>
+            <CustomSelect
+              value={selectedSkillId || ""}
+              onChange={(val) => {
+                setSelectedSkillId(val || null);
+                setActiveSkill(val || null);
+              }}
+              options={[{ id: "", name: "No skill" }, ...skills.map(s => ({ id: s.id, name: s.name }))]}
+              placeholder="Select skill"
+              className="w-48"
+            />
+            {modifiedFiles.length > 0 && (
+              <span className="flex items-center space-x-1.5 px-2.5 py-1 bg-emerald-500/15 border border-emerald-500/30 rounded-lg text-[10px] font-mono text-emerald-300">
+                <CheckCircle2 size={11} />
+                <span>{modifiedFiles.length} file{modifiedFiles.length !== 1 ? "s" : ""} modified</span>
+              </span>
+            )}
           </div>
-
-          {/* File autocomplete dropdown */}
-          {showFilePicker && fileReferences.length > 0 && (
-            <div className="absolute bottom-full left-6 right-6 mb-1 bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-lg shadow-xl max-h-48 overflow-y-auto z-20">
-              {fileReferences.map((file, idx) => (
-                <button
-                  key={file.path}
-                  onClick={() => insertFileReference(file)}
-                  onMouseEnter={() => setSelectedFileIndex(idx)}
-                  className={`w-full text-left px-3 py-2 text-[var(--text-normal)] text-xs font-mono flex items-center space-x-2 border-b border-[var(--border-color)] last:border-b-0 transition-colors ${
-                    idx === selectedFileIndex ? "bg-[var(--accent-bg)]" : "hover:bg-[var(--accent-bg)]"
-                  }`}
-                >
-                  <FileText size={12} className="text-emerald-400 flex-shrink-0" />
-                  <span className="font-semibold text-[var(--text-light)]">{file.name}</span>
-                  <span className="text-[var(--text-muted)] truncate">{file.path}</span>
-                </button>
-              ))}
-            </div>
-          )}
+          <div className="flex items-center space-x-1.5 text-[var(--text-muted)] font-mono text-[10px]">
+            {isStreaming && <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-color)] animate-ping" />}
+            <span>{isStreaming ? "Thinking" : "Ready"}</span>
+          </div>
         </div>
-      </div>
 
-      {/* Permission modal */}
-      {renderPermissionModal()}
+        {/* Modified files bar */}
+        {modifiedFiles.length > 0 && (
+          <div className="flex items-center space-x-2 px-4 py-1.5 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/30 flex-shrink-0 overflow-x-auto">
+            <FolderGit2 size={12} className="text-emerald-400 flex-shrink-0" />
+            <span className="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider flex-shrink-0">Changes:</span>
+            {modifiedFiles.map((filePath) => {
+              const fileName = filePath.split("/").pop() || filePath;
+              return (
+                <button
+                  key={filePath}
+                  onClick={() => handleOpenModifiedFile(filePath)}
+                  className="flex items-center space-x-1 px-2 py-0.5 bg-[var(--bg-app)] border border-[var(--border-color)] hover:border-emerald-500/50 rounded text-[10px] font-mono text-[var(--text-light)] cursor-pointer transition-colors flex-shrink-0"
+                >
+                  <FileText size={10} className="text-emerald-400" />
+                  <span>{fileName}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Chat List and input block */}
+        <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden max-w-3xl mx-auto w-full">
+          <Chat
+            messages={agentChats}
+            isStreaming={isStreaming}
+            streamingMessageId={consoleMessageIdRef.current}
+          />
+          
+          <div className="p-4 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/10 flex-shrink-0 w-full mb-2">
+            <ChatInput
+              value={message}
+              onChange={setMessage}
+              onSend={handleSendMessage}
+              disabled={isStreaming}
+              isStreaming={isStreaming}
+              onStop={handleStopExecution}
+              placeholder="Message agent... (type @ to reference files)"
+            />
+          </div>
+        </div>
+
+        {/* Permission modal */}
+        {renderPermissionModal()}
       </div>
     </div>
   );
