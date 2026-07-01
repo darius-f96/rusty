@@ -136,9 +136,15 @@ export async function executeNode(ws: WebSocket, data: any): Promise<void> {
       for (const ctx of mcpContext) {
         const server: McpServerConfig = ctx.server;
         const description: string = ctx.description || "";
+        const mcpNodeId = ctx.nodeId;
         try {
           const { tools: mcpTools, dispose } = await createMcpTools(server, sendLog);
           mcpDisposers.push(dispose);
+          
+          if (server.enabled && mcpTools.length === 0) {
+            throw new Error(`Failed to list tools from MCP server "${server.name}". Handshake failed or server returned no tools.`);
+          }
+          
           for (const t of mcpTools) {
             allTools.push(t);
             mcpToolDescriptions.push(`- '${t.name}': ${t.description}`);
@@ -146,8 +152,30 @@ export async function executeNode(ws: WebSocket, data: any): Promise<void> {
           if (description) {
             mcpToolDescriptions.push(`  (User intent for ${server.name}: ${description})`);
           }
+          
+          // Connection succeeded
+          if (mcpNodeId) {
+            safeSend(ws, {
+              type: "node_status_change",
+              targetNodeId: mcpNodeId,
+              status: "success",
+              nodeName: server.name,
+            });
+          }
         } catch (err: any) {
-          sendLog(`MCP context "${server.name}" could not be loaded: ${err.message}`);
+          // Connection failed
+          if (mcpNodeId) {
+            safeSend(ws, {
+              type: "node_status_change",
+              targetNodeId: mcpNodeId,
+              status: "error",
+              message: err.message,
+              nodeName: server.name,
+            });
+          }
+          const errMsg = `MCP Node execution aborted: ${err.message}`;
+          sendLog(errMsg);
+          throw new Error(errMsg);
         }
       }
     }

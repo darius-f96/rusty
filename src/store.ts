@@ -47,7 +47,7 @@ export interface GitStatusResult {
 
 export interface Tab {
   id: string;
-  type: "canvas" | "file" | "task" | "settings" | "llm-setup" | "git-diff" | "git-history" | "workspace" | "agent" | "skills" | "mcp-integration";
+  type: "canvas" | "axiom" | "file" | "task" | "settings" | "llm-setup" | "git-diff" | "git-history" | "workspace" | "agent" | "skills" | "mcp-integration";
   title: string;
   key: string;
   diffType?: "staged" | "unstaged" | "commit";
@@ -178,7 +178,7 @@ export interface WorkspaceState {
   
   setRootPath: (path: string) => void;
   setGitStatus: (status: GitStatusResult | null) => void;
-  loadGitStatus: () => Promise<void>;
+  loadGitStatus: (rootDir?: string) => Promise<void>;
   setFileTree: (tree: any[]) => void;
   setSelectedNodeId: (id: string | null) => void;
   setNodes: (nodes: Node[]) => void;
@@ -542,8 +542,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     setTimeout(() => useWorkspaceStore.getState().saveSecureConfig(), 0);
   },
   setGitStatus: (status) => set({ gitStatus: status }),
-  loadGitStatus: async () => {
-    const rootPath = useWorkspaceStore.getState().rootPath;
+  loadGitStatus: async (rootDir) => {
+    const rootPath = rootDir || useWorkspaceStore.getState().rootPath;
     if (!rootPath) {
       set({ gitStatus: null });
       return;
@@ -1304,6 +1304,55 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
 
   openTab: (tab, groupId) => set((state) => {
     const targetGroupId = groupId || state.activeGroupId;
+
+    // Check if we should jump to an existing tab in any editor group
+    let existingTabGroup: any = null;
+    let existingTab: any = null;
+
+    const isSingleton = tab.type === "llm-setup" || tab.type === "mcp-integration" || tab.type === "settings" || tab.type === "skills" || tab.type === "workspace";
+    const isAxiomTab = tab.type === "canvas" || tab.type === "axiom";
+
+    for (const group of state.editorGroups) {
+      const found = group.openTabs.find((t) => {
+        if (isSingleton && t.type === tab.type) return true;
+        if (isAxiomTab && (t.type === "canvas" || t.type === "axiom") && t.key === tab.key) return true;
+        return false;
+      });
+      if (found) {
+        existingTabGroup = group;
+        existingTab = found;
+        break;
+      }
+    }
+
+    if (existingTab && existingTabGroup) {
+      const updatedGroups = state.editorGroups.map((g) => {
+        if (g.id === existingTabGroup.id) {
+          return { ...g, activeTabId: existingTab.id };
+        }
+        return g;
+      });
+
+      const tempState = {
+        ...state,
+        editorGroups: updatedGroups,
+        activeGroupId: existingTabGroup.id
+      };
+      const activeTabId = getActiveCanvasTabId(tempState);
+      const activeCtx = getOrCreateContext(tempState, activeTabId);
+
+      return {
+        editorGroups: updatedGroups,
+        activeGroupId: existingTabGroup.id,
+        nodes: activeCtx.nodes,
+        edges: activeCtx.edges,
+        nodeLogs: activeCtx.nodeLogs,
+        nodeStatus: activeCtx.nodeStatus,
+        globalChatHistory: activeCtx.globalChatHistory,
+        edgeReconciliationStatus: activeCtx.edgeReconciliationStatus
+      };
+    }
+
     const exists = state.editorGroups.some((g) => g.id === targetGroupId);
     
     let newGroups = state.editorGroups.map((group) => {
@@ -1618,6 +1667,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       currentPath += (i > 0 ? "/" : "") + parts[i];
       newExpanded[currentPath] = true;
     }
+    
+    // Switch sidebar explorer view and expand if needed
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("reveal-file-in-tree"));
+    }, 0);
+    
     return { expandedPaths: newExpanded, revealPath: filePath };
   }),
   clearRevealPath: () => set({ revealPath: null }),

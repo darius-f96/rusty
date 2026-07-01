@@ -17,11 +17,12 @@ import {
 import { useWorkspaceStore } from "../store";
 import { FileIcon } from "../services/fileTypeService";
 import { invoke } from "@tauri-apps/api/core";
-import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { MoveDialog } from "./MoveDialog";
 import { CreateDialog } from "./CreateDialog";
 import { notify } from "../notificationStore";
 import { useConfirm } from "./useConfirm";
+
+import { fileTreePresenter, refreshTree } from "./filetree/FileTreePresenter";
 
 interface FileEntry {
   name: string;
@@ -70,7 +71,7 @@ const getGitState = (node: any, gitStatus: any): GitState | null => {
   } else {
     const staged = gitStatus.staged.find((f: any) => f.path === node.path);
     const unstaged = gitStatus.unstaged.find((f: any) => f.path === node.path);
-
+ 
     if (staged && unstaged) {
       return { colorClass: "text-amber-400 font-bold", char: "M", label: "Staged & Modified" };
     }
@@ -90,15 +91,6 @@ const getGitState = (node: any, gitStatus: any): GitState | null => {
   }
 };
 
-async function refreshTree() {
-  const state = useWorkspaceStore.getState();
-  if (state.rootPath) {
-    const tree: any[] = await invoke("get_directory_structure", { rootDir: state.rootPath });
-    state.setFileTree(tree);
-    state.loadGitStatus();
-  }
-}
-
 export const FileTree: React.FC<FileTreeProps> = ({ entries }) => {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [moveDialogNode, setMoveDialogNode] = useState<any | null>(null);
@@ -110,9 +102,9 @@ export const FileTree: React.FC<FileTreeProps> = ({ entries }) => {
   const editorGroups = useWorkspaceStore((state) => state.editorGroups);
   const activeGroupId = useWorkspaceStore((state) => state.activeGroupId);
   const revealFileInTree = useWorkspaceStore((state) => state.revealFileInTree);
-
+ 
   const { confirm, ConfirmModalComponent } = useConfirm();
-
+ 
   useEffect(() => {
     if (revealPath && treeContainerRef.current) {
       setTimeout(() => {
@@ -124,32 +116,30 @@ export const FileTree: React.FC<FileTreeProps> = ({ entries }) => {
       }, 100);
     }
   }, [revealPath, clearRevealPath]);
-
+ 
   const handleDropOnRoot = async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     const rootPath = useWorkspaceStore.getState().rootPath;
     if (!rootPath) return;
-
+ 
     try {
       const dataStr = e.dataTransfer.getData("text/plain");
       if (!dataStr) return;
       const dragData = JSON.parse(dataStr);
       if (!dragData.path) return;
-
+ 
       const srcPath = dragData.path;
       const fileName = srcPath.split("/").pop() || "";
       const destPath = `${rootPath}/${fileName}`;
       if (srcPath === destPath) return;
-
-      await invoke("move_file_or_dir", { src: srcPath, dest: destPath });
-      await refreshTree();
+ 
+      await fileTreePresenter.moveItem(srcPath, destPath);
     } catch (err: any) {
       console.error("Failed to move file to root:", err);
-      notify("Move failed", `Move failed: ${err}`, "error");
     }
   };
-
+ 
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
@@ -161,83 +151,73 @@ export const FileTree: React.FC<FileTreeProps> = ({ entries }) => {
       return () => document.removeEventListener("mousedown", handleOutsideClick);
     }
   }, [contextMenu]);
-
+ 
   const handleContextMenu = (e: React.MouseEvent, node: any) => {
     e.preventDefault();
     e.stopPropagation();
     setContextMenu({ x: e.clientX, y: e.clientY, node });
   };
-
+ 
   const handleMove = async (destPath: string) => {
     if (!moveDialogNode) return;
-    const originalPath = moveDialogNode.path;
     try {
-      await invoke("move_file_or_dir", { src: originalPath, dest: destPath });
-      await refreshTree();
-      const state = useWorkspaceStore.getState();
-      state.closeTab(`file_${originalPath.replace(/[^a-zA-Z0-9]/g, "_")}`);
-      // Track for undo
-      state.setLastRename({ originalPath, newPath: destPath });
-      state.loadGitStatus();
-    } catch (err: any) {
-      notify("Move failed", `Move failed: ${err}`, "error");
+      await fileTreePresenter.moveItem(moveDialogNode.path, destPath);
+    } catch (err) {
+      console.error(err);
     }
     setMoveDialogNode(null);
   };
-
+ 
   const handleDelete = async (node: any) => {
-    const confirmed = await confirm({
-      title: "Confirm Delete",
-      message: `Are you sure you want to permanently delete "${node.name}"?`,
-      confirmLabel: "Delete",
-      cancelLabel: "Cancel",
-      kind: "danger",
-    });
-    if (!confirmed) return;
     try {
-      await invoke("delete_file_or_dir", { path: node.path });
-      await refreshTree();
-      const state = useWorkspaceStore.getState();
-      state.closeTab(`file_${node.path.replace(/[^a-zA-Z0-9]/g, "_")}`);
-    } catch (err: any) {
-      notify("Delete failed", `Delete failed: ${err}`, "error");
+      await fileTreePresenter.deleteItem(
+        { path: node.path, name: node.name, isDir: node.is_dir },
+        async (opts) => {
+          return await confirm({
+            title: opts.title,
+            message: opts.message,
+            confirmLabel: opts.confirmLabel,
+            cancelLabel: opts.cancelLabel,
+            kind: opts.kind,
+          });
+        }
+      );
+    } catch (err) {
+      console.error(err);
     }
   };
-
+ 
   const handleOpenInFinder = async (node: any) => {
     try {
-      await revealItemInDir(node.path);
-    } catch (err: any) {
-      notify("Error", `Failed to open in Finder: ${err}`, "error");
+      await fileTreePresenter.openInFinder(node.path);
+    } catch (err) {
+      console.error(err);
     }
   };
-
+ 
   const handleNewFileFromMenu = (node: any) => {
     const targetDir = node.is_dir ? node.path : node.path.substring(0, node.path.lastIndexOf("/"));
     const dirName = node.is_dir ? node.name : targetDir.split("/").pop() || "folder";
     setCreateDialog({ type: "file", dir: targetDir, name: dirName });
   };
-
+ 
   const handleNewFolderFromMenu = (node: any) => {
     const targetDir = node.is_dir ? node.path : node.path.substring(0, node.path.lastIndexOf("/"));
     const dirName = node.is_dir ? node.name : targetDir.split("/").pop() || "folder";
     setCreateDialog({ type: "folder", dir: targetDir, name: dirName });
   };
-
+ 
   const handleCreate = async (name: string) => {
     if (!createDialog) return;
     const { type, dir } = createDialog;
     try {
       if (type === "file") {
-        await invoke("create_file", { path: `${dir}/${name}` });
+        await fileTreePresenter.createFile(dir, name);
       } else {
-        await invoke("create_directory", { path: `${dir}/${name}` });
+        await fileTreePresenter.createFolder(dir, name);
       }
-      await refreshTree();
-      const state = useWorkspaceStore.getState();
-      state.setPathExpanded(dir, true);
-    } catch (err: any) {
-      notify("Create failed", `Create ${type} failed: ${err}`, "error");
+    } catch (err) {
+      console.error(err);
     }
     setCreateDialog(null);
   };
@@ -459,7 +439,8 @@ const FileTreeNode: React.FC<{
         if (hasContents || hasTracker) {
           await canvasFileService.restoreCanvasVfs(
             parsedData.vfsContents || {},
-            parsedData.vfsTracker || {}
+            parsedData.vfsTracker || {},
+            parsedData.id
           );
         }
       } catch (err: any) {

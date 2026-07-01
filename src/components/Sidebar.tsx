@@ -1,10 +1,10 @@
 import React from "react";
-import { FolderOpen, Files, Cpu, Settings, GitBranch, ChevronLeft, FoldHorizontal, RefreshCw, Bot, Wand2, Plug } from "lucide-react";
+import { ChevronLeft, FoldHorizontal, RefreshCw } from "lucide-react";
 import { useWorkspaceStore } from "../store";
 import { FileTree } from "./FileTree";
 import { invoke } from "@tauri-apps/api/core";
-import { AxiomIcon } from "./AxiomIcon";
 import { SourceControl } from "./SourceControl";
+import { SIDEBAR_ICONS, SidebarHelpers } from "./sidebar/SidebarPresenter";
 
 interface SidebarProps {
   sidebarWidth: number;
@@ -33,95 +33,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const fileTree = useWorkspaceStore((state) => state.fileTree);
   const setFileTree = useWorkspaceStore((state) => state.setFileTree);
-  const openTab = useWorkspaceStore((state) => state.openTab);
   const editorGroups = useWorkspaceStore((state) => state.editorGroups);
   const activeGroupId = useWorkspaceStore((state) => state.activeGroupId);
   const activeGroup = editorGroups.find((g) => g.id === activeGroupId);
   const activeTabId = activeGroup ? activeGroup.activeTabId : null;
   const activeTab = activeGroup && activeGroup.openTabs.find((t) => t.id === activeTabId);
-  const isActiveTabCanvas = activeTab?.type === "canvas";
+  const isActiveTabCanvas = activeTab?.type === "canvas" || activeTab?.type === "axiom";
 
-  const gitStatus = useWorkspaceStore((state) => state.gitStatus);
-
-  const handleOpenWorkspace = () => {
-    openTab({
-      id: "workspace_select",
-      type: "workspace",
-      title: "Workspaces",
-      key: "workspace",
-    });
-  };
-
-  const handleExplorerTabClick = () => {
-    if (!isExplorerOpen) {
-      setSidebarView("explorer");
-      setSidebarWidth(lastWidth);
-      setIsExplorerOpen(true);
-    } else if (sidebarView === "explorer") {
-      setLastWidth(sidebarWidth);
-      setSidebarWidth(56);
-      setIsExplorerOpen(false);
-    } else {
-      setSidebarView("explorer");
-    }
-  };
-
-  const handleGitTabClick = () => {
-    if (!isExplorerOpen) {
-      setSidebarView("git");
-      setSidebarWidth(lastWidth);
-      setIsExplorerOpen(true);
-    } else if (sidebarView === "git") {
-      setLastWidth(sidebarWidth);
-      setSidebarWidth(56);
-      setIsExplorerOpen(false);
-    } else {
-      setSidebarView("git");
-    }
-  };
-
-  const handleAxiomClick = () => {
-    useWorkspaceStore.getState().createCanvasTab();
-  };
-
-  const handleAgentClick = () => {
-    useWorkspaceStore.getState().createAgentTab();
-  };
-
-  const handleLlmSetupClick = () => {
-    openTab({
-      id: "llm_setup",
-      type: "llm-setup",
-      title: "LLM Integrations",
-      key: "llm-setup",
-    });
-  };
-
-  const handleSettingsClick = () => {
-    openTab({
-      id: "settings",
-      type: "settings",
-      title: "Settings",
-      key: "settings",
-    });
-  };
-
-  const handleSkillsClick = () => {
-    openTab({
-      id: "skills",
-      type: "skills",
-      title: "Skills",
-      key: "skills",
-    });
-  };
-
-  const handleMcpIntegrationClick = () => {
-    openTab({
-      id: "mcp-integration",
-      type: "mcp-integration",
-      title: "MCP Integration",
-      key: "mcp-integration",
-    });
+  const helpers: SidebarHelpers = {
+    isExplorerOpen,
+    setIsExplorerOpen,
+    sidebarView,
+    setSidebarView,
+    sidebarWidth,
+    setSidebarWidth,
+    lastWidth,
+    setLastWidth,
   };
 
   const handleCollapseAllFolders = () => {
@@ -146,7 +73,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setIsExplorerOpen(false);
   };
 
-  const totalChanges = gitStatus ? gitStatus.staged.length + gitStatus.unstaged.length : 0;
+  const isItemActive = (id: string) => {
+    switch (id) {
+      case "workspace":
+        return activeTabId === "workspace_select";
+      case "explorer":
+        return isExplorerOpen && sidebarView === "explorer";
+      case "git":
+        return isExplorerOpen && sidebarView === "git";
+      case "axiom":
+        return isActiveTabCanvas;
+      case "agent":
+        return activeTab?.type === "agent";
+      case "llm-setup":
+        return activeTabId === "llm_setup" || activeTabId === "llm-setup";
+      case "skills":
+        return activeTabId === "skills";
+      case "mcp":
+        return activeTabId === "mcp-integration";
+      case "settings":
+        return activeTabId === "settings";
+      default:
+        return false;
+    }
+  };
+
+  const store = useWorkspaceStore();
+  const topIcons = SIDEBAR_ICONS.filter((item) => item.id !== "settings");
+  const settingsIcon = SIDEBAR_ICONS.find((item) => item.id === "settings");
 
   return (
     <div
@@ -157,138 +111,54 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* 1. Left Icon Dock (Activity Bar) */}
       <div className={`w-14 bg-black/15 flex flex-col items-center py-4 justify-between h-full border-r border-[var(--border-color)] flex-shrink-0 rounded-l-[19px] relative z-20 ${!isExplorerOpen ? "rounded-r-[19px]" : ""}`}>
         <div className="flex flex-col items-center space-y-4 w-full">
-          {/* Open Workspace Action */}
-          <button
-            onClick={handleOpenWorkspace}
-            className={`p-2.5 rounded-lg transition-all cursor-pointer relative group ${
-              activeTabId === "workspace_select"
-                ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
-                : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
-            }`}
-          >
-            <FolderOpen size={20} />
-            <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-zinc-950 text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-zinc-800 whitespace-nowrap">
-              Open Workspace
-            </span>
-          </button>
-
-          {/* Files (Explorer View Toggle) */}
-          <button
-            onClick={handleExplorerTabClick}
-            className={`p-2.5 rounded-lg transition-all cursor-pointer relative group ${
-              isExplorerOpen && sidebarView === "explorer"
-                ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
-                : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
-            }`}
-          >
-            <Files size={20} />
-            <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-zinc-950 text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-zinc-800 whitespace-nowrap">
-              Files (⌘1)
-            </span>
-          </button>
-
-          {/* Git Source Control */}
-          <button
-            onClick={handleGitTabClick}
-            className={`p-2.5 rounded-lg transition-all cursor-pointer relative group ${
-              isExplorerOpen && sidebarView === "git"
-                ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
-                : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
-            }`}
-          >
-            <GitBranch size={20} />
-            {totalChanges > 0 && (
-              <span className="absolute top-1 right-1 bg-indigo-600 text-white font-mono text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center border border-[var(--bg-sidebar)] shadow-md select-none">
-                {totalChanges}
-              </span>
-            )}
-            <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-zinc-950 text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-zinc-800 whitespace-nowrap">
-              Source Control
-            </span>
-          </button>
-
-          {/* Axiom Canvas */}
-          <button
-            onClick={handleAxiomClick}
-            className={`p-2.5 rounded-lg transition-all cursor-pointer relative group ${isActiveTabCanvas
-              ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
-              : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
-              }`}
-          >
-            <AxiomIcon size={20} />
-            <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-zinc-950 text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-zinc-800 whitespace-nowrap">
-              Axiom
-            </span>
-          </button>
-
-          {/* Agent Tab */}
-          <button
-            onClick={handleAgentClick}
-            className="p-2.5 rounded-lg transition-all cursor-pointer relative group text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
-            title="Agent Mode"
-          >
-            <Bot size={20} />
-            <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-zinc-950 text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-zinc-800 whitespace-nowrap">
-              Agent Mode
-            </span>
-          </button>
-
-          {/* LLM Integrations Setup */}
-          <button
-            onClick={handleLlmSetupClick}
-            className={`p-2.5 rounded-lg transition-all cursor-pointer relative group ${activeTabId === "llm_setup"
-              ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
-              : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
-              }`}
-          >
-            <Cpu size={20} />
-            <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-zinc-950 text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-zinc-800 whitespace-nowrap">
-              LLM Integrations
-            </span>
-          </button>
-
-          {/* Skills */}
-          <button
-            onClick={handleSkillsClick}
-            className={`p-2.5 rounded-lg transition-all cursor-pointer relative group ${activeTabId === "skills"
-              ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
-              : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
-              }`}
-          >
-            <Wand2 size={20} />
-            <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-zinc-950 text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border-zinc-800 whitespace-nowrap">
-              Skills
-            </span>
-          </button>
-
-          {/* MCP Integration */}
-          <button
-            onClick={handleMcpIntegrationClick}
-            className={`p-2.5 rounded-lg transition-all cursor-pointer relative group ${activeTabId === "mcp-integration"
-              ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
-              : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
-              }`}
-          >
-            <Plug size={20} />
-            <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-zinc-950 text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border-zinc-800 whitespace-nowrap">
-              MCP Integration
-            </span>
-          </button>
+          {topIcons.map((item) => {
+            const Icon = item.icon;
+            const active = isItemActive(item.id);
+            const badge = item.badgeCount ? item.badgeCount(store) : 0;
+            return (
+              <button
+                key={item.id}
+                onClick={() => item.onClick(store, helpers)}
+                className={`p-2.5 rounded-lg transition-all cursor-pointer relative group ${
+                  active
+                    ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
+                    : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
+                }`}
+              >
+                <Icon size={20} />
+                {badge > 0 && (
+                  <span className="absolute top-1 right-1 bg-indigo-600 text-white font-mono text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center border border-[var(--bg-sidebar)] shadow-md select-none">
+                    {badge}
+                  </span>
+                )}
+                <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-zinc-950 text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-zinc-800 whitespace-nowrap">
+                  {item.label}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Bottom General Settings Icon */}
-        <button
-          onClick={handleSettingsClick}
-          className={`p-2.5 rounded-lg transition-all cursor-pointer relative group ${activeTabId === "settings"
-            ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
-            : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
-            }`}
-        >
-          <Settings size={20} />
-          <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-zinc-950 text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-zinc-800 whitespace-nowrap">
-            General Settings
-          </span>
-        </button>
+        {settingsIcon && (() => {
+          const Icon = settingsIcon.icon;
+          const active = isItemActive(settingsIcon.id);
+          return (
+            <button
+              onClick={() => settingsIcon.onClick(store, helpers)}
+              className={`p-2.5 rounded-lg transition-all cursor-pointer relative group ${
+                active
+                  ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
+                  : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
+              }`}
+            >
+              <Icon size={20} />
+              <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-zinc-950 text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-zinc-800 whitespace-nowrap">
+                {settingsIcon.label}
+              </span>
+            </button>
+          );
+        })()}
       </div>
 
       {/* 2. Sidebar View Panel Container */}

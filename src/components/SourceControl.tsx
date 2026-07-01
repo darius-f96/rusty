@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { GitBranch, Plus, Minus, RotateCcw, Check, AlertCircle, ArrowUp, ArrowDown, GitCommit, ChevronDown, GitMerge, GitPullRequest, Trash2 } from "lucide-react";
+import { GitBranch, Plus, Minus, RotateCcw, Check, AlertCircle, ArrowUp, ArrowDown, GitCommit, ChevronDown } from "lucide-react";
 import { useWorkspaceStore } from "../store";
 import { invoke } from "@tauri-apps/api/core";
-import { CustomSelect } from "./CustomSelect";
-import { BranchDialog } from "./BranchDialog";
+import { gitPresenter } from "./git/GitPresenter";
+import { GitBranchManager } from "./git/GitBranchManager";
 import { notify } from "../notificationStore";
 import { useConfirm } from "./useConfirm";
 
@@ -12,6 +12,24 @@ export const SourceControl: React.FC = () => {
   const gitStatus = useWorkspaceStore((state) => state.gitStatus);
   const loadGitStatus = useWorkspaceStore((state) => state.loadGitStatus);
   const openTab = useWorkspaceStore((state) => state.openTab);
+
+  const [activeRepo, setActiveRepo] = useState<string>("");
+  const [subprojects, setSubprojects] = useState<string[]>([]);
+  const [commitMsg, setCommitMsg] = useState("");
+  const [isCommitting, setIsCommitting] = useState(false);
+  const [isPushing, setIsPushing] = useState(false);
+  const [isPulling, setIsPulling] = useState(false);
+  const [initLoading, setInitLoading] = useState(false);
+  const [localBranches, setLocalBranches] = useState<string[]>([]);
+  const [remoteBranches, setRemoteBranches] = useState<string[]>([]);
+  const [isHistoryExpanded, setIsHistoryExpanded] = useState(true);
+  const [historyCommits, setHistoryCommits] = useState<any[]>([]);
+  const [showBranchPopover, setShowBranchPopover] = useState(false);
+
+  const lastRename = useWorkspaceStore((state) => state.lastRename);
+  const setLastRename = useWorkspaceStore((state) => state.setLastRename);
+
+  const { confirm, ConfirmModalComponent } = useConfirm();
 
   const handleOpenGraph = () => {
     openTab({
@@ -22,60 +40,54 @@ export const SourceControl: React.FC = () => {
     });
   };
 
-  const [commitMsg, setCommitMsg] = useState("");
-  const [isCommitting, setIsCommitting] = useState(false);
-  const [isPushing, setIsPushing] = useState(false);
-  const [isPulling, setIsPulling] = useState(false);
-  const [initLoading, setInitLoading] = useState(false);
-  const [localBranches, setLocalBranches] = useState<string[]>([]);
-  const [remoteBranches, setRemoteBranches] = useState<string[]>([]);
-  const [isHistoryExpanded, setIsHistoryExpanded] = useState(true);
-  const [historyCommits, setHistoryCommits] = useState<any[]>([]);
-  const [branchDialog, setBranchDialog] = useState<"create" | "merge" | "rebase" | "delete" | null>(null);
-  const lastRename = useWorkspaceStore((state) => state.lastRename);
-  const setLastRename = useWorkspaceStore((state) => state.setLastRename);
-
-  const { confirm, ConfirmModalComponent } = useConfirm();
-
-  // Fetch recent commits for the sidebar
-  const fetchHistory = async () => {
-    if (rootPath) {
-      try {
-        const history: any[] = await invoke("git_get_commit_history", { rootDir: rootPath });
-        setHistoryCommits(history.slice(0, 15)); // Show last 15 commits
-      } catch (err) {
-        console.error("Failed to load history commits in sidebar:", err);
-      }
-    }
-  };
-
-  // Load local + remote branches. Best-effort fetch/prune first so the origin
-  // branch list stays in sync (e.g. remote branches that were deleted are pruned).
-  const fetchBranches = async () => {
-    if (rootPath) {
-      try {
-        try {
-          await invoke("git_fetch", { rootDir: rootPath });
-        } catch (err) {
-          console.warn("git_fetch skipped (no remote or offline):", err);
-        }
-        const res: { local: string[]; remote: string[] } = await invoke("git_get_all_branches", { rootDir: rootPath });
-        setLocalBranches(res.local || []);
-        setRemoteBranches(res.remote || []);
-      } catch (err) {
-        console.error("Failed to load branches:", err);
-      }
-    }
-  };
-
-  // Load Git status, branches, and history on mount or directory change
+  // Scan subprojects and initialize activeRepo
   useEffect(() => {
     if (rootPath) {
-      loadGitStatus();
-      fetchBranches();
-      fetchHistory();
+      setActiveRepo(rootPath);
+      gitPresenter.scanSubprojects(rootPath).then((repos) => {
+        // Add rootPath if not already present
+        const list = Array.from(new Set([rootPath, ...repos]));
+        setSubprojects(list);
+      }).catch((err) => {
+        console.error("Failed to scan subprojects:", err);
+      });
     }
   }, [rootPath]);
+
+  // Load Git status, branches, and history on repository switch
+  const loadRepoData = async () => {
+    if (activeRepo) {
+      try {
+        await loadGitStatus(activeRepo);
+        
+        // Fetch commit history
+        try {
+          const history: any[] = await invoke("git_get_commit_history", { rootDir: activeRepo });
+          setHistoryCommits(history.slice(0, 15)); // Show last 15 commits
+        } catch (e) {
+          console.warn("Failed to load history commits for current repo:", e);
+        }
+
+        // Fetch branches
+        try {
+          try {
+            await invoke("git_fetch", { rootDir: activeRepo });
+          } catch {}
+          const res: { local: string[]; remote: string[] } = await invoke("git_get_all_branches", { rootDir: activeRepo });
+          setLocalBranches(res.local || []);
+          setRemoteBranches(res.remote || []);
+        } catch (e) {
+          console.warn("Failed to load branches for current repo:", e);
+        }
+      } catch (err) {
+        console.error("Failed to load repo data:", err);
+      }
+    }
+  };
+
+  useEffect(() => {
+    loadRepoData();
+  }, [activeRepo]);
 
   // If no folder is open, guide the user
   if (!rootPath) {
@@ -87,15 +99,13 @@ export const SourceControl: React.FC = () => {
     );
   }
 
-  // Handle git initialization for non-git workspaces
+  // Handle git initialization
   const handleInitializeRepo = async () => {
     setInitLoading(true);
     try {
-      console.log(`Git: Initializing repository at ${rootPath}`);
-      await invoke("git_init", { rootDir: rootPath });
-      await loadGitStatus();
-      await fetchBranches();
-      await fetchHistory();
+      console.log(`Git: Initializing repository at ${activeRepo}`);
+      await invoke("git_init", { rootDir: activeRepo });
+      await loadRepoData();
     } catch (err: any) {
       console.error("Failed to initialize git repository:", err);
       notify("Error", `Error initializing Git: ${err}`, "error");
@@ -126,7 +136,6 @@ export const SourceControl: React.FC = () => {
     );
   }
 
-  // Commit changes function
   const handleCommit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!commitMsg.trim() || isCommitting || !gitStatus) return;
@@ -138,271 +147,162 @@ export const SourceControl: React.FC = () => {
 
     setIsCommitting(true);
     try {
-      console.log(`Git: Committing staged files with message: "${commitMsg}"`);
-      await invoke("git_commit", { rootDir: rootPath, message: commitMsg });
+      await gitPresenter.commit(activeRepo, commitMsg);
       setCommitMsg("");
-      await loadGitStatus();
-      await fetchHistory();
-    } catch (err: any) {
-      console.error("Failed to commit git changes:", err);
-      notify("Commit failed", `Commit failed: ${err}`, "error");
+      await loadRepoData();
+    } catch (err) {
+      console.error(err);
     } finally {
       setIsCommitting(false);
     }
   };
 
-  // Pull changes from remote upstream
   const handlePull = async () => {
-    if (!rootPath || isPulling) return;
+    if (!activeRepo || isPulling) return;
     setIsPulling(true);
     try {
-      console.log("Git: Pulling remote modifications...");
-      await invoke("git_pull", { rootDir: rootPath });
-      await loadGitStatus();
-      await fetchHistory();
-      // Reload file structure as files might have changed on disk
-      const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
-      useWorkspaceStore.getState().setFileTree(tree);
-      notify("Pull complete", "Successfully pulled changes from remote.", "success");
-    } catch (err: any) {
-      console.error("Pull failed:", err);
-      notify("Pull failed", `Pull failed: ${err}`, "error");
+      await gitPresenter.pull(activeRepo);
+      await loadRepoData();
+    } catch (err) {
+      console.error(err);
     } finally {
       setIsPulling(false);
     }
   };
 
-  // Push changes to remote upstream
   const handlePush = async () => {
-    if (!rootPath || !gitStatus || isPushing) return;
+    if (!activeRepo || !gitStatus || isPushing) return;
     setIsPushing(true);
     try {
-      console.log(`Git: Pushing branch "${gitStatus.currentBranch}"...`);
-      await invoke("git_push", { rootDir: rootPath, branchName: gitStatus.currentBranch });
-      await loadGitStatus();
-      await fetchHistory();
-      notify("Push complete", "Successfully pushed changes to remote.", "success");
-    } catch (err: any) {
-      console.error("Push failed:", err);
-      notify("Push failed", `Push failed: ${err}`, "error");
+      await gitPresenter.push(activeRepo, gitStatus.currentBranch);
+      await loadRepoData();
+    } catch (err) {
+      console.error(err);
     } finally {
       setIsPushing(false);
     }
   };
 
-  // Stage individual file
   const handleStageFile = async (e: React.MouseEvent, filePath: string) => {
-    e.stopPropagation(); // Avoid opening the diff tab on button click
+    e.stopPropagation();
     try {
-      await invoke("git_stage_file", { rootDir: rootPath, filePath });
-      await loadGitStatus();
-      await fetchHistory();
+      await gitPresenter.stageFile(activeRepo, filePath);
+      await loadRepoData();
     } catch (err) {
-      console.error(`Failed to stage file ${filePath}:`, err);
+      console.error(err);
     }
   };
 
-  // Unstage individual file
   const handleUnstageFile = async (e: React.MouseEvent, filePath: string) => {
-    e.stopPropagation(); // Avoid opening the diff tab on button click
+    e.stopPropagation();
     try {
-      await invoke("git_unstage_file", { rootDir: rootPath, filePath });
-      await loadGitStatus();
-      await fetchHistory();
+      await gitPresenter.unstageFile(activeRepo, filePath);
+      await loadRepoData();
     } catch (err) {
-      console.error(`Failed to unstage file ${filePath}:`, err);
+      console.error(err);
     }
   };
 
-  // Discard file changes
   const handleDiscardChanges = async (e: React.MouseEvent, filePath: string, fileName: string) => {
-    e.stopPropagation(); // Avoid opening the diff tab on button click
+    e.stopPropagation();
     try {
-      const confirmDiscard = await confirm({
-        title: "Discard Changes",
-        message: `Are you sure you want to discard all unstaged changes in "${fileName}"? This cannot be undone.`,
-        kind: "warning",
+      await gitPresenter.discardChanges(activeRepo, filePath, fileName, async (title, msg) => {
+        return await confirm({
+          title,
+          message: msg,
+          kind: "warning"
+        });
       });
-      if (!confirmDiscard) return;
-
-      await invoke("git_discard_changes", { rootDir: rootPath, filePath });
-      await loadGitStatus();
-      await fetchHistory();
-      // Reload workspace directory tree structure
-      const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
-      useWorkspaceStore.getState().setFileTree(tree);
+      await loadRepoData();
     } catch (err) {
-      console.error(`Failed to discard changes for ${filePath}:`, err);
+      console.error(err);
     }
   };
 
-  // Discard all changes in the working tree
   const handleDiscardAllChanges = async () => {
     try {
-      const confirmDiscard = await confirm({
-        title: "Discard All Changes",
-        message: "Are you sure you want to discard ALL unstaged modifications and untracked files? This action CANNOT BE UNDONE.",
-        kind: "danger",
+      await gitPresenter.discardAllChanges(activeRepo, async (title, msg) => {
+        return await confirm({
+          title,
+          message: msg,
+          kind: "danger"
+        });
       });
-      if (!confirmDiscard) return;
-
-      console.log(`Git: Discarding all unstaged changes in ${rootPath}`);
-      await invoke("git_discard_all_changes", { rootDir: rootPath });
-      await loadGitStatus();
-      await fetchHistory();
-      // Reload workspace directory tree structure
-      const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
-      useWorkspaceStore.getState().setFileTree(tree);
-      notify("Discard complete", "All unstaged changes have been discarded.", "success");
-    } catch (err: any) {
-      console.error("Failed to discard all changes:", err);
-      notify("Discard failed", `Discard failed: ${err}`, "error");
+      await loadRepoData();
+    } catch (err) {
+      console.error(err);
     }
   };
 
-  // Handles checking out another branch. Accepts a local name ("feature") or a
-  // remote-tracking ref ("origin/feature"). The backend wires up origin tracking
-  // for remote refs so push/pull work on the resulting local branch.
-  const handleSwitchBranch = async (branchName: string) => {
-    if (!rootPath) return;
+  const handleCheckoutBranch = async (branchName: string) => {
     try {
-      console.log(`Git: Switching branch to "${branchName}"`);
-      await invoke("git_checkout_branch", { rootDir: rootPath, branchName });
-      await loadGitStatus();
-      await fetchBranches();
-      await fetchHistory();
-      // Reload workspace directory tree structure
-      const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
-      useWorkspaceStore.getState().setFileTree(tree);
-      const localName = branchName.startsWith("origin/") ? branchName.substring("origin/".length) : branchName;
-      notify("Branch switched", `Switched to branch: ${localName}`, "success");
-    } catch (err: any) {
-      console.error("Failed to switch branch:", err);
-      notify("Switch failed", `Failed to switch branch: ${err}`, "error");
+      await gitPresenter.switchBranch(activeRepo, branchName);
+      await loadRepoData();
+      setShowBranchPopover(false);
+    } catch (err) {
+      console.error(err);
     }
   };
 
-  const handleCreateBranch = async (branchName: string, checkout: boolean) => {
-    if (!rootPath) return;
+  const handleCreateBranch = async (branchName: string) => {
     try {
-      await invoke("git_create_branch", { rootDir: rootPath, branchName, checkout });
-      await fetchBranches();
-      if (checkout) {
-        await loadGitStatus();
-        await fetchHistory();
-        const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
-        useWorkspaceStore.getState().setFileTree(tree);
-      }
-      setBranchDialog(null);
-    } catch (err: any) {
-      notify("Error", `Failed to create branch: ${err}`, "error");
+      await gitPresenter.createBranch(activeRepo, branchName, true);
+      await loadRepoData();
+      setShowBranchPopover(false);
+    } catch (err) {
+      console.error(err);
     }
   };
 
-  // Delete a local branch (force via -D when `force` is true) or, when an
-  // origin/... branch is selected, push-delete it from the remote.
   const handleDeleteBranch = async (branchName: string, force: boolean) => {
-    if (!rootPath) return;
     try {
-      if (branchName.startsWith("origin/")) {
-        await invoke("git_delete_remote_branch", { rootDir: rootPath, branchName });
-      } else {
-        await invoke("git_delete_branch", { rootDir: rootPath, branchName, force });
-      }
-      await fetchBranches();
-      await loadGitStatus();
-      await fetchHistory();
-      setBranchDialog(null);
-      notify("Branch deleted", `Deleted branch: ${branchName}`, "success");
-    } catch (err: any) {
-      console.error("Failed to delete branch:", err);
-      notify("Delete failed", `Failed to delete branch: ${err}`, "error");
+      await gitPresenter.deleteBranch(activeRepo, branchName, force);
+      await loadRepoData();
+    } catch (err) {
+      console.error(err);
     }
   };
 
   const handleMergeBranch = async (branchName: string) => {
-    if (!rootPath) return;
     try {
-      const result = await invoke("git_merge_branch", { rootDir: rootPath, branchName });
-      await loadGitStatus();
-      await fetchBranches();
-      await fetchHistory();
-      const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
-      useWorkspaceStore.getState().setFileTree(tree);
-      setBranchDialog(null);
-      notify("Merge complete", String(result) || `Merged ${branchName} into current branch.`, "success");
-    } catch (err: any) {
-      // Check if it's a merge conflict
-      const errMsg = String(err);
-      if (errMsg.includes("conflict") || errMsg.includes("CONFLICT")) {
-        notify("Merge conflicts", `Merge conflicts detected. Resolve them and commit, or run "Abort merge" from the branch menu.`, "danger");
-      } else {
-        notify("Merge failed", `Merge failed: ${err}`, "error");
-      }
-      setBranchDialog(null);
+      await gitPresenter.mergeBranch(activeRepo, branchName);
+      await loadRepoData();
+      setShowBranchPopover(false);
+    } catch (err) {
+      console.error(err);
     }
   };
 
   const handleRebaseBranch = async (branchName: string) => {
-    if (!rootPath) return;
     try {
-      const result = await invoke("git_rebase_branch", { rootDir: rootPath, branchName });
-      await loadGitStatus();
-      await fetchBranches();
-      await fetchHistory();
-      const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
-      useWorkspaceStore.getState().setFileTree(tree);
-      setBranchDialog(null);
-      notify("Rebase complete", String(result) || `Rebased current branch onto ${branchName}.`, "success");
-    } catch (err: any) {
-      const errMsg = String(err);
-      if (errMsg.includes("conflict") || errMsg.includes("CONFLICT")) {
-        notify("Rebase conflicts", `Rebase conflicts detected. Resolve them and continue, or run "Abort rebase" from the branch menu.`, "danger");
-      } else {
-        notify("Rebase failed", `Rebase failed: ${err}`, "error");
-      }
-      setBranchDialog(null);
+      await gitPresenter.rebaseBranch(activeRepo, branchName);
+      await loadRepoData();
+      setShowBranchPopover(false);
+    } catch (err) {
+      console.error(err);
     }
   };
 
   const handleAbortPending = async () => {
-    if (!rootPath) return;
     try {
-      // Try both abort types
-      try {
-        await invoke("git_abort_pending", { rootDir: rootPath, operation: "rebase" });
-      } catch {
-        await invoke("git_abort_pending", { rootDir: rootPath, operation: "merge" });
-      }
-      await loadGitStatus();
-      await fetchHistory();
-      const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
-      useWorkspaceStore.getState().setFileTree(tree);
-      notify("Aborted", "Aborted pending operation.", "success");
-    } catch (err: any) {
-      notify("Abort failed", `Abort failed: ${err}`, "error");
+      await gitPresenter.abortPending(activeRepo);
+      await loadRepoData();
+    } catch (err) {
+      console.error(err);
     }
   };
 
   const handleUndoRename = async () => {
-    if (!rootPath || !lastRename) return;
+    if (!lastRename) return;
     try {
-      await invoke("git_undo_last_rename", {
-        rootDir: rootPath,
-        originalPath: lastRename.originalPath,
-        newPath: lastRename.newPath,
-      });
-      await loadGitStatus();
-      const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
-      useWorkspaceStore.getState().setFileTree(tree);
+      await gitPresenter.undoLastRename(activeRepo, lastRename.originalPath, lastRename.newPath);
       setLastRename(null);
-      notify("Undo complete", "Move/rename has been undone.", "success");
-    } catch (err: any) {
-      notify("Undo failed", `Undo failed: ${err}`, "error");
+      await loadRepoData();
+    } catch (err) {
+      console.error(err);
     }
   };
 
-  // Helper to open side-by-side Monaco diff panel in the workspace tabs
   const handleOpenFileDiff = (filePath: string, fileName: string, diffType: "staged" | "unstaged") => {
     const titleSuffix = diffType === "staged" ? "Index" : "Workspace";
     openTab({
@@ -414,7 +314,6 @@ export const SourceControl: React.FC = () => {
     });
   };
 
-  // Get modification status visual indicators
   const getStatusIndicator = (statusType: string) => {
     switch (statusType) {
       case "added":
@@ -431,7 +330,6 @@ export const SourceControl: React.FC = () => {
     }
   };
 
-  // Build a merged unstaged list that collapses rename/move pairs (deleted + untracked) into a single "renamed" entry
   const buildUnstagedList = () => {
     if (!gitStatus) return [];
     if (!lastRename) return gitStatus.unstaged;
@@ -440,12 +338,8 @@ export const SourceControl: React.FC = () => {
     const hasDeleted = gitStatus.unstaged.some(f => f.path === originalPath);
     const hasUntracked = gitStatus.unstaged.some(f => f.path === newPath);
 
-    // Only collapse if BOTH entries exist in the unstaged list
-    if (!hasDeleted || !hasUntracked) {
-      return gitStatus.unstaged;
-    }
+    if (!hasDeleted || !hasUntracked) return gitStatus.unstaged;
 
-    // Filter out both the old (deleted) and new (untracked) paths, add synthetic "renamed" entry
     const filtered = gitStatus.unstaged.filter(
       (f) => f.path !== originalPath && f.path !== newPath
     );
@@ -454,27 +348,37 @@ export const SourceControl: React.FC = () => {
       {
         path: newPath,
         name: `${originalPath.split("/").pop()} → ${newPath.split("/").pop()}`,
-        status_type: "renamed",
+        status_type: "renamed" as const,
       },
     ];
   };
 
   const unstagedList = buildUnstagedList();
-
-  // Clear stale lastRename when neither path appears in git status anymore
-  useEffect(() => {
-    if (!lastRename || !gitStatus) return;
-    const { originalPath, newPath } = lastRename;
-    const stillExists = gitStatus.unstaged.some(f => f.path === originalPath || f.path === newPath)
-      || gitStatus.staged.some(f => f.path === originalPath || f.path === newPath);
-    if (!stillExists) {
-      setLastRename(null);
-    }
-  }, [gitStatus, lastRename, setLastRename]);
   const totalChanges = (gitStatus?.staged.length || 0) + unstagedList.length;
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-[var(--bg-sidebar)] font-sans text-xs select-none">
+    <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-[var(--bg-sidebar)] font-sans text-xs select-none relative">
+      {/* Subproject Selector (Only if nested repositories are present) */}
+      {subprojects.length > 1 && (
+        <div className="px-4 py-2 border-b border-[var(--border-color)]/60 bg-black/10 flex items-center justify-between flex-shrink-0">
+          <span className="text-[9px] font-mono text-[var(--text-muted)] uppercase font-semibold">Repository:</span>
+          <select
+            value={activeRepo}
+            onChange={(e) => setActiveRepo(e.target.value)}
+            className="bg-[var(--bg-app)] border border-[var(--border-color)] text-[var(--text-normal)] rounded px-2 py-0.5 max-w-[170px] truncate text-[10px] font-mono focus:outline-none focus:border-[var(--accent-color)]"
+          >
+            {subprojects.map((repo) => {
+              const name = repo === rootPath ? "[Workspace Root]" : repo.replace(`${rootPath}/`, "");
+              return (
+                <option key={repo} value={repo}>
+                  {name}
+                </option>
+              );
+            })}
+          </select>
+        </div>
+      )}
+
       {/* Header Info */}
       <div className="px-4 py-3 border-b border-[var(--border-color)] flex items-center justify-between flex-shrink-0 bg-black/5">
         <div className="flex items-center space-x-2">
@@ -488,41 +392,9 @@ export const SourceControl: React.FC = () => {
             <GitCommit size={13} className="text-[var(--accent-color)]" />
           </button>
         </div>
+
         {gitStatus && (
-          <div className="flex items-center space-x-1.5">
-            {/* Branch management buttons */}
-            <button
-              type="button"
-              onClick={() => setBranchDialog("create")}
-              className="p-1 rounded hover:bg-[var(--border-color)]/60 text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer"
-              title="Create Branch"
-            >
-              <Plus size={12} />
-            </button>
-            <button
-              type="button"
-              onClick={() => setBranchDialog("merge")}
-              className="p-1 rounded hover:bg-[var(--border-color)]/60 text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer"
-              title="Merge Branch"
-            >
-              <GitMerge size={12} />
-            </button>
-            <button
-              type="button"
-              onClick={() => setBranchDialog("rebase")}
-              className="p-1 rounded hover:bg-[var(--border-color)]/60 text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer"
-              title="Rebase"
-            >
-              <GitPullRequest size={12} />
-            </button>
-            <button
-              type="button"
-              onClick={() => setBranchDialog("delete")}
-              className="p-1 rounded hover:bg-rose-500/10 text-[var(--text-muted)] hover:text-rose-400 transition-colors cursor-pointer"
-              title="Delete Branch"
-            >
-              <Trash2 size={12} />
-            </button>
+          <div className="flex items-center space-x-1.5 relative">
             <button
               type="button"
               onClick={handleAbortPending}
@@ -531,20 +403,29 @@ export const SourceControl: React.FC = () => {
             >
               <RotateCcw size={12} />
             </button>
-            <div className="flex items-center space-x-1 bg-[var(--accent-bg)]/35 text-[var(--accent-color)] px-2 py-0.5 rounded font-mono text-[10px] border border-[var(--accent-color)]/25 relative hover:border-[var(--accent-color)]/50 transition-all cursor-pointer min-w-[100px]">
+            <button
+              onClick={() => setShowBranchPopover(!showBranchPopover)}
+              className="flex items-center space-x-1 bg-[var(--accent-bg)]/35 text-[var(--accent-color)] px-2 py-1 rounded font-mono text-[10px] border border-[var(--accent-color)]/25 hover:border-[var(--accent-color)]/50 transition-all cursor-pointer font-bold"
+            >
               <GitBranch size={10} className="flex-shrink-0 mr-1" />
-              <CustomSelect
-                value={gitStatus.currentBranch}
-                onChange={handleSwitchBranch}
-                groups={[
-                  { label: "Local", options: localBranches.map((b) => ({ id: b, name: b })) },
-                  { label: "Origin", options: remoteBranches.map((b) => ({ id: b, name: b })) },
-                ]}
-                buttonClassName="bg-transparent border-none text-[var(--accent-color)] font-mono text-[10px] focus:outline-none cursor-pointer outline-none font-bold p-0 flex items-center justify-between w-full"
-                dropdownClassName="min-w-[280px] w-max max-w-[min(90vw,560px)]"
-                className="flex-1"
+              <span className="truncate max-w-[80px]">{gitStatus.currentBranch}</span>
+              <ChevronDown size={10} className="flex-shrink-0 opacity-60 ml-0.5" />
+            </button>
+
+            {/* IntelliJ Branch Manager Popover */}
+            {showBranchPopover && (
+              <GitBranchManager
+                currentBranch={gitStatus.currentBranch}
+                localBranches={localBranches}
+                remoteBranches={remoteBranches}
+                onCheckout={handleCheckoutBranch}
+                onCreateBranch={handleCreateBranch}
+                onDeleteBranch={handleDeleteBranch}
+                onMergeBranch={handleMergeBranch}
+                onRebaseBranch={handleRebaseBranch}
+                onClose={() => setShowBranchPopover(false)}
               />
-            </div>
+            )}
           </div>
         )}
       </div>
@@ -615,8 +496,7 @@ export const SourceControl: React.FC = () => {
             <div className="space-y-0.5">
               {gitStatus.staged.map((file) => {
                 const indicator = getStatusIndicator(file.status_type);
-                // Extract parent directory for display
-                const relativeDir = file.path.substring(rootPath.length + 1, file.path.length - file.name.length - 1);
+                const relativeDir = file.path.substring(activeRepo.length + 1, file.path.length - file.name.length - 1);
                 
                 return (
                   <div
@@ -636,7 +516,6 @@ export const SourceControl: React.FC = () => {
                     </div>
 
                     <div className="flex items-center space-x-2.5">
-                      {/* Unstage Hover Button */}
                       <button
                         onClick={(e) => handleUnstageFile(e, file.path)}
                         className="opacity-0 group-hover:opacity-100 p-1 text-[var(--text-muted)] hover:text-rose-400 hover:bg-black/20 rounded transition-all cursor-pointer"
@@ -681,7 +560,7 @@ export const SourceControl: React.FC = () => {
                 const isRenamed = file.status_type === "renamed";
                 const relativeDir = isRenamed
                   ? ""
-                  : file.path.substring(rootPath.length + 1, file.path.length - file.name.length - 1);
+                  : file.path.substring(activeRepo.length + 1, file.path.length - file.name.length - 1);
 
                 return (
                   <div
@@ -701,7 +580,6 @@ export const SourceControl: React.FC = () => {
                     </div>
 
                     <div className="flex items-center space-x-1.5">
-                      {/* Rollback Rename Button */}
                       {isRenamed && (
                         <button
                           onClick={(e) => { e.stopPropagation(); handleUndoRename(); }}
@@ -712,7 +590,6 @@ export const SourceControl: React.FC = () => {
                         </button>
                       )}
 
-                      {/* Discard Hover Button */}
                       {!isRenamed && file.status_type !== "untracked" && (
                         <button
                           onClick={(e) => handleDiscardChanges(e, file.path, file.name)}
@@ -723,7 +600,6 @@ export const SourceControl: React.FC = () => {
                         </button>
                       )}
                       
-                      {/* Stage Hover Button */}
                       {!isRenamed && (
                         <button
                           onClick={(e) => handleStageFile(e, file.path)}
@@ -754,7 +630,7 @@ export const SourceControl: React.FC = () => {
         )}
       </div>
 
-      {/* 4. Collapsible Git History Section - Pinned to bottom, expands upward */}
+      {/* 4. Collapsible Git History Section */}
       {gitStatus && (
         <div className="flex-shrink-0 border-t border-[var(--border-color)]/40">
           <div
@@ -822,24 +698,6 @@ export const SourceControl: React.FC = () => {
         </div>
       )}
 
-      {/* Branch Dialog */}
-      {branchDialog && gitStatus && (
-        <BranchDialog
-          mode={branchDialog}
-          currentBranch={gitStatus.currentBranch}
-          localBranches={localBranches}
-          remoteBranches={remoteBranches}
-          onConfirm={(name, extra) => {
-            if (branchDialog === "create") handleCreateBranch(name, extra || false);
-            else if (branchDialog === "merge") handleMergeBranch(name);
-            else if (branchDialog === "rebase") handleRebaseBranch(name);
-            else if (branchDialog === "delete") handleDeleteBranch(name, extra || false);
-          }}
-          onCancel={() => setBranchDialog(null)}
-        />
-      )}
-
-      {/* Confirmation Modal */}
       {ConfirmModalComponent}
     </div>
   );

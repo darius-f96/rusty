@@ -34,7 +34,7 @@ export const canvasFileService = {
     let vfsContents: Record<string, string> = {};
     let vfsTracker: Record<string, string[]> = {};
     try {
-      vfsContents = await vfsService.exportVfsContents();
+      vfsContents = await vfsService.exportVfsContents(tabId);
     } catch (err) {
       console.warn("[canvasFileService] Could not export VFS contents:", err);
     }
@@ -43,7 +43,7 @@ export const canvasFileService = {
     } catch (err) {
       console.warn("[canvasFileService] Could not export VFS tracker:", err);
     }
-
+ 
     const payload = {
       id: tabId,
       title,
@@ -57,31 +57,32 @@ export const canvasFileService = {
       vfsContents,
       vfsTracker
     };
-
+ 
     const fileName = canvasFileService.sanitizeFileName(title);
     const filePath = canvasFileService.getCanvasFilePath(rootPath, fileName);
-
+ 
     await invoke("write_file_disk", {
       path: filePath,
       content: JSON.stringify(payload, null, 2)
     });
-
+ 
     // Refresh file structure in workspace
     const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
     useWorkspaceStore.getState().setFileTree(tree);
-
+ 
     return filePath;
   },
-
+ 
   loadCanvasFromFile: async (filePath: string): Promise<any> => {
     const rawContent: string = await invoke("read_file_disk", { path: filePath });
     const parsed = JSON.parse(rawContent);
     return parsed;
   },
-
+ 
   restoreCanvasVfs: async (
     vfsContents: Record<string, string>,
-    vfsTracker: Record<string, string[]>
+    vfsTracker: Record<string, string[]>,
+    tabId: string
   ): Promise<void> => {
     const hasContents = vfsContents && Object.keys(vfsContents).length > 0;
     const hasTracker = vfsTracker && Object.keys(vfsTracker).length > 0;
@@ -91,8 +92,8 @@ export const canvasFileService = {
     }
     try {
       if (hasContents) {
-        await vfsService.importVfsContents(vfsContents);
-        console.log(`[canvasFileService] Restored ${Object.keys(vfsContents).length} VFS files`);
+        await vfsService.importVfsContents(vfsContents, tabId);
+        console.log(`[canvasFileService] Restored ${Object.keys(vfsContents).length} VFS files for tab: ${tabId}`);
       }
       if (hasTracker) {
         await vfsService.importVfsTracker(vfsTracker);

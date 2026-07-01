@@ -7,10 +7,10 @@ export interface NodeFilesResponse {
 
 export interface VfsService {
   setCurrentExecutingNode(nodeId: string | null): Promise<void>;
-  deleteNodeVfsFiles(nodeId: string): Promise<void>;
+  deleteNodeVfsFiles(nodeId: string, tabId?: string): Promise<void>;
   getAllNodeVfsFiles(): Promise<NodeFilesResponse[]>;
-  exportVfsContents(): Promise<Record<string, string>>;
-  importVfsContents(files: Record<string, string>): Promise<void>;
+  exportVfsContents(tabId?: string): Promise<Record<string, string>>;
+  importVfsContents(files: Record<string, string>, tabId?: string): Promise<void>;
   exportVfsTracker(): Promise<Record<string, string[]>>;
   importVfsTracker(tracker: Record<string, string[]>): Promise<void>;
 }
@@ -25,10 +25,10 @@ export const vfsService: VfsService = {
     }
   },
 
-  async deleteNodeVfsFiles(nodeId: string): Promise<void> {
+  async deleteNodeVfsFiles(nodeId: string, tabId?: string): Promise<void> {
     try {
-      await invoke("delete_node_vfs_files", { nodeId });
-      console.log(`[vfsService] Deleted all VFS files for node: ${nodeId}`);
+      await invoke("delete_node_vfs_files", { nodeId, tabId: tabId || null });
+      console.log(`[vfsService] Deleted all VFS files for node: ${nodeId} in tab: ${tabId}`);
     } catch (err) {
       console.error(`[vfsService] delete_node_vfs_files failed:`, err);
       throw err;
@@ -46,10 +46,10 @@ export const vfsService: VfsService = {
     }
   },
 
-  async exportVfsContents(): Promise<Record<string, string>> {
+  async exportVfsContents(tabId?: string): Promise<Record<string, string>> {
     try {
-      const result = await invoke<Record<string, string>>("export_vfs_contents");
-      console.log(`[vfsService] export_vfs_contents returned ${Object.keys(result).length} files`);
+      const result = await invoke<Record<string, string>>("export_vfs_contents", { tabId: tabId || null });
+      console.log(`[vfsService] export_vfs_contents returned ${Object.keys(result).length} files for tab: ${tabId}`);
       return result;
     } catch (err) {
       console.error(`[vfsService] export_vfs_contents failed:`, err);
@@ -57,10 +57,10 @@ export const vfsService: VfsService = {
     }
   },
 
-  async importVfsContents(files: Record<string, string>): Promise<void> {
+  async importVfsContents(files: Record<string, string>, tabId?: string): Promise<void> {
     try {
-      await invoke("import_vfs_contents", { files });
-      console.log(`[vfsService] import_vfs_contents imported ${Object.keys(files).length} files`);
+      await invoke("import_vfs_contents", { files, tabId: tabId || null });
+      console.log(`[vfsService] import_vfs_contents imported ${Object.keys(files).length} files for tab: ${tabId}`);
     } catch (err) {
       console.error(`[vfsService] import_vfs_contents failed:`, err);
       throw err;

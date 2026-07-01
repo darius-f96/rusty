@@ -29,6 +29,23 @@ function App() {
   const [sidebarView, setSidebarView] = useState<"explorer" | "git">("explorer");
   const [lastSidebarWidth, setLastSidebarWidth] = useState(320);
 
+  useEffect(() => {
+    const handleReveal = () => {
+      setSidebarView("explorer");
+      setIsSidebarExplorerOpen(true);
+      if (sidebarWidthRef.current <= 56) {
+        const targetWidth = lastSidebarWidth > 56 ? lastSidebarWidth : 320;
+        setSidebarWidth(targetWidth);
+        sidebarWidthRef.current = targetWidth;
+        if (sidebarElementRef.current) {
+          sidebarElementRef.current.style.width = `${targetWidth}px`;
+        }
+      }
+    };
+    window.addEventListener("reveal-file-in-tree", handleReveal);
+    return () => window.removeEventListener("reveal-file-in-tree", handleReveal);
+  }, [lastSidebarWidth]);
+
   const toggleExplorer = useCallback(() => {
     if (!isSidebarExplorerOpen) {
       setSidebarView("explorer");

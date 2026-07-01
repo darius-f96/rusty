@@ -3,7 +3,7 @@ import { useWorkspaceStore } from "../store";
 import { invoke } from "@tauri-apps/api/core";
 import { vfsService } from "../services/vfsService";
 import { TabBar } from "./TabBar";
-import { CanvasTab } from "./tabs/canvas/CanvasTab";
+import { AxiomTab } from "./tabs/canvas/AxiomTab";
 import { FileTab } from "./tabs/FileTab";
 import { TaskTab } from "./tabs/TaskTab";
 import { GitDiffTab } from "./tabs/GitDiffTab";
@@ -168,6 +168,7 @@ export const Workspace: React.FC = () => {
         if (!server) return null;
         return {
           server,
+          nodeId: n.id,
           description: (n.data.description as string) || "",
           nodeName: (n.data.name as string) || "MCP Context",
         };
@@ -219,6 +220,12 @@ export const Workspace: React.FC = () => {
 
     clearLogs(nodeId);
     setNodeStatus(nodeId, "running");
+    
+    // Set connected MCP nodes status to running
+    mcpContext.forEach((ctx) => {
+      setNodeStatus(ctx.nodeId, "running");
+    });
+
     addLog(nodeId, `Connecting to local agent sidecar...`);
     addLog(
       nodeId,
@@ -320,6 +327,14 @@ export const Workspace: React.FC = () => {
       try {
         const data = JSON.parse(event.data);
         console.log("WebSocket received message:", data);
+
+        if (data.type === "node_status_change") {
+          setNodeStatus(data.targetNodeId, data.status);
+          if (data.status === "error" && data.message) {
+            addLog(nodeId, `MCP error [${data.nodeName || "Node"}]: ${data.message}`);
+          }
+          return;
+        }
 
         if (data.type === "log" && data.nodeId === nodeId) {
           addLog(nodeId, data.message);
@@ -461,7 +476,7 @@ export const Workspace: React.FC = () => {
           className={`${isActive ? "w-full h-full" : "absolute -left-[99999px] top-0 w-full h-full"} ${bgClass} overflow-hidden`}
         >
           {tab.type === "canvas" && (
-            <CanvasTab tab={tab} onExecuteNode={executeNode} onStopExecution={stopExecution} />
+            <AxiomTab tab={tab} onExecuteNode={executeNode} onStopExecution={stopExecution} />
           )}
           {tab.type === "file" && (
             <FileTab tab={tab} groupId={groupId} />

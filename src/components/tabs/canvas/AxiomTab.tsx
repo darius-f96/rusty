@@ -30,6 +30,7 @@ import { BoundaryNode } from "../../nodes/boundary";
 import { invoke } from "@tauri-apps/api/core";
 import { CanvasTabContext } from "./CanvasTabContext";
 import { canvasFileService } from "./services/canvasFileService";
+import { getNodeConfig } from "../../nodes/AxiomNodeConfig";
 
 const nodeTypes = {
   contextNode: ContextNode,
@@ -44,13 +45,13 @@ const edgeTypes = {
   reconciliationEdge: ReconciliationEdge,
 };
 
-interface CanvasTabProps {
+interface AxiomTabProps {
   tab: { id: string; title: string };
   onExecuteNode: (nodeId: string) => void;
   onStopExecution: (nodeId: string) => void;
 }
 
-export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode, onStopExecution }) => {
+export const AxiomTab: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopExecution }) => {
   const rootPath = useWorkspaceStore((state) => state.rootPath);
   
   // Resolve tab-specific context from the store
@@ -551,7 +552,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode, onStop
                     className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
                   >
                     <Save size={13} className="text-emerald-400" />
-                    <span>Save Pipeline</span>
+                    <span>Save Axiom</span>
                   </button>
                   <div className="border-t border-[var(--border-color)] my-1" />
                   <button
@@ -571,12 +572,12 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode, onStop
                     {isPipelineApplied ? (
                       <>
                         <CheckSquare size={13} className="text-emerald-400" />
-                        <span>Pipeline Applied</span>
+                        <span>Axiom Applied</span>
                       </>
                     ) : (
                       <>
                         <CheckSquare size={13} className="text-[var(--accent-color)]" />
-                        <span>Apply Pipeline</span>
+                        <span>Apply Axiom</span>
                       </>
                     )}
                   </button>
@@ -704,14 +705,19 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode, onStop
         </div>
 
         {/* Sliding Drawer Inspector Pane */}
-        {selectedNodeId && (
-          <SidePane
-            onClose={() => setSelectedNodeId(null)}
-            onExecuteNode={onExecuteNode}
-            onStopExecution={onStopExecution}
-            tabId={tab.id}
-          />
-        )}
+        {(() => {
+          const selectedNode = flowNodes.find((n) => n.id === selectedNodeId);
+          const showSidePane = selectedNodeId && selectedNode && getNodeConfig(selectedNode.type || "").hasSidepane;
+          if (!showSidePane) return null;
+          return (
+            <SidePane
+              onClose={() => setSelectedNodeId(null)}
+              onExecuteNode={onExecuteNode}
+              onStopExecution={onStopExecution}
+              tabId={tab.id}
+            />
+          );
+        })()}
 
         {/* Edge Inspector Pane */}
         {selectedEdgeId && !selectedNodeId && (
@@ -720,14 +726,14 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode, onStop
           />
         )}
 
-        {/* Save Pipeline Prompt Modal */}
+        {/* Save Axiom Prompt Modal */}
         {showSaveModal && (
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-xl w-full max-w-md shadow-2xl overflow-hidden font-mono">
               <div className="px-4 py-3 bg-[var(--bg-header)] border-b border-[var(--border-color)] flex items-center justify-between">
                 <span className="text-[var(--text-light)] text-sm font-bold flex items-center space-x-2">
                   <Save size={16} className="text-emerald-400" />
-                  <span>Save Pipeline Canvas</span>
+                  <span>Save Axiom Canvas</span>
                 </span>
                 <button
                   onClick={() => setShowSaveModal(false)}
@@ -738,16 +744,16 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode, onStop
               </div>
               <div className="p-4 flex flex-col space-y-3">
                 <p className="text-xs text-[var(--text-normal)]">
-                  Enter a filename/title for this pipeline. It will be serialized under <code className="text-emerald-400 font-bold">.axiom/canvas/</code>.
+                  Enter a filename/title for this Axiom. It will be serialized under <code className="text-emerald-400 font-bold">.axiom/canvas/</code>.
                 </p>
                 <div className="flex flex-col space-y-1">
-                  <label htmlFor="pipeline-title-input" className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Pipeline Title</label>
+                  <label htmlFor="axiom-title-input" className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Axiom Title</label>
                   <input
-                    id="pipeline-title-input"
+                    id="axiom-title-input"
                     type="text"
                     value={saveTitle}
                     onChange={(e) => setSaveTitle(e.target.value)}
-                    placeholder="e.g. build_and_test_pipeline"
+                    placeholder="e.g. build_and_test_axiom"
                     className="w-full bg-[var(--bg-canvas)] border border-[var(--border-color)] focus:border-[var(--accent-color)] text-[var(--text-light)] rounded-lg px-3 py-2 text-sm outline-none transition-colors"
                   />
                 </div>
@@ -763,7 +769,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ tab, onExecuteNode, onStop
                   onClick={confirmSavePipeline}
                   className="px-4 py-1.5 bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/90 text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors shadow-md hover:shadow-lg"
                 >
-                  Save Canvas
+                  Save Axiom
                 </button>
               </div>
             </div>

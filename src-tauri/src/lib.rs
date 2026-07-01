@@ -17,21 +17,37 @@ pub struct FileEntry {
     children: Option<Vec<FileEntry>>,
 }
 
-pub struct VfsState(pub Arc<Mutex<HashMap<String, String>>>);
+pub struct VfsState(pub Arc<Mutex<HashMap<String, HashMap<String, String>>>>);
 pub struct NodeFileTracker(pub Arc<Mutex<HashMap<String, Vec<String>>>>);
 pub struct CurrentExecutingNode(pub Arc<Mutex<Option<String>>>);
 
 pub struct SidecarState(pub Arc<Mutex<Option<CommandChild>>>);
 
+fn get_tab_id(tab_id: Option<String>) -> String {
+    let t = tab_id.unwrap_or_default();
+    if t.is_empty() {
+        "global".to_string()
+    } else {
+        t
+    }
+}
+
 #[tauri::command]
-async fn read_file_vfs(state: tauri::State<'_, VfsState>, path: String) -> Result<String, String> {
-    println!("Rust [read_file_vfs] called for path: {}", path);
+async fn read_file_vfs(
+    state: tauri::State<'_, VfsState>,
+    path: String,
+    tab_id: Option<String>,
+) -> Result<String, String> {
+    let tid = get_tab_id(tab_id);
+    println!("Rust [read_file_vfs] called for path: {}, tab_id: {}", path, tid);
     let vfs = state.0.lock().map_err(|e| e.to_string())?;
 
     // Check VFS first
-    if let Some(content) = vfs.get(&path) {
-        println!("Rust [read_file_vfs] cache hit in VFS memory");
-        return Ok(content.clone());
+    if let Some(tab_map) = vfs.get(&tid) {
+        if let Some(content) = tab_map.get(&path) {
+            println!("Rust [read_file_vfs] cache hit in VFS memory for tab: {}", tid);
+            return Ok(content.clone());
+        }
     }
 
     // Fall back to physical disk
@@ -52,15 +68,19 @@ async fn write_file_vfs(
     path: String,
     content: String,
     node_id: Option<String>,
+    tab_id: Option<String>,
 ) -> Result<(), String> {
+    let tid = get_tab_id(tab_id);
     println!(
-        "Rust [write_file_vfs] writing path: {} (content size: {} chars), node_id: {:?}",
+        "Rust [write_file_vfs] writing path: {} (content size: {} chars), node_id: {:?}, tab_id: {}",
         path,
         content.len(),
-        node_id
+        node_id,
+        tid
     );
     let mut vfs = state.0.lock().map_err(|e| e.to_string())?;
-    vfs.insert(path.clone(), content);
+    let tab_map = vfs.entry(tid.clone()).or_insert_with(HashMap::new);
+    tab_map.insert(path.clone(), content);
 
     if let Some(nid) = node_id.or_else(|| {
         current_exec_node.0.lock().ok().and_then(|g| g.clone())
@@ -74,16 +94,22 @@ async fn write_file_vfs(
 }
 
 #[tauri::command]
-async fn apply_vfs_to_disk(state: tauri::State<'_, VfsState>) -> Result<(), String> {
-    println!("Rust [apply_vfs_to_disk] flushing in-memory VFS changes to local disk...");
+async fn apply_vfs_to_disk(
+    state: tauri::State<'_, VfsState>,
+    tab_id: Option<String>,
+) -> Result<(), String> {
+    let tid = get_tab_id(tab_id);
+    println!("Rust [apply_vfs_to_disk] flushing in-memory VFS changes for tab: {} to local disk...", tid);
     let mut vfs = state.0.lock().map_err(|e| e.to_string())?;
-    for (path_str, content) in vfs.drain() {
-        println!("Rust [apply_vfs_to_disk] applying file: {}", path_str);
-        let path = PathBuf::from(&path_str);
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    if let Some(mut tab_map) = vfs.remove(&tid) {
+        for (path_str, content) in tab_map.drain() {
+            println!("Rust [apply_vfs_to_disk] applying file: {}", path_str);
+            let path = PathBuf::from(&path_str);
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+            std::fs::write(&path, content).map_err(|e| e.to_string())?;
         }
-        std::fs::write(&path, content).map_err(|e| e.to_string())?;
     }
     println!("Rust [apply_vfs_to_disk] flush complete!");
     Ok(())
@@ -105,15 +131,19 @@ async fn delete_node_vfs_files(
     vfs_state: tauri::State<'_, VfsState>,
     tracker_state: tauri::State<'_, NodeFileTracker>,
     node_id: String,
+    tab_id: Option<String>,
 ) -> Result<(), String> {
-    println!("Rust [delete_node_vfs_files] deleting all VFS files for node: {}", node_id);
+    let tid = get_tab_id(tab_id);
+    println!("Rust [delete_node_vfs_files] deleting all VFS files for node: {} under tab: {}", node_id, tid);
     let mut tracker = tracker_state.0.lock().map_err(|e| e.to_string())?;
     if let Some(files) = tracker.remove(&node_id) {
         println!("Rust [delete_node_vfs_files] found {} files to delete: {:?}", files.len(), files);
         let mut vfs = vfs_state.0.lock().map_err(|e| e.to_string())?;
-        for file_path in files {
-            vfs.remove(&file_path);
-            println!("Rust [delete_node_vfs_files] removed from VFS: {}", file_path);
+        if let Some(tab_map) = vfs.get_mut(&tid) {
+            for file_path in files {
+                tab_map.remove(&file_path);
+                println!("Rust [delete_node_vfs_files] removed from VFS: {}", file_path);
+            }
         }
     } else {
         println!("Rust [delete_node_vfs_files] no files tracked for node: {}", node_id);
@@ -145,27 +175,37 @@ async fn get_all_node_vfs_files(
 }
 
 #[tauri::command]
-async fn export_vfs_contents(state: tauri::State<'_, VfsState>) -> Result<std::collections::HashMap<String, String>, String> {
-    println!("Rust [export_vfs_contents] exporting all VFS files");
+async fn export_vfs_contents(
+    state: tauri::State<'_, VfsState>,
+    tab_id: Option<String>,
+) -> Result<std::collections::HashMap<String, String>, String> {
+    let tid = get_tab_id(tab_id);
+    println!("Rust [export_vfs_contents] exporting VFS files for tab: {}", tid);
     let vfs = state.0.lock().map_err(|e| e.to_string())?;
-    let result: std::collections::HashMap<String, String> = vfs.iter()
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .collect();
-    println!("Rust [export_vfs_contents] exported {} files", result.len());
+    let mut result = std::collections::HashMap::new();
+    if let Some(tab_map) = vfs.get(&tid) {
+        for (k, v) in tab_map {
+            result.insert(k.clone(), v.clone());
+        }
+    }
+    println!("Rust [export_vfs_contents] exported {} files for tab: {}", result.len(), tid);
     Ok(result)
 }
 
 #[tauri::command]
 async fn import_vfs_contents(
     state: tauri::State<'_, VfsState>,
+    tab_id: Option<String>,
     files: std::collections::HashMap<String, String>,
 ) -> Result<(), String> {
-    println!("Rust [import_vfs_contents] importing {} files into VFS", files.len());
+    let tid = get_tab_id(tab_id);
+    println!("Rust [import_vfs_contents] importing {} files into VFS for tab: {}", files.len(), tid);
     let mut vfs = state.0.lock().map_err(|e| e.to_string())?;
+    let tab_map = vfs.entry(tid.clone()).or_insert_with(HashMap::new);
     for (path, content) in files {
-        vfs.insert(path, content);
+        tab_map.insert(path, content);
     }
-    println!("Rust [import_vfs_contents] import complete");
+    println!("Rust [import_vfs_contents] import complete for tab: {}", tid);
     Ok(())
 }
 
@@ -231,6 +271,7 @@ async fn write_file_disk(
     state: tauri::State<'_, VfsState>,
     path: String,
     content: String,
+    tab_id: Option<String>,
 ) -> Result<(), String> {
     println!("Rust [write_file_disk] writing path directly to disk: {}", path);
     let path_buf = PathBuf::from(&path);
@@ -239,9 +280,17 @@ async fn write_file_disk(
     }
     std::fs::write(&path_buf, content).map_err(|e| e.to_string())?;
 
-    // Evict this path from VFS memory cache so subsequent VFS reads fall back to this physical disk file
+    // Evict this path from VFS memory cache
     let mut vfs = state.0.lock().map_err(|e| e.to_string())?;
-    vfs.remove(&path);
+    if let Some(tid) = tab_id {
+        if let Some(tab_map) = vfs.get_mut(&tid) {
+            tab_map.remove(&path);
+        }
+    } else {
+        for tab_map in vfs.values_mut() {
+            tab_map.remove(&path);
+        }
+    }
     Ok(())
 }
 
@@ -722,7 +771,8 @@ pub fn run() {
             git::git_revert_commit,
             git::git_reset_to_commit,
             git::git_blame,
-            git::git_get_file_commit_history
+            git::git_get_file_commit_history,
+            git::git_scan_subprojects
         ]);
 
     let app = builder
