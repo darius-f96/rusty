@@ -170,6 +170,35 @@ async fn import_vfs_contents(
 }
 
 #[tauri::command]
+async fn export_vfs_tracker(
+    tracker_state: tauri::State<'_, NodeFileTracker>,
+) -> Result<std::collections::HashMap<String, Vec<String>>, String> {
+    println!("Rust [export_vfs_tracker] exporting all node file tracking");
+    let tracker = tracker_state.0.lock().map_err(|e| e.to_string())?;
+    let result: std::collections::HashMap<String, Vec<String>> = tracker
+        .iter()
+        .map(|(node_id, files)| (node_id.clone(), files.clone()))
+        .collect();
+    println!("Rust [export_vfs_tracker] exported tracking for {} nodes", result.len());
+    Ok(result)
+}
+
+#[tauri::command]
+async fn import_vfs_tracker(
+    tracker_state: tauri::State<'_, NodeFileTracker>,
+    tracker: std::collections::HashMap<String, Vec<String>>,
+) -> Result<(), String> {
+    println!("Rust [import_vfs_tracker] importing tracking for {} nodes", tracker.len());
+    let mut state = tracker_state.0.lock().map_err(|e| e.to_string())?;
+    state.clear();
+    for (node_id, files) in tracker {
+        state.insert(node_id, files);
+    }
+    println!("Rust [import_vfs_tracker] import complete");
+    Ok(())
+}
+
+#[tauri::command]
 async fn get_directory_structure(root_dir: String) -> Result<Vec<FileEntry>, String> {
     println!(
         "Rust [get_directory_structure] reading structure for: {}",
@@ -654,6 +683,8 @@ pub fn run() {
             get_all_node_vfs_files,
             export_vfs_contents,
             import_vfs_contents,
+            export_vfs_tracker,
+            import_vfs_tracker,
             get_directory_structure,
             read_file_disk,
             write_file_disk,

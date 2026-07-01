@@ -300,12 +300,21 @@ export const useExplorerWebSocket = (selectedNode: any) => {
 
     setIsSummarizing(true);
     setNodeStatus(selectedNodeId, "running");
-    addLog(selectedNodeId, "Summarizing conversation...");
+    addLog(selectedNodeId, "Summarizing conversation (focused on recent discussion)...");
 
     const socket = new WebSocket("ws://localhost:4000");
     explorerSocketRef.current = socket;
 
-    const conversationText = chatHistory.map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`).join("\n\n");
+    // Focus on the most recent portion of the discussion. The user typically
+    // iterates over many topics and acts on the latest one, so the summary
+    // should capture the current intent rather than earlier tangents.
+    const RECENT_WINDOW = 8;
+    const recentMessages = chatHistory.slice(-RECENT_WINDOW);
+    const totalCount = chatHistory.length;
+    const truncatedCount = Math.max(0, totalCount - recentMessages.length);
+    const conversationText = recentMessages
+      .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
+      .join("\n\n");
 
     socket.onopen = () => {
       const rootPath = useWorkspaceStore.getState().rootPath;
@@ -324,10 +333,14 @@ export const useExplorerWebSocket = (selectedNode: any) => {
         preferredModel: auditorSkill.preferredModel,
       } : null;
 
+      const truncationNote = truncatedCount > 0
+        ? `\n\nNote: This conversation had ${totalCount} total messages; only the last ${recentMessages.length} are included because the user iterates over many topics and the current focus is the most recent discussion.`
+        : "";
+
       socket.send(JSON.stringify({
         type: "global_explore",
         nodeId: selectedNodeId,
-        prompt: `Please summarize the following conversation concisely, highlighting the key insights, findings, and any important decisions or next steps mentioned:\n\n${conversationText}`,
+        prompt: `Please summarize the recent portion of the following conversation concisely. The user typically discusses many topics in sequence but only acts on the latest one, so focus the summary on the most recent exchange: what the user wants, what was decided or agreed, and the immediate next steps.${truncationNote}\n\n${conversationText}`,
         workspaceRoot: rootPath,
         model: currentSummarizeModel,
         chatHistory: [],

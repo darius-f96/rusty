@@ -11,6 +11,8 @@ export interface VfsService {
   getAllNodeVfsFiles(): Promise<NodeFilesResponse[]>;
   exportVfsContents(): Promise<Record<string, string>>;
   importVfsContents(files: Record<string, string>): Promise<void>;
+  exportVfsTracker(): Promise<Record<string, string[]>>;
+  importVfsTracker(tracker: Record<string, string[]>): Promise<void>;
 }
 
 export const vfsService: VfsService = {
@@ -61,6 +63,27 @@ export const vfsService: VfsService = {
       console.log(`[vfsService] import_vfs_contents imported ${Object.keys(files).length} files`);
     } catch (err) {
       console.error(`[vfsService] import_vfs_contents failed:`, err);
+      throw err;
+    }
+  },
+
+  async exportVfsTracker(): Promise<Record<string, string[]>> {
+    try {
+      const result = await invoke<Record<string, string[]>>("export_vfs_tracker");
+      console.log(`[vfsService] export_vfs_tracker returned tracking for ${Object.keys(result).length} nodes`);
+      return result;
+    } catch (err) {
+      console.error(`[vfsService] export_vfs_tracker failed:`, err);
+      throw err;
+    }
+  },
+
+  async importVfsTracker(tracker: Record<string, string[]>): Promise<void> {
+    try {
+      await invoke("import_vfs_tracker", { tracker });
+      console.log(`[vfsService] import_vfs_tracker imported tracking for ${Object.keys(tracker).length} nodes`);
+    } catch (err) {
+      console.error(`[vfsService] import_vfs_tracker failed:`, err);
       throw err;
     }
   },

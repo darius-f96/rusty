@@ -11,9 +11,7 @@ export const Header: React.FC<HeaderProps> = ({ onSearchOpen }) => {
     <header className="w-full h-10 px-4 flex items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-app)] select-none z-30 flex-shrink-0">
       {/* Left Area: Logo */}
       <div className="flex items-center space-x-2">
-        <div className="w-6 h-6 rounded-md bg-[var(--bg-sidebar)] border border-[var(--border-color)] flex items-center justify-center text-[var(--accent-color)] shadow-md transition-all">
-          <AxiomIcon size={13} className="animate-spin-slow" />
-        </div>
+        <AxiomIcon size={20} />
         <span className="text-xs font-black tracking-wider text-[var(--text-light)] font-sans">
           Axiom
         </span>

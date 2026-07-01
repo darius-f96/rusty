@@ -30,12 +30,18 @@ export const canvasFileService = {
       isPipelineApplied: false
     };
 
-    // Export VFS contents to include in the canvas
+    // Export VFS contents and the node -> file tracker to include in the canvas.
     let vfsContents: Record<string, string> = {};
+    let vfsTracker: Record<string, string[]> = {};
     try {
       vfsContents = await vfsService.exportVfsContents();
     } catch (err) {
       console.warn("[canvasFileService] Could not export VFS contents:", err);
+    }
+    try {
+      vfsTracker = await vfsService.exportVfsTracker();
+    } catch (err) {
+      console.warn("[canvasFileService] Could not export VFS tracker:", err);
     }
 
     const payload = {
@@ -48,7 +54,8 @@ export const canvasFileService = {
       globalChatHistory: context.globalChatHistory,
       edgeReconciliationStatus: context.edgeReconciliationStatus,
       isPipelineApplied: context.isPipelineApplied || false,
-      vfsContents
+      vfsContents,
+      vfsTracker
     };
 
     const fileName = canvasFileService.sanitizeFileName(title);
@@ -72,16 +79,27 @@ export const canvasFileService = {
     return parsed;
   },
 
-  restoreCanvasVfs: async (vfsContents: Record<string, string>): Promise<void> => {
-    if (!vfsContents || Object.keys(vfsContents).length === 0) {
-      console.log("[canvasFileService] No VFS contents to restore");
+  restoreCanvasVfs: async (
+    vfsContents: Record<string, string>,
+    vfsTracker: Record<string, string[]>
+  ): Promise<void> => {
+    const hasContents = vfsContents && Object.keys(vfsContents).length > 0;
+    const hasTracker = vfsTracker && Object.keys(vfsTracker).length > 0;
+    if (!hasContents && !hasTracker) {
+      console.log("[canvasFileService] No VFS state to restore");
       return;
     }
     try {
-      await vfsService.importVfsContents(vfsContents);
-      console.log(`[canvasFileService] Restored ${Object.keys(vfsContents).length} VFS files`);
+      if (hasContents) {
+        await vfsService.importVfsContents(vfsContents);
+        console.log(`[canvasFileService] Restored ${Object.keys(vfsContents).length} VFS files`);
+      }
+      if (hasTracker) {
+        await vfsService.importVfsTracker(vfsTracker);
+        console.log(`[canvasFileService] Restored VFS tracker for ${Object.keys(vfsTracker).length} nodes`);
+      }
     } catch (err) {
-      console.error("[canvasFileService] Failed to restore VFS contents:", err);
+      console.error("[canvasFileService] Failed to restore VFS state:", err);
       throw err;
     }
   }
