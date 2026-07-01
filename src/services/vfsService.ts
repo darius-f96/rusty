@@ -9,6 +9,8 @@ export interface VfsService {
   setCurrentExecutingNode(nodeId: string | null): Promise<void>;
   deleteNodeVfsFiles(nodeId: string): Promise<void>;
   getAllNodeVfsFiles(): Promise<NodeFilesResponse[]>;
+  exportVfsContents(): Promise<Record<string, string>>;
+  importVfsContents(files: Record<string, string>): Promise<void>;
 }
 
 export const vfsService: VfsService = {
@@ -38,6 +40,27 @@ export const vfsService: VfsService = {
       return result;
     } catch (err) {
       console.error(`[vfsService] get_all_node_vfs_files failed:`, err);
+      throw err;
+    }
+  },
+
+  async exportVfsContents(): Promise<Record<string, string>> {
+    try {
+      const result = await invoke<Record<string, string>>("export_vfs_contents");
+      console.log(`[vfsService] export_vfs_contents returned ${Object.keys(result).length} files`);
+      return result;
+    } catch (err) {
+      console.error(`[vfsService] export_vfs_contents failed:`, err);
+      throw err;
+    }
+  },
+
+  async importVfsContents(files: Record<string, string>): Promise<void> {
+    try {
+      await invoke("import_vfs_contents", { files });
+      console.log(`[vfsService] import_vfs_contents imported ${Object.keys(files).length} files`);
+    } catch (err) {
+      console.error(`[vfsService] import_vfs_contents failed:`, err);
       throw err;
     }
   },

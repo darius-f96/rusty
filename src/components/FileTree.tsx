@@ -451,6 +451,11 @@ const FileTreeNode: React.FC<{
         const { canvasFileService } = await import("./tabs/canvas/services/canvasFileService");
         const parsedData = await canvasFileService.loadCanvasFromFile(node.path);
         useWorkspaceStore.getState().loadCanvasTab(parsedData);
+
+        // Restore VFS contents if available
+        if (parsedData.vfsContents && Object.keys(parsedData.vfsContents).length > 0) {
+          await canvasFileService.restoreCanvasVfs(parsedData.vfsContents);
+        }
       } catch (err: any) {
         notify("Canvas error", `Failed to load canvas: ${err.message || err}`, "error");
       }

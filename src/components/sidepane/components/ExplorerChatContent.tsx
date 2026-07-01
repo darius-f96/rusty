@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState } from "react";
 import { Send, Sparkles, FileText, Lightbulb } from "lucide-react";
+import { CustomSelect } from "../../CustomSelect";
 import { useWorkspaceStore } from "../../../store";
 import { processResponse } from "../../../services/responseProcessingService";
 import { searchService } from "../../../services/searchService";
@@ -19,6 +20,7 @@ interface ExplorerChatContentProps {
   handleExplorerSummarize: () => void;
   exploreModel: string;
   summarizeModel: string;
+  allAvailableModels: { id: string; name: string }[];
 }
 
 const EMPTY_ARRAY: any[] = [];
@@ -33,10 +35,12 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
   handleExplorerSummarize,
   exploreModel,
   summarizeModel,
+  allAvailableModels,
 }) => {
   const globalChatHistory = useWorkspaceStore(
     (state) => state.globalChatHistory[selectedNode?.id || ""] || EMPTY_ARRAY
   );
+  const updateNode = useWorkspaceStore((state) => state.updateTaskNode);
   const rootPath = useWorkspaceStore((state) => state.rootPath);
 
   const chatScrollRef = useRef<HTMLDivElement>(null);
@@ -201,12 +205,29 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-[var(--bg-app)]">
-      {/* Chat sub-header with model status */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/20 select-none flex-shrink-0">
-        <div className="flex items-center space-x-2 text-[10px] font-mono text-[var(--text-muted)]">
-          <span>Chat: <strong className="text-violet-400">{(exploreModel || "").split("/").pop() || "None"}</strong></span>
-          <span>•</span>
-          <span>Summ: <strong className="text-amber-400">{(summarizeModel || "").split("/").pop() || "None"}</strong></span>
+      {/* Chat sub-header with model dropdowns */}
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/20 select-none flex-shrink-0">
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+          <span className="text-[9px] font-mono uppercase text-violet-400 flex-shrink-0">Chat</span>
+          <CustomSelect
+            value={exploreModel}
+            onChange={(val) => updateNode(selectedNode.id, { exploreModel: val })}
+            options={allAvailableModels}
+            placeholder={allAvailableModels.length === 0 ? (exploreModel || "None") : "Chat model"}
+            className="flex-1 min-w-0 nodrag nopan"
+            buttonClassName="w-full flex items-center justify-between bg-[var(--bg-app)] text-[var(--text-light)] border border-[var(--border-color)] focus:border-violet-500 rounded px-1.5 py-1 outline-none cursor-pointer text-left transition-all hover:border-violet-500/50 text-[10px] font-mono"
+          />
+        </div>
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+          <span className="text-[9px] font-mono uppercase text-amber-400 flex-shrink-0">Summ</span>
+          <CustomSelect
+            value={summarizeModel}
+            onChange={(val) => updateNode(selectedNode.id, { summarizeModel: val })}
+            options={allAvailableModels}
+            placeholder={allAvailableModels.length === 0 ? (summarizeModel || "None") : "Summ model"}
+            className="flex-1 min-w-0 nodrag nopan"
+            buttonClassName="w-full flex items-center justify-between bg-[var(--bg-app)] text-[var(--text-light)] border border-[var(--border-color)] focus:border-amber-500 rounded px-1.5 py-1 outline-none cursor-pointer text-left transition-all hover:border-amber-500/50 text-[10px] font-mono"
+          />
         </div>
       </div>
 

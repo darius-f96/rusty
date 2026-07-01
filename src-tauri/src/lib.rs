@@ -145,6 +145,31 @@ async fn get_all_node_vfs_files(
 }
 
 #[tauri::command]
+async fn export_vfs_contents(state: tauri::State<'_, VfsState>) -> Result<std::collections::HashMap<String, String>, String> {
+    println!("Rust [export_vfs_contents] exporting all VFS files");
+    let vfs = state.0.lock().map_err(|e| e.to_string())?;
+    let result: std::collections::HashMap<String, String> = vfs.iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    println!("Rust [export_vfs_contents] exported {} files", result.len());
+    Ok(result)
+}
+
+#[tauri::command]
+async fn import_vfs_contents(
+    state: tauri::State<'_, VfsState>,
+    files: std::collections::HashMap<String, String>,
+) -> Result<(), String> {
+    println!("Rust [import_vfs_contents] importing {} files into VFS", files.len());
+    let mut vfs = state.0.lock().map_err(|e| e.to_string())?;
+    for (path, content) in files {
+        vfs.insert(path, content);
+    }
+    println!("Rust [import_vfs_contents] import complete");
+    Ok(())
+}
+
+#[tauri::command]
 async fn get_directory_structure(root_dir: String) -> Result<Vec<FileEntry>, String> {
     println!(
         "Rust [get_directory_structure] reading structure for: {}",
@@ -627,6 +652,8 @@ pub fn run() {
             set_current_executing_node,
             delete_node_vfs_files,
             get_all_node_vfs_files,
+            export_vfs_contents,
+            import_vfs_contents,
             get_directory_structure,
             read_file_disk,
             write_file_disk,

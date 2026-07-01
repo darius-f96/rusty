@@ -172,6 +172,7 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
               handleExplorerSummarize={explorer.handleExplorerSummarize}
               exploreModel={explorer.exploreModel}
               summarizeModel={explorer.summarizeModel}
+              allAvailableModels={explorer.allAvailableModels}
             />
           ) : (
             <PromptChatContent

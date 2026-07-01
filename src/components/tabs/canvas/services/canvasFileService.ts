@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useWorkspaceStore } from "../../../../store";
+import { vfsService } from "../../../../services/vfsService";
 
 export const canvasFileService = {
   getCanvasDir: (rootPath: string) => {
@@ -29,6 +30,14 @@ export const canvasFileService = {
       isPipelineApplied: false
     };
 
+    // Export VFS contents to include in the canvas
+    let vfsContents: Record<string, string> = {};
+    try {
+      vfsContents = await vfsService.exportVfsContents();
+    } catch (err) {
+      console.warn("[canvasFileService] Could not export VFS contents:", err);
+    }
+
     const payload = {
       id: tabId,
       title,
@@ -38,7 +47,8 @@ export const canvasFileService = {
       nodeStatus: context.nodeStatus,
       globalChatHistory: context.globalChatHistory,
       edgeReconciliationStatus: context.edgeReconciliationStatus,
-      isPipelineApplied: context.isPipelineApplied || false
+      isPipelineApplied: context.isPipelineApplied || false,
+      vfsContents
     };
 
     const fileName = canvasFileService.sanitizeFileName(title);
@@ -60,5 +70,19 @@ export const canvasFileService = {
     const rawContent: string = await invoke("read_file_disk", { path: filePath });
     const parsed = JSON.parse(rawContent);
     return parsed;
+  },
+
+  restoreCanvasVfs: async (vfsContents: Record<string, string>): Promise<void> => {
+    if (!vfsContents || Object.keys(vfsContents).length === 0) {
+      console.log("[canvasFileService] No VFS contents to restore");
+      return;
+    }
+    try {
+      await vfsService.importVfsContents(vfsContents);
+      console.log(`[canvasFileService] Restored ${Object.keys(vfsContents).length} VFS files`);
+    } catch (err) {
+      console.error("[canvasFileService] Failed to restore VFS contents:", err);
+      throw err;
+    }
   }
 };

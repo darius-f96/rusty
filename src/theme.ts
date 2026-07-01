@@ -180,7 +180,15 @@ export function applyThemeProperties(t: AppTheme) {
   root.style.setProperty("--text-light", t.textLight);
   root.style.setProperty("--accent-color", t.accent);
   root.style.setProperty("--accent-bg", t.accentBg);
+
+  // Update application favicon to dark theme icon
+  const favicon = document.querySelector("link[rel='icon']");
+  if (favicon) {
+    favicon.setAttribute("href", "/axiom-dark.png");
+    favicon.setAttribute("type", "image/png");
+  }
 }
+
 
 /** Registers theme configuration with monaco editor runtime */
 export function defineMonacoTheme(monaco: any, t: AppTheme) {

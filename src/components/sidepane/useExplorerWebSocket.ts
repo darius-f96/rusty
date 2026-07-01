@@ -78,6 +78,12 @@ export const useExplorerWebSocket = (selectedNode: any) => {
   const filteredProviders = providers.filter(isProviderActive);
   const activeProvider = filteredProviders.find((p) => p.id === activeCustomProviderId);
   const availableModels = activeProvider ? activeProvider.models : [];
+  const allAvailableModels = filteredProviders.flatMap((prov) =>
+    prov.models.map((m: any) => ({
+      id: m.id,
+      name: `${prov.name} / ${m.name}`,
+    }))
+  );
 
   const exploreModel = (selectedNode?.data?.exploreModel as string) || activeModel;
   const summarizeModel = (selectedNode?.data?.summarizeModel as string) || activeModel;
@@ -421,6 +427,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
     summarizeModel,
     providers: filteredProviders,
     activeCustomProviderId,
-    availableModels
+    availableModels,
+    allAvailableModels
   };
 };
