@@ -262,10 +262,17 @@ export const AxiomTab: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
   };
 
   const onPaneClick = () => {
-    const selectedNodeId = useWorkspaceStore.getState().selectedNodeId;
-    const nodes = useWorkspaceStore.getState().nodes;
-    const selectedNode = nodes.find((n) => n.id === selectedNodeId);
-    if (selectedNode?.type === "globalChatNode") {
+    const currentSelectedId = useWorkspaceStore.getState().selectedNodeId;
+    if (!currentSelectedId) {
+      setContextMenu(null);
+      return;
+    }
+    const selectedNodeInThisCanvas = nodes.find((n) => n.id === currentSelectedId);
+    if (!selectedNodeInThisCanvas) {
+      setContextMenu(null);
+      return;
+    }
+    if (selectedNodeInThisCanvas.type === "globalChatNode") {
       return;
     }
     setSelectedNodeId(null);

@@ -215,7 +215,7 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
               Background Context
             </div>
             <div
-              className="nodrag text-xs font-sans font-medium text-[var(--text-light)] leading-relaxed flex-1 whitespace-pre-wrap bg-[var(--bg-app)]/50 rounded-lg p-2.5 border border-[var(--border-color)] w-full antialiased subpixel-antialiased select-text overflow-hidden"
+              className="nodrag text-xs font-sans font-medium text-[var(--text-light)] leading-relaxed flex-1 min-h-0 whitespace-pre-wrap bg-[var(--bg-app)]/50 rounded-lg p-2.5 border border-[var(--border-color)] w-full antialiased subpixel-antialiased select-text overflow-y-auto scrollbar-wider"
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
             >
