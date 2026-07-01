@@ -8,6 +8,7 @@ interface PromptChatContentProps {
   selectedNode: any;
   nodeStatus: string;
   onExecuteNode: (nodeId: string, customPrompt?: string) => void;
+  onStopExecution: (nodeId: string) => void;
 }
 
 const EMPTY_ARRAY: any[] = [];
@@ -47,7 +48,8 @@ const SkillSelector: React.FC<{ nodeId: string }> = ({ nodeId }) => {
 export const PromptChatContent: React.FC<PromptChatContentProps> = ({
   selectedNode,
   nodeStatus,
-  onExecuteNode
+  onExecuteNode,
+  onStopExecution
 }) => {
   const [chatMessage, setChatMessage] = useState("");
   const globalChatHistory = useWorkspaceStore(
@@ -64,17 +66,24 @@ export const PromptChatContent: React.FC<PromptChatContentProps> = ({
     ...globalChatHistory
       .filter((msg: any, idx: number) => !(idx === 0 && msg.role === "user"))
       .map((msg: any, idx: number) => ({
-        id: `task-msg-${idx}`,
+        id: msg.id || `task-msg-${idx}`,
         role: msg.role,
         content: msg.content,
         timestamp: msg.timestamp || "",
+        attachments: msg.attachments,
       })),
   ];
+
+  const streamingMessageId = globalChatHistory.find((m: any) => m.role === "console" && m.content !== "")?.id || null;
 
   const handleSend = () => {
     if (!chatMessage.trim() || nodeStatus === "running") return;
     onExecuteNode(selectedNode.id, chatMessage);
     setChatMessage("");
+  };
+
+  const handleStop = () => {
+    onStopExecution(selectedNode.id);
   };
 
   return (
@@ -83,6 +92,8 @@ export const PromptChatContent: React.FC<PromptChatContentProps> = ({
       <Chat
         messages={chatMessages}
         isStreaming={nodeStatus === "running"}
+        streamingMessageId={streamingMessageId}
+        compact
       />
 
       {/* Model & Skill selectors */}
@@ -102,6 +113,8 @@ export const PromptChatContent: React.FC<PromptChatContentProps> = ({
           onChange={setChatMessage}
           onSend={handleSend}
           disabled={nodeStatus === "running"}
+          isStreaming={nodeStatus === "running"}
+          onStop={handleStop}
           placeholder="Refine work, prompt modifications... (type @ to reference files)"
         />
       </div>

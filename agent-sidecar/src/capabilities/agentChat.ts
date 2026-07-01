@@ -177,7 +177,8 @@ Guidelines:
       workspaceRoot,
       sendLog,
       30,
-      chatHistory || []
+      chatHistory || [],
+      () => ws.readyState !== WebSocket.OPEN
     );
 
     sendLog("Agent complete.");

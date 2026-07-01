@@ -252,12 +252,15 @@ export const Workspace: React.FC = () => {
     if (customPrompt) {
       // Refinement message from Prompt Chat
       const userMsg = {
+        id: `msg_${Date.now()}`,
         role: "user" as const,
         content: customPrompt,
         timestamp: new Date().toLocaleTimeString()
       };
       store.addGlobalChatMessage(nodeId, userMsg);
-      chatHistoryToSend = store.getGlobalChatHistory(nodeId).map(m => ({ role: m.role, content: m.content }));
+      chatHistoryToSend = store.getGlobalChatHistory(nodeId)
+        .filter(m => m.role === "user" || m.role === "assistant")
+        .map(m => ({ role: m.role, content: m.content }));
       currentInstructions = customPrompt;
     } else {
       // Initial "Run Executor" procedure call
@@ -282,6 +285,7 @@ export const Workspace: React.FC = () => {
       }
 
       const userMsg = {
+        id: `msg_${Date.now()}`,
         role: "user" as const,
         content: formattedPrompt,
         timestamp: new Date().toLocaleTimeString()
@@ -290,6 +294,23 @@ export const Workspace: React.FC = () => {
       chatHistoryToSend = [{ role: "user", content: formattedPrompt }];
       currentInstructions = formattedPrompt;
     }
+
+    const consoleMessageId = `console_${nodeId}_${Date.now()}`;
+    store.addGlobalChatMessage(nodeId, {
+      id: consoleMessageId,
+      role: "console",
+      content: "",
+      timestamp: new Date().toLocaleTimeString(),
+    });
+    let consoleBuffer = "";
+    let consoleFlushTimeout: ReturnType<typeof setTimeout> | null = null;
+    const flushConsole = () => {
+      if (consoleFlushTimeout) return;
+      consoleFlushTimeout = setTimeout(() => {
+        consoleFlushTimeout = null;
+        useWorkspaceStore.getState().updateGlobalChatMessage(nodeId, consoleMessageId, consoleBuffer);
+      }, 150);
+    };
 
     let socket: WebSocket;
     try {
@@ -352,6 +373,8 @@ export const Workspace: React.FC = () => {
 
         if (data.type === "log" && data.nodeId === nodeId) {
           addLog(nodeId, data.message);
+          consoleBuffer += data.message + "\n";
+          flushConsole();
           return;
         }
 
@@ -404,11 +427,14 @@ export const Workspace: React.FC = () => {
 
           // Add assistant message to history
           const assistantMsg = {
+            id: `msg_${Date.now()}`,
             role: "assistant" as const,
             content: responseText,
             timestamp: new Date().toLocaleTimeString()
           };
           store.addGlobalChatMessage(nodeId, assistantMsg);
+          if (consoleFlushTimeout) clearTimeout(consoleFlushTimeout);
+          useWorkspaceStore.getState().updateGlobalChatMessage(nodeId, consoleMessageId, "");
 
           useWorkspaceStore.getState().updateTaskNode(nodeId, { modifiedFiles: modified });
           setNodeStatus(nodeId, "success");
@@ -421,11 +447,14 @@ export const Workspace: React.FC = () => {
 
           // Add assistant error message to history
           const assistantMsg = {
+            id: `msg_${Date.now()}`,
             role: "assistant" as const,
             content: `Execution failed: ${data.error}`,
             timestamp: new Date().toLocaleTimeString()
           };
           store.addGlobalChatMessage(nodeId, assistantMsg);
+          if (consoleFlushTimeout) clearTimeout(consoleFlushTimeout);
+          useWorkspaceStore.getState().updateGlobalChatMessage(nodeId, consoleMessageId, "");
 
           setNodeStatus(nodeId, "error");
           socket.close();

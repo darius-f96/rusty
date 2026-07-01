@@ -14,9 +14,10 @@ interface ChatProps {
   messages: Message[];
   isStreaming?: boolean;
   streamingMessageId?: string | null;
+  compact?: boolean;
 }
 
-export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, streamingMessageId = null }) => {
+export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, streamingMessageId = null, compact = false }) => {
   const [collapsedConsoles, setCollapsedConsoles] = useState<Record<string, boolean>>({});
   const consoleContentRef = useRef<HTMLDivElement>(null);
 
@@ -155,11 +156,11 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
   }, [messages, isStreaming]);
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 scrollbar-wider min-h-0 min-w-0">
+    <div className={`flex-1 overflow-y-auto ${compact ? "px-1" : "px-4"} py-4 space-y-4 scrollbar-wider min-h-0 min-w-0`}>
       {messages.length === 0 ? (
         <div className="h-full flex flex-col items-center justify-center text-center text-[var(--text-muted)] select-none py-12">
           <Sparkles size={32} className="text-violet-500/40 animate-pulse mb-3" />
-          <p className="text-xs font-mono">Start the conversation to begin auditing code changes.</p>
+          <p className="text-xs font-mono">Start a conversation to begin.</p>
         </div>
       ) : (
         messages.map(renderMessage)

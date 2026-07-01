@@ -3,7 +3,6 @@ import { Pencil, Check, Trash2, Sparkles, X, Loader2, Plug, ChevronDown, Lightbu
 import { useWorkspaceStore } from "../../store";
 import { processResponse } from "../../services/responseProcessingService";
 import { CanvasTabContext } from "../tabs/canvas/CanvasTabContext";
-import { notify } from "../../notificationStore";
 
 export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) => {
   const { tabId } = useContext(CanvasTabContext);
@@ -26,47 +25,6 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
   const handleNameSave = () => {
     updateNode(id, { name: tempName });
     setIsEditing(false);
-  };
-
-  const generateContextNodes = () => {
-    const history = useWorkspaceStore.getState().globalChatHistory[id] || [];
-    const lastAssistantMsg = [...history].reverse().find(m => m.role === "assistant");
-    if (!lastAssistantMsg) {
-      notify("No response found", "The auditor must respond before generating context nodes.", "info");
-      return;
-    }
-    
-    // Extract words starting with @
-    const matches = lastAssistantMsg.content.match(/@([^\s`\)]+)/g) || [];
-    if (matches.length === 0) {
-      notify("No references detected", "Could not find any file references (@path) in the last auditor response.", "info");
-      return;
-    }
-    
-    const uniquePaths = Array.from(new Set(matches.map(m => m.substring(1))));
-    
-    // Find current node position
-    const tabCtx = useWorkspaceStore.getState().canvasContexts[tabId];
-    const node = tabCtx?.nodes.find((n) => n.id === id);
-    const startX = node ? node.position.x + (node.width || width || 384) + 80 : 400;
-    const startY = node ? node.position.y : 100;
-    
-    uniquePaths.forEach((filePath, index) => {
-      const fileName = filePath.split("/").pop() || filePath;
-      const isDir = !filePath.includes(".");
-      useWorkspaceStore.getState().addContextNode(
-        startX,
-        startY + index * 95,
-        {
-          path: filePath,
-          name: fileName,
-          isDir,
-        },
-        tabId
-      );
-    });
-    
-    notify("Context Nodes Generated", `Added ${uniquePaths.length} context nodes to the graph.`, "success");
   };
 
   const startResize = (e: React.MouseEvent) => {
@@ -167,16 +125,6 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
             </button>
           ) : (
             <>
-              <button
-                onClick={(e) => { e.stopPropagation(); generateContextNodes(); }}
-                onPointerDown={(e) => e.stopPropagation()}
-                onMouseDown={(e) => e.stopPropagation()}
-                className="nodrag text-[var(--accent-color)] hover:text-emerald-400 p-0.5 rounded transition-colors cursor-pointer flex items-center space-x-1 border border-[var(--accent-color)]/25 px-1.5 py-0.5 text-[9px] font-mono font-bold bg-[var(--accent-bg)]/20"
-                title="Generate context nodes from last AI response"
-              >
-                <Sparkles size={10} />
-                <span>Link Nodes</span>
-              </button>
               <button
                 onClick={(e) => { e.stopPropagation(); setIsEditing(true); }}
                 onPointerDown={(e) => e.stopPropagation()}

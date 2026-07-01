@@ -100,9 +100,11 @@ export interface EditorGroup {
 }
 
 export interface GlobalChatMessage {
-  role: "user" | "assistant" | "system";
+  id?: string;
+  role: "user" | "assistant" | "system" | "console";
   content: string;
   timestamp: string;
+  attachments?: { path: string; name: string; isDir?: boolean }[];
 }
 
 export interface CanvasContext {
@@ -201,6 +203,7 @@ export interface WorkspaceState {
   setNodeStatus: (nodeId: string, status: "idle" | "running" | "success" | "error") => void;
   setGlobalContextSummary: (summary: string) => void;
   addGlobalChatMessage: (nodeId: string, message: GlobalChatMessage) => void;
+  updateGlobalChatMessage: (nodeId: string, messageId: string, content: string) => void;
   clearGlobalChatHistory: (nodeId: string) => void;
   
   addCustomProvider: (provider: CustomProvider) => void;
@@ -1251,6 +1254,21 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         globalChatHistory: {
           ...ctx.globalChatHistory,
           [nodeId]: [...history, message]
+        }
+      };
+    });
+  }),
+
+  updateGlobalChatMessage: (nodeId, messageId, content) => set((state) => {
+    const targetTabId = findTabIdByNodeId(state, nodeId);
+    return updateContextAndSync(state, targetTabId, (ctx) => {
+      const history = ctx.globalChatHistory[nodeId] || [];
+      return {
+        globalChatHistory: {
+          ...ctx.globalChatHistory,
+          [nodeId]: history.map((m) =>
+            m.id === messageId ? { ...m, content } : m
+          )
         }
       };
     });

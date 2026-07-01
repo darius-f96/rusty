@@ -13,6 +13,8 @@ interface ExplorerChatContentProps {
   isSummarizing: boolean;
   handleExplorerSendMessage: () => void;
   handleExplorerSummarize: () => void;
+  handleStopExplorer: () => void;
+  streamingMessageId: string | null;
   exploreModel: string;
   summarizeModel: string;
   allAvailableModels: { id: string; name: string }[];
@@ -28,6 +30,8 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
   isSummarizing,
   handleExplorerSendMessage,
   handleExplorerSummarize,
+  handleStopExplorer,
+  streamingMessageId,
   exploreModel,
   summarizeModel,
   allAvailableModels,
@@ -38,10 +42,11 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
   const updateNode = useWorkspaceStore((state) => state.updateTaskNode);
 
   const chatMessages = globalChatHistory.map((msg, idx) => ({
-    id: `global-msg-${idx}`,
+    id: msg.id || `global-msg-${idx}`,
     role: msg.role,
     content: msg.content,
     timestamp: msg.timestamp || "",
+    attachments: msg.attachments,
   }));
 
   return (
@@ -76,6 +81,8 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
       <Chat
         messages={chatMessages}
         isStreaming={nodeStatus === "running"}
+        streamingMessageId={streamingMessageId}
+        compact
       />
 
       {/* Reusable Chat Input area */}
@@ -86,6 +93,8 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
             onChange={setExplorerInput}
             onSend={() => handleExplorerSendMessage()}
             disabled={nodeStatus === "running"}
+            isStreaming={nodeStatus === "running"}
+            onStop={handleStopExplorer}
             placeholder="Discuss task, plan changes... (type @ to reference files)"
           />
         </div>

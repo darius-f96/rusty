@@ -198,7 +198,8 @@ IMPORTANT: End your response with a section marked "--- SUMMARY ---" that contai
         workspaceRoot,
         sendLog,
         50,
-        chatHistory || []
+        chatHistory || [],
+        () => ws.readyState !== WebSocket.OPEN
       );
 
       runResult = { response: responseText };

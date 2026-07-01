@@ -325,7 +325,8 @@ CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
           workspaceRoot,
           sendLog,
           200,
-          chatHistory || []
+          chatHistory || [],
+          () => ws.readyState !== WebSocket.OPEN
         );
         runResult = { status: "success", modified: Array.from(modifiedFiles), response: responseText };
       }

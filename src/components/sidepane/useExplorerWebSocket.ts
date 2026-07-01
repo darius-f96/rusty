@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from "react";
 import { useWorkspaceStore } from "../../store";
 import { invoke } from "@tauri-apps/api/core";
 import { notify } from "../../notificationStore";
-
 const CONTEXT_NODE_CREATION_MARKER = "[CREATE_CONTEXT_NODES]";
 
 const parseAndCreateContextNodes = (response: string, nodePosition: { x: number; y: number }, tabId: string) => {
@@ -58,9 +57,14 @@ export const useExplorerWebSocket = (selectedNode: any) => {
   const [explorerInput, setExplorerInput] = useState("");
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const explorerSocketRef = useRef<WebSocket | null>(null);
+  const consoleMessageIdRef = useRef<string | null>(null);
+  const consoleBufferRef = useRef<string>("");
+  const consoleFlushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const addGlobalChatMessage = useWorkspaceStore((state) => state.addGlobalChatMessage);
+  const updateGlobalChatMessage = useWorkspaceStore((state) => state.updateGlobalChatMessage);
   const setGlobalContextSummary = useWorkspaceStore((state) => state.setGlobalContextSummary);
   const updateNode = useWorkspaceStore((state) => state.updateTaskNode);
   const addLog = useWorkspaceStore((state) => state.addLog);
@@ -112,6 +116,20 @@ export const useExplorerWebSocket = (selectedNode: any) => {
     };
   }, []);
 
+  const flushConsoleBuffer = () => {
+    if (consoleMessageIdRef.current && consoleBufferRef.current) {
+      updateGlobalChatMessage(selectedNodeId || "", consoleMessageIdRef.current, consoleBufferRef.current);
+    }
+  };
+
+  const scheduleConsoleFlush = () => {
+    if (consoleFlushTimeoutRef.current) return;
+    consoleFlushTimeoutRef.current = setTimeout(() => {
+      consoleFlushTimeoutRef.current = null;
+      flushConsoleBuffer();
+    }, 150);
+  };
+
   const handleExplorerSendMessage = () => {
     if (!selectedNodeId) return;
     if (!explorerInput.trim() || nodeStatus === "running") return;
@@ -123,6 +141,18 @@ export const useExplorerWebSocket = (selectedNode: any) => {
     };
 
     addGlobalChatMessage(selectedNodeId, userMessage);
+
+    const consoleMessageId = `console_${Date.now()}`;
+    consoleMessageIdRef.current = consoleMessageId;
+    consoleBufferRef.current = "";
+    addGlobalChatMessage(selectedNodeId, {
+      id: consoleMessageId,
+      role: "console",
+      content: "",
+      timestamp: new Date().toLocaleTimeString(),
+    });
+    setStreamingMessageId(consoleMessageId);
+
     setExplorerInput("");
     setNodeStatus(selectedNodeId, "running");
     addLog(selectedNodeId, `User prompt: ${userMessage.content}`);
@@ -184,7 +214,9 @@ export const useExplorerWebSocket = (selectedNode: any) => {
         prompt: userMessage.content,
         workspaceRoot: rootPath,
         model: currentExploreModel,
-        chatHistory: chatHistory.map((m) => ({ role: m.role, content: m.content })),
+        chatHistory: chatHistory
+          .filter((m) => m.role === "user" || m.role === "assistant")
+          .map((m) => ({ role: m.role, content: m.content })),
         mcpServers,
         customProvider:
           prov &&
@@ -202,6 +234,8 @@ export const useExplorerWebSocket = (selectedNode: any) => {
         const msg = JSON.parse(event.data);
         if (msg.type === "log" && msg.nodeId === selectedNodeId) {
           addLog(selectedNodeId, msg.message);
+          consoleBufferRef.current += msg.message + "\n";
+          scheduleConsoleFlush();
           return;
         }
 
@@ -235,11 +269,21 @@ export const useExplorerWebSocket = (selectedNode: any) => {
           console.log(`[SidePane] Exploration complete! Response length: ${msg.response?.length || 0}`);
           const responseText = msg.response || "Exploration complete.";
           const assistantMsg = {
+            id: `msg_${Date.now()}`,
             role: "assistant" as const,
             content: responseText,
             timestamp: new Date().toLocaleTimeString()
           };
           addGlobalChatMessage(selectedNodeId, assistantMsg);
+
+          if (consoleFlushTimeoutRef.current) {
+            clearTimeout(consoleFlushTimeoutRef.current);
+            consoleFlushTimeoutRef.current = null;
+          }
+          if (consoleMessageIdRef.current) {
+            updateGlobalChatMessage(selectedNodeId, consoleMessageIdRef.current, "");
+          }
+          setStreamingMessageId(null);
 
           if (msg.summary) {
             setGlobalContextSummary(msg.summary);
@@ -263,11 +307,20 @@ export const useExplorerWebSocket = (selectedNode: any) => {
         if (msg.type === "global_explore_error" && msg.nodeId === selectedNodeId) {
           console.log(`[SidePane] Exploration error: ${msg.error}`);
           const errorMsg = {
+            id: `msg_${Date.now()}`,
             role: "assistant" as const,
             content: `Error: ${msg.error}`,
             timestamp: new Date().toLocaleTimeString()
           };
           addGlobalChatMessage(selectedNodeId, errorMsg);
+          if (consoleFlushTimeoutRef.current) {
+            clearTimeout(consoleFlushTimeoutRef.current);
+            consoleFlushTimeoutRef.current = null;
+          }
+          if (consoleMessageIdRef.current) {
+            updateGlobalChatMessage(selectedNodeId, consoleMessageIdRef.current, "");
+          }
+          setStreamingMessageId(null);
           setNodeStatus(selectedNodeId, "error");
           addLog(selectedNodeId, `Global exploration error: ${msg.error}`);
           socket.close();
@@ -305,6 +358,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       if (currentStatus === "running") {
         setNodeStatus(selectedNodeId, "error");
         const errorMsg = {
+          id: `msg_${Date.now()}`,
           role: "assistant" as const,
           content: `Connection lost unexpectedly (WebSocket close code: ${event.code}).`,
           timestamp: new Date().toLocaleTimeString()
@@ -316,8 +370,18 @@ export const useExplorerWebSocket = (selectedNode: any) => {
           "error"
         );
       }
+      setStreamingMessageId(null);
       explorerSocketRef.current = null;
     };
+  };
+
+  const handleStopExplorer = () => {
+    if (explorerSocketRef.current) {
+      explorerSocketRef.current.close();
+      explorerSocketRef.current = null;
+    }
+    setStreamingMessageId(null);
+    setNodeStatus(selectedNodeId || "", "idle");
   };
 
   const handleExplorerSummarize = () => {
@@ -493,6 +557,8 @@ export const useExplorerWebSocket = (selectedNode: any) => {
     setShowSettings,
     handleExplorerSendMessage,
     handleExplorerSummarize,
+    handleStopExplorer,
+    streamingMessageId,
     exploreModel,
     summarizeModel,
     providers: filteredProviders,

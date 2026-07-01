@@ -170,6 +170,8 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
               isSummarizing={explorer.isSummarizing}
               handleExplorerSendMessage={explorer.handleExplorerSendMessage}
               handleExplorerSummarize={explorer.handleExplorerSummarize}
+              handleStopExplorer={explorer.handleStopExplorer}
+              streamingMessageId={explorer.streamingMessageId}
               exploreModel={explorer.exploreModel}
               summarizeModel={explorer.summarizeModel}
               allAvailableModels={explorer.allAvailableModels}
@@ -179,6 +181,7 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
               selectedNode={selectedNode}
               nodeStatus={nodeStatus}
               onExecuteNode={onExecuteNode}
+              onStopExecution={onStopExecution}
             />
           )
         )}

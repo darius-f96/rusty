@@ -169,13 +169,18 @@ export async function callLlmWithToolsMultiRound(
   workspaceRoot: string,
   sendLog: (msg: string) => void,
   maxRounds = 50,
-  chatHistory: Array<any> = []
+  chatHistory: Array<any> = [],
+  shouldAbort: () => boolean = () => false
 ): Promise<string> {
   const { baseUrl, apiKey, model } = config;
-  
+
+  const sanitizedHistory = (chatHistory || []).filter(
+    (m: any) => m && (m.role === "user" || m.role === "assistant" || m.role === "system")
+  );
+
   const messages: Array<any> = [
     { role: "system", content: systemPrompt },
-    ...chatHistory,
+    ...sanitizedHistory,
     { role: "user", content: userMessage }
   ];
 
@@ -203,6 +208,10 @@ export async function callLlmWithToolsMultiRound(
 
   let round = 0;
   while (round < maxRounds) {
+    if (shouldAbort()) {
+      console.log(`WebSocket [Server] LLM loop aborted: client disconnected before round ${round + 1}`);
+      throw new Error("Client disconnected");
+    }
     round++;
     sendLog(`LLM round ${round} starting...`);
     console.log(`\n--- WebSocket [Server] LLM Round ${round} ---`);
@@ -230,6 +239,12 @@ export async function callLlmWithToolsMultiRound(
     }
 
     const data = await response.json();
+
+    if (shouldAbort()) {
+      console.log(`WebSocket [Server] LLM loop aborted: client disconnected after round ${round} response`);
+      throw new Error("Client disconnected");
+    }
+
     const finishReason = data.choices?.[0]?.finish_reason || 'unknown';
     const contentLen = data.choices?.[0]?.message?.content?.length || 0;
     const toolCallCount = data.choices?.[0]?.message?.tool_calls?.length || 0;
@@ -270,6 +285,10 @@ export async function callLlmWithToolsMultiRound(
     console.log(`WebSocket [Server] LLM requested ${toolCalls.length} tool calls in round ${round}`);
 
     for (const toolCall of toolCalls) {
+      if (shouldAbort()) {
+        console.log(`WebSocket [Server] LLM loop aborted: client disconnected during tool execution in round ${round}`);
+        throw new Error("Client disconnected");
+      }
       const toolName = toolCall.function.name;
       let toolArgs = {};
       try {
@@ -296,6 +315,10 @@ export async function callLlmWithToolsMultiRound(
           });
         } catch (err: any) {
           console.error(`WebSocket [Server] Tool ${toolName} execution error:`, err);
+          if (shouldAbort()) {
+            console.log(`WebSocket [Server] LLM loop aborted: client disconnected during tool execution in round ${round}`);
+            throw new Error("Client disconnected");
+          }
           messages.push({
             role: "tool",
             tool_call_id: toolCall.id,
@@ -327,7 +350,7 @@ export async function callLlmWithToolsMultiRound(
 
     const finalMessages = [
       { role: "system", content: "You are a codebase exploration assistant. Summarize the findings and answer the user's question clearly based on the provided tool outputs." },
-      ...chatHistory,
+      ...sanitizedHistory,
       { role: "user", content: `${userMessage}\n\nHere are the results of the files read and codebase searches:\n${toolExecutions}` }
     ];
 
