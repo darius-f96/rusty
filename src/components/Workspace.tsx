@@ -31,7 +31,7 @@ export const Workspace: React.FC = () => {
 
   const globalContextSummary = useWorkspaceStore((state) => state.globalContextSummary);
 
-  const socketRef = useRef<WebSocket | null>(null);
+  const socketsRef = useRef<Map<string, WebSocket>>(new Map());
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -294,7 +294,7 @@ export const Workspace: React.FC = () => {
     let socket: WebSocket;
     try {
       socket = new WebSocket("ws://localhost:4000");
-      socketRef.current = socket;
+      socketsRef.current.set(nodeId, socket);
     } catch (err: any) {
       console.error("Failed to construct WebSocket:", err);
       addLog(nodeId, `Fatal: Failed to construct WebSocket: ${err.message}`);
@@ -462,6 +462,7 @@ export const Workspace: React.FC = () => {
     socket.onclose = (event) => {
       console.log(`[Workspace] WebSocket closed (code: ${event.code}, reason: "${event.reason}", clean: ${event.wasClean})`);
       addLog(nodeId, `WebSocket connection closed (code: ${event.code}, reason: "${event.reason || "none"}", clean: ${event.wasClean})`);
+      socketsRef.current.delete(nodeId);
       const currentStatus = useWorkspaceStore.getState().nodeStatus[nodeId];
       if (currentStatus === "running") {
         setNodeStatus(nodeId, "error");
@@ -471,23 +472,28 @@ export const Workspace: React.FC = () => {
           "error"
         );
       }
-      vfsService.setCurrentExecutingNode(null).catch(err => {
-        console.error(`[Workspace] Failed to clear current executing node:`, err);
-      });
+      if (socketsRef.current.size === 0) {
+        vfsService.setCurrentExecutingNode(null).catch(err => {
+          console.error(`[Workspace] Failed to clear current executing node:`, err);
+        });
+      }
     };
   };
 
   const stopExecution = (nodeId: string) => {
     console.log(`[Workspace] Stopping execution for node: ${nodeId}`);
-    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-      socketRef.current.close(1000, "User requested stop");
-      socketRef.current = null;
+    const socket = socketsRef.current.get(nodeId);
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.close(1000, "User requested stop");
     }
+    socketsRef.current.delete(nodeId);
     setNodeStatus(nodeId, "idle");
     addLog(nodeId, "Execution stopped by user.");
-    vfsService.setCurrentExecutingNode(null).catch(err => {
-      console.error(`[Workspace] Failed to clear current executing node on stop:`, err);
-    });
+    if (socketsRef.current.size === 0) {
+      vfsService.setCurrentExecutingNode(null).catch(err => {
+        console.error(`[Workspace] Failed to clear current executing node on stop:`, err);
+      });
+    }
   };
 
   const renderTabPanel = (tabsList: any[], activeId: string | null, groupId: string) => {
@@ -495,8 +501,8 @@ export const Workspace: React.FC = () => {
       const isActive = tab.id === activeId;
       const isCanvas = tab.type === "canvas";
 
-      // Optimize rendering: unmount non-active file/task/diff tabs (but keep git-history and git-diff mounted to preserve state)
-      const keepMounted = isCanvas || tab.type === "git-history" || tab.type === "git-diff";
+      // Optimize rendering: unmount non-active file/task tabs (but keep canvas, git-history, git-diff, and agent tabs mounted to preserve state and WebSocket connections)
+      const keepMounted = isCanvas || tab.type === "git-history" || tab.type === "git-diff" || tab.type === "agent";
       if (!isActive && !keepMounted) return null;
 
       const bgClass = isCanvas ? "bg-[var(--bg-canvas)]" : "bg-[var(--bg-editor)]";

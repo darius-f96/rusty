@@ -55,6 +55,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
   const consoleBufferRef = useRef<string>("");
   const savedChatPathRef = useRef<string | null>(null);
   const chatSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isStreamingRef = useRef(false);
 
   const modelOptions = customProviders.flatMap((p) => p.models).map((m) => ({
     id: m.id,
@@ -170,6 +171,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
     if (agentSocketRef.current) {
       agentSocketRef.current.close();
     }
+    isStreamingRef.current = false;
     setIsStreaming(false);
   };
 
@@ -204,6 +206,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
 
     const messageToSend = message;
     setMessage("");
+    isStreamingRef.current = true;
     setIsStreaming(true);
 
     let socket: WebSocket;
@@ -218,6 +221,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
         content: `Connection failed: ${err.message || String(err)}`,
         timestamp: new Date().toISOString(),
       });
+      isStreamingRef.current = false;
       setIsStreaming(false);
       notify(
         "Sidecar Connection Error",
@@ -346,18 +350,11 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
             updateAgentMessage(tab.id, consoleMessageIdRef.current, "");
           }
 
+          isStreamingRef.current = false;
           setIsStreaming(false);
           saveChatHistory();
           refreshHistoryAfterSave();
           return;
-        }
-
-        if (msg.type === "permission_request" && msg.tabId === tab.id) {
-          setPendingPermission({
-            id: msg.requestId,
-            toolCall: msg.toolCall,
-            description: msg.description,
-          });
         }
 
         if (msg.type === "agent_chat_error" && msg.tabId === tab.id) {
@@ -371,6 +368,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
             content: `Error: ${msg.error}`,
             timestamp: new Date().toISOString(),
           });
+          isStreamingRef.current = false;
           setIsStreaming(false);
           socket.close();
           notify("Agent Error", `The agent encountered an error: ${msg.error}`, "error");
@@ -396,6 +394,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
         content: "Connection failed. Please ensure the agent sidecar is running on port 4000.",
         timestamp: new Date().toISOString(),
       });
+      isStreamingRef.current = false;
       setIsStreaming(false);
       notify(
         "Sidecar Connection Failed",
@@ -407,7 +406,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
     socket.onclose = (event) => {
       console.log(`[AgentTab] WebSocket closed (code: ${event.code})`);
 
-      if (isStreaming && consoleBufferRef.current && consoleBufferRef.current.trim()) {
+      if (isStreamingRef.current && consoleBufferRef.current && consoleBufferRef.current.trim()) {
         const consoleContent = consoleBufferRef.current.trim();
         if (consoleContent.length > 50) {
           addAgentMessage(tab.id, {
@@ -419,6 +418,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
           if (consoleMessageIdRef.current) {
             updateAgentMessage(tab.id, consoleMessageIdRef.current, "");
           }
+          isStreamingRef.current = false;
           setIsStreaming(false);
           saveChatHistory();
           refreshHistoryAfterSave();
@@ -427,13 +427,14 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
         }
       }
 
-      if (isStreaming) {
+      if (isStreamingRef.current) {
         addAgentMessage(tab.id, {
           id: `msg_${Date.now()}`,
           role: "assistant" as const,
           content: "Connection closed unexpectedly.",
           timestamp: new Date().toISOString(),
         });
+        isStreamingRef.current = false;
         setIsStreaming(false);
         notify(
           "Connection Lost",

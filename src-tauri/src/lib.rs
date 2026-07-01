@@ -64,7 +64,6 @@ async fn read_file_vfs(
 async fn write_file_vfs(
     state: tauri::State<'_, VfsState>,
     node_file_tracker: tauri::State<'_, NodeFileTracker>,
-    current_exec_node: tauri::State<'_, CurrentExecutingNode>,
     path: String,
     content: String,
     node_id: Option<String>,
@@ -82,9 +81,7 @@ async fn write_file_vfs(
     let tab_map = vfs.entry(tid.clone()).or_insert_with(HashMap::new);
     tab_map.insert(path.clone(), content);
 
-    if let Some(nid) = node_id.or_else(|| {
-        current_exec_node.0.lock().ok().and_then(|g| g.clone())
-    }) {
+    if let Some(nid) = node_id {
         let mut tracker = node_file_tracker.0.lock().map_err(|e| e.to_string())?;
         tracker.entry(nid.clone()).or_insert_with(Vec::new).push(path.clone());
         println!("Rust [write_file_vfs] tracked file for node: {}", nid);
