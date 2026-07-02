@@ -14,9 +14,6 @@ type InstallState = {
 };
 
 export const SettingsTab: React.FC = () => {
-  const rootPath = useWorkspaceStore((state) => state.rootPath);
-  const activeCustomProviderId = useWorkspaceStore((state) => state.activeCustomProviderId);
-  const activeModel = useWorkspaceStore((state) => state.activeModel);
   const activeThemeId = useWorkspaceStore((state) => state.activeThemeId);
   const setActiveThemeId = useWorkspaceStore((state) => state.setActiveThemeId);
 
@@ -98,6 +95,13 @@ export const SettingsTab: React.FC = () => {
     { id: "sakura", name: "Sakura Blossom" },
     { id: "spaceDust", name: "Space Dust" },
     { id: "goldsrc", name: "GoldSrc" },
+    { id: "oneMonokai", name: "One Monokai" },
+    { id: "andromeda", name: "Andromeda" },
+    { id: "atomOneLight", name: "Atom One Light" },
+    { id: "noctis", name: "Noctis" },
+    { id: "panda", name: "Panda Theme" },
+    { id: "ruby", name: "Ruby" },
+    { id: "blulocoLight", name: "Bluloco Light" },
   ];
 
   const handleServerPathChange = (lang: string, val: string) => {
@@ -161,27 +165,6 @@ export const SettingsTab: React.FC = () => {
               onChange={setActiveThemeId}
               options={themeOptions}
             />
-          </div>
-
-          <div className="space-y-1.5 pt-2">
-            <label className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider font-mono">Workspace Directory</label>
-            <div className="bg-[var(--bg-app)] border border-[var(--border-color)] px-3 py-2 rounded-lg font-mono text-xs text-[var(--text-light)] select-text break-all">
-              {rootPath || "No workspace folder selected"}
-            </div>
-          </div>
-
-          <div className="space-y-1.5 pt-2">
-            <label className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider font-mono">Active LLM Provider</label>
-            <div className="bg-[var(--bg-app)] border border-[var(--border-color)] px-3 py-2 rounded-lg font-mono text-xs text-[var(--text-light)]">
-              {activeCustomProviderId || "None"}
-            </div>
-          </div>
-
-          <div className="space-y-1.5 pt-2">
-            <label className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider font-mono">Active Target Model</label>
-            <div className="bg-[var(--bg-app)] border border-[var(--border-color)] px-3 py-2 rounded-lg font-mono text-xs text-[var(--text-light)]">
-              {activeModel || "None"}
-            </div>
           </div>
         </div>
 

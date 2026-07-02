@@ -524,9 +524,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       isPipelineApplied: false
     }
   },
-  activeThemeId: localStorage.getItem("selected_theme") || "dark",
+  activeThemeId: localStorage.getItem("selected_theme") || "spaceDust",
   setActiveThemeId: (themeId) => {
-    const t = themes[themeId] || themes.dark;
+    const t = themes[themeId] || themes.spaceDust;
     applyThemeProperties(t);
     localStorage.setItem("selected_theme", themeId);
     set({ activeThemeId: themeId });
@@ -1845,7 +1845,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         localStorage.setItem("selected_theme", config.activeThemeId);
         const themeId = config.activeThemeId;
         const { themes, applyThemeProperties, defineMonacoTheme } = await import("./theme");
-        const t = themes[themeId] || themes.dark;
+        const t = themes[themeId] || themes.spaceDust;
         applyThemeProperties(t);
 
         const { loader } = await import("@monaco-editor/react");

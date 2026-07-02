@@ -8,7 +8,7 @@ interface AxiomIconProps {
 
 export const AxiomIcon: React.FC<AxiomIconProps> = ({ size = 20, className = "" }) => {
   const activeThemeId = useWorkspaceStore((state) => state.activeThemeId);
-  const isLight = activeThemeId === "sepia";
+  const isLight = ["sepia", "atomOneLight", "blulocoLight"].includes(activeThemeId);
 
   return (
     <img
