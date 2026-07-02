@@ -302,6 +302,11 @@ class LspConnection {
 export class LspService {
   private static connections = new Map<string, LspConnection>();
   private static registeredProviders = new Set<string>();
+  // Reference count of editors currently using a given model URI. A model is
+  // only opened with the language server on the first attach and closed on the
+  // last detach, so split editors sharing one Monaco model don't tear down the
+  // LSP document when one of them is closed.
+  private static modelRefCounts = new Map<string, number>();
 
   public static async ensureConnection(filePath: string): Promise<LspConnection | null> {
     const store = useWorkspaceStore.getState();
@@ -364,8 +369,13 @@ export class LspService {
     this.ensureConnection(filePath).then((connection) => {
       if (!connection) return;
 
-      // Sync document open
-      connection.openModel(uri, languageId, model.getVersionId(), model.getValue());
+      const refCount = (this.modelRefCounts.get(uri) || 0) + 1;
+      this.modelRefCounts.set(uri, refCount);
+
+      // Sync document open only on the first attach for this URI
+      if (refCount === 1) {
+        connection.openModel(uri, languageId, model.getVersionId(), model.getValue());
+      }
 
       // Sync modifications
       const changeDisposable = model.onDidChangeContent(() => {
@@ -376,9 +386,15 @@ export class LspService {
       editor._lspDisposable = {
         dispose: () => {
           changeDisposable.dispose();
-          connection.closeModel(uri);
-          // Clear markers
-          monaco.editor.setModelMarkers(model, "lsp", []);
+          const remaining = (this.modelRefCounts.get(uri) || 0) - 1;
+          if (remaining <= 0) {
+            this.modelRefCounts.delete(uri);
+            connection.closeModel(uri);
+            // Clear markers only when the last editor for this model is gone
+            monaco.editor.setModelMarkers(model, "lsp", []);
+          } else {
+            this.modelRefCounts.set(uri, remaining);
+          }
         },
       };
     });

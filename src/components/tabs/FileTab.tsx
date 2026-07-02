@@ -89,9 +89,26 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
       }
       if (editorRef.current) {
         LspService.disposeEditor(editorRef.current);
-        const model = editorRef.current.getModel();
+      }
+      // We render <Editor keepCurrentModel /> below, so @monaco-editor/react
+      // never disposes the shared Monaco model on unmount. (Its keepCurrentModel
+      // flag is captured at mount time inside a [] effect, which predates any
+      // split, so a conditional prop can't reliably cover the shared-model
+      // case — closing the original editor would still dispose the model and
+      // black out the split copy.) We own model lifecycle here: dispose the
+      // model only when this was the last editor group still showing the file.
+      const monaco = (window as any).monaco;
+      if (monaco) {
+        const uri = monaco.Uri.parse(`file://${tab.key}`);
+        const model = monaco.editor.getModel(uri);
         if (model) {
           unregisterModelPath(model.uri.toString());
+          const stillOpenElsewhere = useWorkspaceStore
+            .getState()
+            .editorGroups.some((g) => g.openTabs.some((t) => t.key === tab.key));
+          if (!stillOpenElsewhere) {
+            model.dispose();
+          }
         }
       }
     };
@@ -290,6 +307,7 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
         value={fileContent}
         onChange={handleEditorChange}
         onMount={handleEditorMount}
+        keepCurrentModel
         options={{
           minimap: { enabled: true },
           scrollBeyondLastLine: false,
