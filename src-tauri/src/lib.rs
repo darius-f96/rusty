@@ -29,6 +29,7 @@ pub struct SidecarState(pub Arc<Mutex<Option<CommandChild>>>);
 pub struct TerminalSession {
     pub master: Box<dyn MasterPty + Send>,
     pub writer: Box<dyn Write + Send>,
+    pub child: Box<dyn portable_pty::Child + Send + Sync>,
 }
 
 pub struct TerminalState(pub Arc<Mutex<HashMap<String, TerminalSession>>>);
@@ -445,7 +446,7 @@ async fn create_terminal_session(
             cmd.cwd(cwd_dir);
         }
     }
-    let _child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
+    let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
     let master = pair.master;
     let mut reader = master.try_clone_reader().map_err(|e| e.to_string())?;
     let writer = master.take_writer().map_err(|e| e.to_string())?;
@@ -455,6 +456,7 @@ async fn create_terminal_session(
         map.insert(session_id.clone(), TerminalSession {
             master,
             writer,
+            child,
         });
     }
 

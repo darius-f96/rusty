@@ -18,6 +18,11 @@ export const LocalTerminal: React.FC<LocalTerminalProps> = ({ sessionId, cwd, is
   const fitAddonRef = useRef<FitAddon | null>(null);
   const rootPath = useWorkspaceStore((state) => state.rootPath);
   const isSessionCreatedRef = useRef<boolean>(false);
+  const isActiveRef = useRef<boolean>(isActive);
+
+  useEffect(() => {
+    isActiveRef.current = isActive;
+  }, [isActive]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -39,7 +44,13 @@ export const LocalTerminal: React.FC<LocalTerminalProps> = ({ sessionId, cwd, is
     term.loadAddon(fitAddon);
 
     term.open(containerRef.current);
-    fitAddon.fit();
+    if (isActive && containerRef.current.clientWidth > 0 && containerRef.current.clientHeight > 0) {
+      try {
+        fitAddon.fit();
+      } catch (err) {
+        console.warn("xterm initial fit failed:", err);
+      }
+    }
 
     terminalRef.current = term;
     fitAddonRef.current = fitAddon;
@@ -102,15 +113,29 @@ export const LocalTerminal: React.FC<LocalTerminalProps> = ({ sessionId, cwd, is
     initTerminal();
 
     // Resize observer to handle container size changes
-    const resizeObserver = new ResizeObserver(() => {
-      if (fitAddonRef.current && terminalRef.current && isSessionCreatedRef.current) {
-        fitAddonRef.current.fit();
-        const cols = terminalRef.current.cols;
-        const rows = terminalRef.current.rows;
-        invoke("resize_terminal", { sessionId, cols, rows }).catch((err) => {
-          console.error("Failed to resize terminal:", err);
-        });
-      }
+    const resizeObserver = new ResizeObserver((entries) => {
+      if (!isActiveRef.current) return;
+      const entry = entries[0];
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      if (width <= 0 || height <= 0) return;
+
+      requestAnimationFrame(() => {
+        if (fitAddonRef.current && terminalRef.current && isSessionCreatedRef.current) {
+          try {
+            fitAddonRef.current.fit();
+            const cols = terminalRef.current.cols;
+            const rows = terminalRef.current.rows;
+            if (cols > 0 && rows > 0) {
+              invoke("resize_terminal", { sessionId, cols, rows }).catch((err) => {
+                console.error("Failed to resize terminal:", err);
+              });
+            }
+          } catch (err) {
+            console.warn("xterm fit error:", err);
+          }
+        }
+      });
     });
     resizeObserver.observe(containerRef.current);
 
@@ -130,13 +155,19 @@ export const LocalTerminal: React.FC<LocalTerminalProps> = ({ sessionId, cwd, is
     if (isActive && terminalRef.current && fitAddonRef.current && isSessionCreatedRef.current) {
       const timer = setTimeout(() => {
         if (fitAddonRef.current && terminalRef.current) {
-          fitAddonRef.current.fit();
-          const cols = terminalRef.current.cols;
-          const rows = terminalRef.current.rows;
-          invoke("resize_terminal", { sessionId, cols, rows }).catch((err) => {
-            console.error("Failed to resize terminal:", err);
-          });
-          terminalRef.current.focus();
+          try {
+            fitAddonRef.current.fit();
+            const cols = terminalRef.current.cols;
+            const rows = terminalRef.current.rows;
+            if (cols > 0 && rows > 0) {
+              invoke("resize_terminal", { sessionId, cols, rows }).catch((err) => {
+                console.error("Failed to resize terminal:", err);
+              });
+            }
+            terminalRef.current.focus();
+          } catch (err) {
+            console.warn("xterm fit error on activate:", err);
+          }
         }
       }, 50);
       return () => clearTimeout(timer);

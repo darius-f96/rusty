@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState, useCallback } from "react";
 import { X, Plus } from "lucide-react";
 import { useWorkspaceStore } from "../store";
 import { LocalTerminal } from "./LocalTerminal";
@@ -17,6 +17,64 @@ export const TerminalPanel: React.FC = () => {
 
   const consoleScrollRef = useRef<HTMLDivElement>(null);
 
+  // Height Resizing logic
+  const [terminalHeight, setTerminalHeight] = useState(() => {
+    const stored = localStorage.getItem("terminal_height");
+    if (stored) {
+      const val = parseInt(stored, 10);
+      if (!isNaN(val) && val >= 100 && val <= 800) {
+        return val;
+      }
+    }
+    return 240;
+  });
+
+  const [isDragging, setIsDragging] = useState(false);
+  const isDraggingRef = useRef(false);
+  const startYRef = useRef(0);
+  const startHeightRef = useRef(240);
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isDraggingRef.current) return;
+    const dy = e.clientY - startYRef.current;
+    const newHeight = Math.max(100, Math.min(800, startHeightRef.current - dy));
+    setTerminalHeight(newHeight);
+  }, []);
+
+  const handleMouseUp = useCallback(() => {
+    isDraggingRef.current = false;
+    setIsDragging(false);
+    document.removeEventListener("mousemove", handleMouseMove);
+    document.removeEventListener("mouseup", handleMouseUp);
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+  }, [handleMouseMove]);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isDraggingRef.current = true;
+    setIsDragging(true);
+    startYRef.current = e.clientY;
+    startHeightRef.current = terminalHeight;
+    document.body.style.cursor = "ns-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  }, [terminalHeight, handleMouseMove, handleMouseUp]);
+
+  // Save to local storage when height changes
+  useEffect(() => {
+    localStorage.setItem("terminal_height", String(terminalHeight));
+  }, [terminalHeight]);
+
+  // Clean up on unmount
+  useEffect(() => {
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [handleMouseMove, handleMouseUp]);
+
   // Auto-scroll dev logs
   useEffect(() => {
     if (showDevConsole && activeTerminalTabId === "dev-logs" && consoleScrollRef.current) {
@@ -28,10 +86,19 @@ export const TerminalPanel: React.FC = () => {
 
   return (
     <div
-      className={`border-t border-[var(--border-color)] bg-[var(--bg-header)] flex flex-col transition-all duration-300 ${
-        showDevConsole ? "h-60" : "h-9"
-      } z-10 overflow-hidden font-sans`}
+      style={{ height: showDevConsole ? `${terminalHeight}px` : "36px" }}
+      className={`border-t border-[var(--border-color)] bg-[var(--bg-header)] flex flex-col z-10 overflow-hidden font-sans relative ${
+        isDragging ? "" : "transition-[height] duration-300"
+      }`}
     >
+      {/* Top Drag Resizer Handle */}
+      {showDevConsole && (
+        <div
+          onMouseDown={handleMouseDown}
+          className="absolute top-0 left-0 right-0 h-1 cursor-ns-resize hover:bg-[var(--accent-color)]/50 z-30 transition-colors"
+        />
+      )}
+
       {/* Header Bar */}
       <div
         onClick={() => setShowDevConsole(!showDevConsole)}
@@ -79,7 +146,7 @@ export const TerminalPanel: React.FC = () => {
                         e.stopPropagation();
                         closeTerminalTab(tab.id);
                       }}
-                      className="hover:bg-[var(--bg-app)] hover:text-[var(--text-light)] rounded-full p-0.5 text-zinc-500 hover:text-zinc-300 transition-all cursor-pointer border-none flex items-center justify-center"
+                      className="hover:bg-[var(--bg-app)] hover:text-[var(--text-light)] rounded-full p-0.5 text-zinc-500 hover:text-zinc-300 transition-all cursor-pointer border-none flex items-center justify-center bg-transparent"
                     >
                       <X size={10} />
                     </button>
