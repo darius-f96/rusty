@@ -5,6 +5,13 @@ import { invoke } from "@tauri-apps/api/core";
 import { getFileTypeDetails } from "../../services/fileTypeService";
 import { themes, defineMonacoTheme } from "../../theme";
 import { GitBranch, History, TreePine } from "lucide-react";
+import { LspService } from "../../services/lspService";
+import {
+  registerModelPath,
+  unregisterModelPath,
+  resolveModelPath,
+  resolveInmemoryByContent,
+} from "../../services/modelPathRegistry";
 
 // Register custom Monaco theme once
 loader.init().then((monaco) => {
@@ -80,6 +87,13 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
+      if (editorRef.current) {
+        LspService.disposeEditor(editorRef.current);
+        const model = editorRef.current.getModel();
+        if (model) {
+          unregisterModelPath(model.uri.toString());
+        }
+      }
     };
   }, [tab.key]);
 
@@ -137,6 +151,70 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
 
   const handleEditorMount = (editor: any) => {
     editorRef.current = editor;
+
+    const monaco = (window as any).monaco;
+
+    // Register the model's URI in the path registry so openCodeEditor can
+    // resolve definition jumps back to this file.
+    const model = editor.getModel();
+    if (model && monaco) {
+      registerModelPath(model.uri.toString(), tab.key);
+    }
+
+    // Register LSP service
+    LspService.registerEditor(editor, tab.key);
+
+    // Override code navigation service to intercept Go to Definition (CMD+click / F12)
+    // and open the target file in a new tab in Axiom instead of Monaco's built-in viewer.
+    const editorService = editor._codeEditorService;
+    if (editorService) {
+      editorService.openCodeEditor = async (input: any) => {
+        if (!input || !input.resource) return null;
+
+        const targetUri = input.resource;
+        const monaco = (window as any).monaco;
+        let filePath: string | null = null;
+
+        // 1. Check the path registry first (covers both file:// and inmemory://
+        //    URIs for models we created).
+        const uriStr = targetUri.toString?.() || targetUri.external;
+        filePath = resolveModelPath(uriStr);
+
+        // 2. For file:// URIs, extract the filesystem path directly.
+        if (!filePath && targetUri.scheme === "file") {
+          filePath = targetUri.fsPath || targetUri.path;
+        }
+
+        // 3. For inmemory:// URIs, try content matching — Monaco's TypeScript
+        //    worker creates internal inmemory:// models whose content matches
+        //    a real file we have open as a file:// model.
+        if (!filePath && targetUri.scheme === "inmemory" && monaco) {
+          filePath = resolveInmemoryByContent(monaco, targetUri);
+        }
+
+        // Strip leading slash on Windows paths (e.g. /C:/Users/... -> C:/Users/...)
+        if (filePath && filePath.startsWith("/") && /^\/[a-zA-Z]:/.test(filePath)) {
+          filePath = filePath.substring(1);
+        }
+
+        if (!filePath) {
+          console.warn("[FileTab] Cannot resolve definition target to a file path:", uriStr);
+          return null;
+        }
+
+        const lineNum = input.options && input.options.selection ? input.options.selection.startLineNumber : 1;
+        const openTab = useWorkspaceStore.getState().openTab;
+        const title = filePath.split("/").pop() || filePath;
+        openTab({
+          id: `file-${filePath}`,
+          type: "file",
+          title,
+          key: filePath,
+          line: lineNum,
+        });
+        return editor;
+      };
+    }
 
     // Toggle blame display when user clicks on line numbers gutter
     editor.onMouseDown((e: any) => {
@@ -206,6 +284,7 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
 
       <Editor
         height="100%"
+        path={`file://${tab.key}`}
         language={getEditorLanguage(tab.key)}
         theme="axiom-custom-theme"
         value={fileContent}

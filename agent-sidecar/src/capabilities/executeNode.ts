@@ -11,9 +11,10 @@ import path from "path";
 import { safeSend, getNextId, registerPendingRequest } from "../services/websocket";
 import { createListFilesTool, createSearchCodebaseTool } from "../services/tools";
 import { createMcpTools, McpServerConfig } from "../services/mcpClient";
+import { createLspTools } from "../services/lspTools";
 
 export async function executeNode(ws: WebSocket, data: any): Promise<void> {
-  const { nodeId, instructions, model, workspaceRoot, inputFiles, customProvider, globalContext, contextDescriptions, chatHistory, skill, mcpContext, upstreamTaskContext } = data;
+  const { nodeId, instructions, model, workspaceRoot, inputFiles, customProvider, globalContext, contextDescriptions, chatHistory, skill, mcpContext, upstreamTaskContext, lspSettings } = data;
   console.log(`WebSocket [Server] execute_node task starting`, {
     nodeId,
     model,
@@ -22,7 +23,8 @@ export async function executeNode(ws: WebSocket, data: any): Promise<void> {
     chatHistoryCount: chatHistory?.length || 0,
     hasSkill: !!skill,
     mcpContextCount: mcpContext?.length || 0,
-    upstreamTasksCount: upstreamTaskContext?.length || 0
+    upstreamTasksCount: upstreamTaskContext?.length || 0,
+    lspEnabled: lspSettings?.enabled
   });
 
   const modifiedFiles = new Set<string>();
@@ -123,11 +125,14 @@ export async function executeNode(ws: WebSocket, data: any): Promise<void> {
 
     sendLog("Initializing Pi agent runtime...");
 
+    const lspTools = createLspTools(workspaceRoot, lspSettings, sendLog);
+
     const allTools = [
       readVfsTool,
       writeVfsTool,
       createListFilesTool(workspaceRoot),
-      createSearchCodebaseTool(workspaceRoot)
+      createSearchCodebaseTool(workspaceRoot),
+      ...lspTools
     ];
 
     // Connect to MCP servers attached via MCP context nodes and merge their tools.
@@ -180,7 +185,13 @@ export async function executeNode(ws: WebSocket, data: any): Promise<void> {
       }
     }
 
-    const enabledToolNames = skill?.enabledTools || ["read_file", "write_file", "list_files", "search_codebase"];
+    const enabledToolNames = skill?.enabledTools || [
+      "read_file",
+      "write_file",
+      "list_files",
+      "search_codebase",
+      ...(lspSettings?.enabled ? ["lsp_get_definition", "lsp_get_references", "lsp_get_diagnostics"] : [])
+    ];
     // Built-in tools are filtered by the skill; MCP tools are always available.
     const tools = [
       ...allTools.filter((t: any) => enabledToolNames.includes(t.name)),
@@ -192,6 +203,9 @@ export async function executeNode(ws: WebSocket, data: any): Promise<void> {
       write_file: "- 'write_file': Write or edit a file.",
       list_files: "- 'list_files': Discover files in the workspace.",
       search_codebase: "- 'search_codebase': Find specific code patterns.",
+      lsp_get_definition: "- 'lsp_get_definition': Find definition of a symbol (input: {\"path\": \"file/path\", \"line\": lineNum, \"character\": colNum}).",
+      lsp_get_references: "- 'lsp_get_references': Find all references of a symbol (input: {\"path\": \"file/path\", \"line\": lineNum, \"character\": colNum}).",
+      lsp_get_diagnostics: "- 'lsp_get_diagnostics': Get compile errors/warnings for a file (input: {\"path\": \"file/path\"})."
     };
     const toolListText = [
       ...enabledToolNames.map((name: string) => toolDescriptions[name] || `- '${name}'`),

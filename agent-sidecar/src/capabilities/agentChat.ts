@@ -11,10 +11,11 @@ import path from "path";
 import { safeSend, getNextId, registerPendingRequest } from "../services/websocket";
 import { createListFilesTool, createSearchCodebaseTool } from "../services/tools";
 import { callLlmWithToolsMultiRound, LlmConfig } from "../services/llm";
+import { createLspTools } from "../services/lspTools";
 
 export async function agentChat(ws: WebSocket, data: any): Promise<void> {
-  const { tabId, message, model, workspaceRoot, chatHistory, customProvider, skill } = data;
-  console.log(`WebSocket [Server] agent_chat starting`, { tabId, workspaceRoot, model, hasSkill: !!skill });
+  const { tabId, message, model, workspaceRoot, chatHistory, customProvider, skill, lspSettings } = data;
+  console.log(`WebSocket [Server] agent_chat starting`, { tabId, workspaceRoot, model, hasSkill: !!skill, lspEnabled: lspSettings?.enabled });
 
   const modifiedFiles = new Set<string>();
 
@@ -86,14 +87,23 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
       }
     };
 
-const allTools = [
+    const lspTools = createLspTools(workspaceRoot, lspSettings, sendLog);
+
+    const allTools = [
       readVfsTool,
       writeVfsTool,
       createListFilesTool(workspaceRoot),
-      createSearchCodebaseTool(workspaceRoot)
+      createSearchCodebaseTool(workspaceRoot),
+      ...lspTools
     ];
 
-    const enabledToolNames = skill?.enabledTools || ["read_file", "write_file", "list_files", "search_codebase"];
+    const enabledToolNames = skill?.enabledTools || [
+      "read_file",
+      "write_file",
+      "list_files",
+      "search_codebase",
+      ...(lspSettings?.enabled ? ["lsp_get_definition", "lsp_get_references", "lsp_get_diagnostics"] : [])
+    ];
     const tools = allTools.filter((t: any) => enabledToolNames.includes(t.name));
 
     const toolDescriptions: Record<string, string> = {
@@ -101,6 +111,9 @@ const allTools = [
       write_file: "- 'write_file': Write or edit a file (input: {\"path\": \"file/path\", \"content\": \"full content\"}).",
       list_files: "- 'list_files': List all files in the workspace (no input needed).",
       search_codebase: "- 'search_codebase': Search for text patterns across the codebase (input: {\"pattern\": \"search text\"}).",
+      lsp_get_definition: "- 'lsp_get_definition': Find definition of a symbol (input: {\"path\": \"file/path\", \"line\": lineNum, \"character\": colNum}).",
+      lsp_get_references: "- 'lsp_get_references': Find all references of a symbol (input: {\"path\": \"file/path\", \"line\": lineNum, \"character\": colNum}).",
+      lsp_get_diagnostics: "- 'lsp_get_diagnostics': Get compile errors/warnings for a file (input: {\"path\": \"file/path\"})."
     };
     const toolListText = enabledToolNames.map((name: string) => toolDescriptions[name] || `- '${name}'`).join("\n");
 
@@ -108,6 +121,7 @@ const allTools = [
 You help the user analyze, modify, and implement code in their workspace.
 
 Workspace root: ${workspaceRoot || "unknown"}
+
 
 You have access to tools:
 ${toolListText}

@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Plus, Send, X, FileText, Folder, Paperclip, Square } from "lucide-react";
+import { Plus, Send, X, Paperclip, Square } from "lucide-react";
+import Editor, { loader } from "@monaco-editor/react";
 import { useWorkspaceStore } from "../../store";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { searchService } from "../../services/searchService";
 
 interface ChatInputProps {
   value: string;
@@ -20,6 +20,9 @@ interface FileItem {
   isDir: boolean;
 }
 
+// Global variable to avoid double registering the markdown trigger
+let markdownTriggerRegistered = false;
+
 export const ChatInput: React.FC<ChatInputProps> = ({
   value,
   onChange,
@@ -33,16 +36,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const rootPath = useWorkspaceStore((state) => state.rootPath);
   
   const [attachments, setAttachments] = useState<{ path: string; name: string; isDir?: boolean }[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [suggestions, setSuggestions] = useState<FileItem[]>([]);
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const [suggestionTriggerIndex, setSuggestionTriggerIndex] = useState(-1);
+  const editorRef = useRef<any>(null);
 
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const suggestionsRef = useRef<HTMLDivElement>(null);
-  const autocompleteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Flatten the file tree for autocompletion fallback
+  // Flatten the file tree for autocompletion
   const getFlatFiles = (): FileItem[] => {
     const list: FileItem[] = [];
     const recurse = (entries: any[]) => {
@@ -61,152 +57,53 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     return list;
   };
 
-  // Auto-resize the textarea
+  // Register the global `@` trigger once Monaco is loaded
   useEffect(() => {
-    const textarea = textareaRef.current;
-    if (textarea) {
-      textarea.style.height = "auto";
-      textarea.style.height = `${Math.min(200, textarea.scrollHeight)}px`;
-    }
-  }, [value]);
+    loader.init().then((monaco) => {
+      if (markdownTriggerRegistered) return;
+      markdownTriggerRegistered = true;
 
-  // Handle click outside suggestions box & clean timeouts
-  useEffect(() => {
-    const handleOutsideClick = (e: MouseEvent) => {
-      if (suggestionsRef.current && !suggestionsRef.current.contains(e.target as Node)) {
-        setShowSuggestions(false);
-      }
-    };
-    document.addEventListener("mousedown", handleOutsideClick);
-    return () => {
-      document.removeEventListener("mousedown", handleOutsideClick);
-      if (autocompleteTimeoutRef.current) {
-        clearTimeout(autocompleteTimeoutRef.current);
-      }
-    };
-  }, []);
+      console.log("[ChatInput] Registering markdown autolink suggestion provider (@)");
+      monaco.languages.registerCompletionItemProvider("markdown", {
+        triggerCharacters: ["@"],
+        provideCompletionItems: (model: any, position: any) => {
+          // Verify we are triggered by '@'
+          const textUntilPosition = model.getValueInRange({
+            startLineNumber: position.lineNumber,
+            startColumn: 1,
+            endLineNumber: position.lineNumber,
+            endColumn: position.column,
+          });
 
-  const searchWorkspaceFiles = async (query: string) => {
-    if (!rootPath) {
-      setShowSuggestions(false);
-      return;
-    }
+          if (!textUntilPosition.endsWith("@")) {
+            return { suggestions: [] };
+          }
 
-    if (!query) {
-      // Instant fallback for empty query
-      const flat = getFlatFiles();
-      const filtered = flat.slice(0, 10);
-      if (filtered.length > 0) {
-        setSuggestions(filtered);
-        setShowSuggestions(true);
-        setSelectedIndex(0);
-      } else {
-        setShowSuggestions(false);
-      }
-      return;
-    }
+          const flatFiles = getFlatFiles();
+          const suggestions = flatFiles.map((file) => {
+            const relPath = rootPath ? file.path.replace(`${rootPath}/`, "") : file.path;
+            return {
+              label: `@${file.name}`,
+              kind: file.isDir
+                ? monaco.languages.CompletionItemKind.Folder
+                : monaco.languages.CompletionItemKind.File,
+              detail: relPath,
+              insertText: relPath,
+              documentation: `Insert project reference: ${file.path}`,
+              range: {
+                startLineNumber: position.lineNumber,
+                startColumn: position.column - 1,
+                endLineNumber: position.lineNumber,
+                endColumn: position.column,
+              },
+            };
+          });
 
-    try {
-      const results = await searchService.searchProject({
-        rootDir: rootPath,
-        query,
-        matchCase: false,
-        wholeWord: false,
-        isRegex: false,
+          return { suggestions };
+        },
       });
-
-      const fileMatches = results
-        .filter((r) => !r.is_content_match) // only filenames
-        .map((r) => ({
-          name: r.name,
-          path: r.path,
-          isDir: false,
-        }))
-        .slice(0, 10);
-
-      if (fileMatches.length > 0) {
-        setSuggestions(fileMatches);
-        setShowSuggestions(true);
-        setSelectedIndex(0);
-      } else {
-        setShowSuggestions(false);
-      }
-    } catch (err) {
-      console.error("Failed autocomplete search:", err);
-      setShowSuggestions(false);
-    }
-  };
-
-  // Handle keydown for autocompletion suggestions
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (showSuggestions && suggestions.length > 0) {
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setSelectedIndex((prev) => (prev + 1) % suggestions.length);
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setSelectedIndex((prev) => (prev - 1 + suggestions.length) % suggestions.length);
-      } else if (e.key === "Enter" || e.key === "Tab") {
-        e.preventDefault();
-        insertSuggestion(suggestions[selectedIndex]);
-      } else if (e.key === "Escape") {
-        e.preventDefault();
-        setShowSuggestions(false);
-      }
-    } else {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        handleSend();
-      }
-    }
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const text = e.target.value;
-    onChange(text);
-
-    const selectionStart = e.target.selectionStart;
-    const beforeCursor = text.substring(0, selectionStart);
-    
-    // Check if user has typed `@` followed by any non-whitespace characters
-    const atMatch = beforeCursor.match(/@([^\s@]*)$/);
-
-    if (atMatch) {
-      const query = atMatch[1].toLowerCase();
-      const triggerIdx = selectionStart - atMatch[0].length;
-      setSuggestionTriggerIndex(triggerIdx);
-
-      if (autocompleteTimeoutRef.current) {
-        clearTimeout(autocompleteTimeoutRef.current);
-      }
-
-      autocompleteTimeoutRef.current = setTimeout(() => {
-        searchWorkspaceFiles(query);
-      }, 150);
-    } else {
-      setShowSuggestions(false);
-    }
-  };
-
-  const insertSuggestion = (item: FileItem) => {
-    const text = value;
-    const startPart = text.substring(0, suggestionTriggerIndex);
-    // Use relative path if possible, or just the file name
-    const relativePath = rootPath ? item.path.replace(`${rootPath}/`, "") : item.name;
-    const completedText = `${startPart}@${relativePath} ` + text.substring(textareaRef.current?.selectionStart || 0);
-    
-    onChange(completedText);
-    setShowSuggestions(false);
-
-    // Reposition cursor
-    setTimeout(() => {
-      if (textareaRef.current) {
-        const cursorPosition = startPart.length + relativePath.length + 2; // +2 for @ and space
-        textareaRef.current.setSelectionRange(cursorPosition, cursorPosition);
-        textareaRef.current.focus();
-      }
-    }, 10);
-  };
+    });
+  }, [fileTree, rootPath]);
 
   const handleAddAttachment = async () => {
     try {
@@ -223,7 +120,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           return { path: p, name, isDir: false };
         });
         setAttachments((prev) => {
-          // Avoid duplicates
           const filtered = newAttachments.filter((n) => !prev.some((p) => p.path === n.path));
           return [...prev, ...filtered];
         });
@@ -238,60 +134,58 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const handleSend = () => {
-    if (!value.trim() && attachments.length === 0) return;
+    // Read directly from editor value to ensure sync
+    const content = editorRef.current ? editorRef.current.getValue() : value;
+    if (!content.trim() && attachments.length === 0) return;
+    
+    // Clear editor
+    if (editorRef.current) {
+      editorRef.current.setValue("");
+    }
+    onChange("");
+    
     onSend(attachments);
     setAttachments([]);
   };
 
-  // Close suggestions on outside click
-  useEffect(() => {
-    const handleOutsideClick = (e: MouseEvent) => {
-      if (suggestionsRef.current && !suggestionsRef.current.contains(e.target as Node)) {
-        setShowSuggestions(false);
+  const handleEditorMount = (editor: any, monaco: any) => {
+    editorRef.current = editor;
+
+    // Send on Enter key, ONLY if suggest widget is not visible
+    editor.addAction({
+      id: "send-message",
+      label: "Send Message",
+      keybindings: [monaco.KeyCode.Enter],
+      precondition: "!suggestWidgetVisible",
+      run: () => {
+        handleSend();
       }
-    };
-    document.addEventListener("mousedown", handleOutsideClick);
-    return () => document.removeEventListener("mousedown", handleOutsideClick);
-  }, []);
+    });
+
+    // Support Shift+Enter for new lines
+    editor.addAction({
+      id: "insert-newline",
+      label: "Insert Newline",
+      keybindings: [monaco.KeyMod.Shift | monaco.KeyCode.Enter],
+      run: () => {
+        const selection = editor.getSelection();
+        const range = new monaco.Range(
+          selection.startLineNumber,
+          selection.startColumn,
+          selection.endLineNumber,
+          selection.endColumn
+        );
+        const id = { major: 1, minor: 1 };
+        const text = "\n";
+        const op = { identifier: id, range: range, text: text, forceMoveMarkers: true };
+        editor.executeEdits("my-source", [op]);
+      }
+    });
+  };
 
   return (
     <div className="w-full flex flex-col relative bg-[var(--bg-app)] border border-[var(--border-color)] rounded-xl shadow-md p-2">
-      {/* 1. Autocomplete Dropdown */}
-      {showSuggestions && suggestions.length > 0 && (
-        <div
-          ref={suggestionsRef}
-          className="absolute left-2 bottom-full mb-1 z-[150] w-72 max-h-48 overflow-y-auto bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-lg shadow-xl py-1"
-        >
-          <div className="px-3 py-1 border-b border-[var(--border-color)]/40 text-[9px] font-mono text-[var(--text-muted)] uppercase tracking-wider">
-            Autolink Files
-          </div>
-          {suggestions.map((item, idx) => (
-            <button
-              key={item.path}
-              onClick={() => insertSuggestion(item)}
-              className={`w-full text-left px-3 py-1.5 flex items-center justify-between text-xs transition-colors cursor-pointer ${
-                idx === selectedIndex
-                  ? "bg-[var(--accent-bg)] text-[var(--text-light)]"
-                  : "text-[var(--text-normal)] hover:bg-[var(--accent-bg)]/40"
-              }`}
-            >
-              <span className="flex items-center space-x-2 min-w-0">
-                {item.isDir ? (
-                  <Folder size={12} className="text-violet-400 flex-shrink-0" />
-                ) : (
-                  <FileText size={12} className="text-zinc-400 flex-shrink-0" />
-                )}
-                <span className="truncate">{item.name}</span>
-              </span>
-              <span className="text-[9px] font-mono text-[var(--text-muted)] ml-2 truncate max-w-[120px]">
-                {rootPath ? item.path.replace(`${rootPath}/`, "") : ""}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* 2. Attachments Preview Drawer */}
+      {/* Attachments Preview Drawer */}
       {attachments.length > 0 && (
         <div className="flex flex-wrap gap-2 px-2 pb-2 mb-2 border-b border-[var(--border-color)]/40">
           {attachments.map((att) => (
@@ -303,7 +197,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               <span className="truncate max-w-[120px]">{att.name}</span>
               <button
                 onClick={() => handleRemoveAttachment(att.path)}
-                className="text-[var(--text-muted)] hover:text-rose-400 transition-colors p-0.5 rounded-full"
+                className="text-[var(--text-muted)] hover:text-rose-400 transition-colors p-0.5 rounded-full cursor-pointer"
               >
                 <X size={10} />
               </button>
@@ -312,38 +206,61 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         </div>
       )}
 
-      {/* 3. Input Text Box Row */}
-      <div className="flex items-end space-x-2 min-h-[36px]">
+      {/* Input Row */}
+      <div className="flex items-end space-x-2">
         {/* Upload Button */}
         <button
           type="button"
           onClick={handleAddAttachment}
           disabled={disabled}
-          className="p-2 rounded-lg bg-[var(--bg-sidebar)]/50 border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-light)] hover:border-[var(--border-active)] transition-all cursor-pointer flex-shrink-0"
+          className="p-2 rounded-lg bg-[var(--bg-sidebar)]/50 border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-light)] hover:border-[var(--border-active)] transition-all cursor-pointer flex-shrink-0 mb-0.5"
           title="Add context file (+)"
         >
           <Plus size={16} />
         </button>
 
-        {/* Scalable Textarea */}
-        <textarea
-          ref={textareaRef}
-          value={value}
-          onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          disabled={disabled}
-          className="flex-1 bg-transparent border-none outline-none py-1.5 text-xs text-[var(--text-light)] placeholder-[var(--text-muted)] resize-none font-sans leading-relaxed min-h-[20px] select-text focus:ring-0 focus:outline-none"
-          rows={1}
-          style={{ height: "auto", maxHeight: "200px" }}
-        />
+        {/* Monaco Prompt Editor */}
+        <div className="flex-1 min-h-[64px] max-h-[160px] border border-[var(--border-color)]/60 rounded-lg overflow-hidden bg-[var(--bg-app)] relative py-1">
+          <Editor
+            height="64px"
+            language="markdown"
+            theme="axiom-custom-theme"
+            value={value}
+            onChange={(val) => onChange(val || "")}
+            onMount={handleEditorMount}
+            options={{
+              minimap: { enabled: false },
+              wordWrap: "on",
+              lineNumbers: "off",
+              glyphMargin: false,
+              folding: false,
+              lineDecorationsWidth: 0,
+              lineNumbersMinChars: 0,
+              scrollbar: {
+                vertical: "auto",
+                horizontal: "hidden",
+                verticalScrollbarSize: 6,
+              },
+              scrollBeyondLastLine: false,
+              automaticLayout: true,
+              fontSize: 12,
+              suggestOnTriggerCharacters: true,
+              quickSuggestions: {
+                other: true,
+                comments: false,
+                strings: false,
+              },
+              placeholder: placeholder,
+            }}
+          />
+        </div>
 
         {/* Send or Stop Button */}
         {isStreaming && onStop ? (
           <button
             type="button"
             onClick={onStop}
-            className="p-2 rounded-lg bg-rose-600 text-white hover:bg-rose-500 transition-all cursor-pointer flex-shrink-0 shadow-md flex items-center justify-center animate-pulse border-none"
+            className="p-2.5 rounded-lg bg-rose-600 text-white hover:bg-rose-500 transition-all cursor-pointer flex-shrink-0 shadow-md flex items-center justify-center animate-pulse border-none mb-0.5"
             title="Stop process"
           >
             <Square size={14} fill="currentColor" />
@@ -353,7 +270,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             type="button"
             onClick={handleSend}
             disabled={disabled || (!value.trim() && attachments.length === 0)}
-            className="p-2 rounded-lg bg-[var(--accent-color)] disabled:opacity-40 disabled:hover:bg-[var(--accent-color)] text-white hover:bg-[var(--accent-color)]/80 transition-all cursor-pointer flex-shrink-0 shadow-md flex items-center justify-center"
+            className="p-2.5 rounded-lg bg-[var(--accent-color)] disabled:opacity-40 disabled:hover:bg-[var(--accent-color)] text-white hover:bg-[var(--accent-color)]/80 transition-all cursor-pointer flex-shrink-0 shadow-md flex items-center justify-center mb-0.5 border-none"
           >
             <Send size={14} />
           </button>

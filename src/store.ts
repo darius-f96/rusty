@@ -118,6 +118,16 @@ export interface CanvasContext {
   lastStickyColor?: string;
 }
 
+export interface LspServerConfig {
+  serverPath: string;
+  args: string[];
+}
+
+export interface LspSettings {
+  enabled: boolean;
+  servers: Record<string, LspServerConfig>;
+}
+
 export interface WorkspaceState {
   rootPath: string;
   nodes: Node[];
@@ -239,6 +249,8 @@ export interface WorkspaceState {
   setEdgeStatus: (edgeId: string, status: "idle" | "unreconciled" | "reconciled") => void;
   getSequenceEdges: () => Edge[];
   updateTabTitle: (tabId: string, title: string) => void;
+  lspSettings: LspSettings;
+  updateLspSettings: (settings: Partial<LspSettings>) => void;
   saveSecureConfig: () => Promise<void>;
   loadSecureConfig: () => Promise<void>;
 }
@@ -402,6 +414,32 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   ],
   activeCustomProviderId: "opencode",
   activeModel: "",
+  lspSettings: {
+    enabled: true,
+    servers: {
+      typescript: { serverPath: "typescript-language-server", args: ["--stdio"] },
+      python: { serverPath: "pyright-langserver", args: ["--stdio"] },
+      go: { serverPath: "gopls", args: [] },
+      rust: { serverPath: "rust-analyzer", args: [] },
+      java: { serverPath: "jdtls", args: [] },
+      c: { serverPath: "clangd", args: [] },
+      cpp: { serverPath: "clangd", args: [] },
+      csharp: { serverPath: "csharp-ls", args: [] },
+      ruby: { serverPath: "ruby-lsp", args: [] },
+      php: { serverPath: "intelephense", args: ["--stdio"] },
+      lua: { serverPath: "lua-language-server", args: [] },
+      bash: { serverPath: "bash-language-server", args: ["start"] },
+      json: { serverPath: "vscode-json-language-server", args: ["--stdio"] },
+      yaml: { serverPath: "yaml-language-server", args: ["--stdio"] },
+      html: { serverPath: "vscode-html-language-server", args: ["--stdio"] },
+      css: { serverPath: "vscode-css-language-server", args: ["--stdio"] }
+    }
+  },
+  updateLspSettings: (settings) => set((state) => {
+    const updated = { ...state.lspSettings, ...settings };
+    setTimeout(() => useWorkspaceStore.getState().saveSecureConfig(), 0);
+    return { lspSettings: updated };
+  }),
   gitStatus: null,
   lastRename: null,
   setLastRename: (rename) => set({ lastRename: rename }),
@@ -1778,6 +1816,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       activeThemeId: state.activeThemeId,
       lastWorkspacePath: state.rootPath,
       mcpServers: state.mcpServers,
+      lspSettings: state.lspSettings,
     });
   },
 
@@ -1790,6 +1829,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       activeThemeId?: string;
       lastWorkspacePath?: string;
       mcpServers?: Record<string, McpServerConfig>;
+      lspSettings?: LspSettings;
     }>("axiom_secure_config");
 
     if (config) {
@@ -1798,6 +1838,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       if (config.activeCustomProviderId !== undefined) updates.activeCustomProviderId = config.activeCustomProviderId;
       if (config.activeModel) updates.activeModel = config.activeModel;
       if (config.mcpServers) updates.mcpServers = config.mcpServers;
+      if (config.lspSettings) updates.lspSettings = config.lspSettings;
 
       if (config.activeThemeId) {
         updates.activeThemeId = config.activeThemeId;

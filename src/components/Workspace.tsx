@@ -354,6 +354,7 @@ export const Workspace: React.FC = () => {
               ? provider
               : null,
           skill: skillData,
+          lspSettings: useWorkspaceStore.getState().lspSettings,
         })
       );
     };

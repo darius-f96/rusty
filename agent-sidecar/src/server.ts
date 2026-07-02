@@ -59,6 +59,11 @@ import { generateSkill } from "./capabilities/generateSkill";
 
 dotenv.config();
 
+// LSP Manager
+import { LspManager } from "./services/lspManager";
+import { LspInstaller } from "./services/lspInstaller";
+import { getPackageSpec, listRegisteredLanguages } from "./services/lspRegistry";
+
 // ── Global Process Crash Prevention & Logging ──────────────────────
 process.on("uncaughtException", (error) => {
   console.error("CRITICAL [Uncaught Exception]:", error);
@@ -121,7 +126,97 @@ app.post("/proxy/models", async (req, res) => {
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
-wss.on("connection", (ws: WebSocket) => {
+wss.on("connection", (ws: WebSocket, req: http.IncomingMessage) => {
+  const parsedUrl = new URL(req.url || "", "http://localhost");
+
+  // LSP admin channel: install / detect language servers on demand.
+  // NOTE: must be checked before /lsp because /lsp-admin starts with /lsp.
+  if (parsedUrl.pathname.startsWith("/lsp-admin")) {
+    console.log("WebSocket [LSP-Admin] Client connected");
+    ws.on("message", async (messageStr: string) => {
+      let data;
+      try {
+        data = JSON.parse(messageStr);
+      } catch (e) {
+        console.error("WebSocket [LSP-Admin] Invalid JSON", e);
+        return;
+      }
+
+      try {
+        if (data.type === "lsp_detect") {
+          const { language, serverPath } = data;
+          const spec = getPackageSpec(language);
+          if (!spec) {
+            ws.send(JSON.stringify({ type: "lsp_detect_result", language, detected: false, reason: "No registry entry" }));
+            return;
+          }
+          const result = await LspInstaller.detect(language, serverPath || "");
+          ws.send(JSON.stringify({ type: "lsp_detect_result", language, detected: result.detected, serverPath: result.serverPath, reason: result.reason }));
+          return;
+        }
+
+        if (data.type === "lsp_detect_all") {
+          const languages = listRegisteredLanguages();
+          const results: any[] = [];
+          for (const lang of languages) {
+            const r = await LspInstaller.detect(lang, "");
+            results.push({ language: lang, detected: r.detected, serverPath: r.serverPath });
+          }
+          ws.send(JSON.stringify({ type: "lsp_detect_all_result", results }));
+          return;
+        }
+
+        if (data.type === "lsp_install") {
+          const { language } = data;
+          const spec = getPackageSpec(language);
+          if (!spec) {
+            ws.send(JSON.stringify({ type: "lsp_install_result", language, error: `No registry entry for language "${language}"` }));
+            return;
+          }
+          try {
+            const result = await LspInstaller.install(language, (event) => {
+              ws.send(JSON.stringify({ type: "lsp_install_progress", language: event.language, stage: event.stage, message: event.message }));
+            });
+            ws.send(JSON.stringify({ type: "lsp_install_result", language: result.language, serverPath: result.serverPath, version: result.version }));
+          } catch (err: any) {
+            ws.send(JSON.stringify({ type: "lsp_install_result", language, error: err?.message || String(err) }));
+          }
+          return;
+        }
+
+        if (data.type === "lsp_list") {
+          ws.send(JSON.stringify({ type: "lsp_list_result", languages: listRegisteredLanguages() }));
+          return;
+        }
+
+        console.warn(`WebSocket [LSP-Admin] Unknown message type: ${data.type}`);
+      } catch (err: any) {
+        console.error(`WebSocket [LSP-Admin] Error handling ${data.type}:`, err);
+      }
+    });
+    return;
+  }
+
+  // LSP runtime channel: connects a frontend editor to a language server process.
+  if (parsedUrl.pathname.startsWith("/lsp")) {
+    const language = parsedUrl.searchParams.get("language") || "";
+    const workspacePath = parsedUrl.searchParams.get("workspacePath") || "";
+    const serverPath = parsedUrl.searchParams.get("serverPath") || "";
+    const argsStr = parsedUrl.searchParams.get("args") || "";
+    const args = argsStr ? argsStr.split(" ") : [];
+
+    if (!language || !workspacePath || !serverPath) {
+      console.error("WebSocket [LSP] Missing connection parameters:", { language, workspacePath, serverPath });
+      ws.send(JSON.stringify({ type: "lsp_error", error: "Missing language, workspacePath or serverPath" }));
+      ws.close();
+      return;
+    }
+
+    console.log(`WebSocket [LSP] Client connected for ${language} in ${workspacePath}`);
+    LspManager.getInstance().handleConnection(ws, language, workspacePath, serverPath, args);
+    return;
+  }
+
   console.log("WebSocket [Server] Client connected to Pi Sidecar");
 
   ws.on("error", (error) => {

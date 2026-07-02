@@ -260,6 +260,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
             ? prov
             : null,
         skill: skillData,
+        lspSettings: useWorkspaceStore.getState().lspSettings,
       }));
     };
 
