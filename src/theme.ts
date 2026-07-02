@@ -20,6 +20,7 @@ export interface AppTheme {
     variables: string;
     types: string;
   };
+  isLight?: boolean;
 }
 
 export const themes: Record<string, AppTheme> = {
@@ -47,6 +48,7 @@ export const themes: Record<string, AppTheme> = {
     }
   },
   sepia: {
+    isLight: true,
     bgApp: "#F4ECD8",
     bgSidebar: "#EADFB4",
     bgHeader: "#E5D9AC",
@@ -181,10 +183,10 @@ export function applyThemeProperties(t: AppTheme) {
   root.style.setProperty("--accent-color", t.accent);
   root.style.setProperty("--accent-bg", t.accentBg);
 
-  // Update application favicon to dark theme icon
+  // Update application favicon based on theme brightness
   const favicon = document.querySelector("link[rel='icon']");
   if (favicon) {
-    favicon.setAttribute("href", "/axiom-dark.png");
+    favicon.setAttribute("href", t.isLight ? "/axiom-light.png" : "/axiom-dark.png");
     favicon.setAttribute("type", "image/png");
   }
 }
