@@ -234,7 +234,7 @@ export const AxiomTab: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
 
   const getCanvasCenter = useCallback(() => {
     if (rfInstance) {
-      const reactFlowBounds = document.getElementById("rf-canvas")?.getBoundingClientRect();
+      const reactFlowBounds = document.getElementById(`rf-canvas-${tab.id}`)?.getBoundingClientRect();
       if (reactFlowBounds) {
         const x = reactFlowBounds.left + reactFlowBounds.width / 2;
         const y = reactFlowBounds.top + reactFlowBounds.height / 2;
@@ -242,7 +242,7 @@ export const AxiomTab: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
       }
     }
     return { x: 300, y: 200 };
-  }, [rfInstance]);
+  }, [rfInstance, tab.id]);
 
   useEffect(() => {
     const handleGlobalClick = () => {
@@ -282,7 +282,7 @@ export const AxiomTab: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
   const onPaneContextMenu = useCallback(
     (event: any) => {
       event.preventDefault();
-      const bounds = document.getElementById("rf-canvas")?.getBoundingClientRect();
+      const bounds = document.getElementById(`rf-canvas-${tab.id}`)?.getBoundingClientRect();
       if (bounds) {
         setContextMenu({
           x: event.clientX - bounds.left,
@@ -292,14 +292,14 @@ export const AxiomTab: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
         });
       }
     },
-    []
+    [tab.id]
   );
 
   const onNodeContextMenu = useCallback(
     (event: any, node: any) => {
       if (node.type !== "boundaryNode") return;
       event.preventDefault();
-      const bounds = document.getElementById("rf-canvas")?.getBoundingClientRect();
+      const bounds = document.getElementById(`rf-canvas-${tab.id}`)?.getBoundingClientRect();
       if (bounds) {
         setContextMenu({
           x: event.clientX - bounds.left,
@@ -309,7 +309,7 @@ export const AxiomTab: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
         });
       }
     },
-    []
+    [tab.id]
   );
 
   const handleAddNodeFromContextMenu = useCallback(
@@ -337,7 +337,7 @@ export const AxiomTab: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
     const target = event.target as HTMLElement;
     if (!target.classList.contains("react-flow__pane")) return;
 
-    const reactFlowBounds = document.getElementById("rf-canvas")?.getBoundingClientRect();
+    const reactFlowBounds = document.getElementById(`rf-canvas-${tab.id}`)?.getBoundingClientRect();
     if (!reactFlowBounds || !rfInstance) return;
 
     const position = rfInstance.screenToFlowPosition({
@@ -405,7 +405,7 @@ export const AxiomTab: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
             y: event.clientY,
           });
         } else {
-          const reactFlowBounds = document.getElementById("rf-canvas")?.getBoundingClientRect();
+          const reactFlowBounds = document.getElementById(`rf-canvas-${tab.id}`)?.getBoundingClientRect();
           if (reactFlowBounds) {
             position = {
               x: event.clientX - reactFlowBounds.left,
@@ -431,7 +431,7 @@ export const AxiomTab: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
       <div className="w-full h-full flex flex-row relative">
         <div
           className="flex-1 min-h-0 relative bg-[var(--bg-canvas)]"
-          id="rf-canvas"
+          id={`rf-canvas-${tab.id}`}
           onDragOver={onDragOver}
         >
           {/* Top Right Dropdowns */}

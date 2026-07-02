@@ -21,37 +21,50 @@
     <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
       <feGaussianBlur stdDeviation="10"/>
     </filter>
+    <filter id="dropshadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="14"/>
+      <feOffset dx="0" dy="12"/>
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.5"/>
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
   </defs>
 
-  <rect width="1024" height="1024" rx="228" fill="url(#bg)"/>
-  <rect width="1024" height="1024" rx="228" fill="url(#glow)"/>
+  <rect x="102.4" y="102.4" width="819.2" height="819.2" rx="182.4" fill="url(#bg)" filter="url(#dropshadow)"/>
+  <rect x="102.4" y="102.4" width="819.2" height="819.2" rx="182.4" fill="url(#glow)"/>
 
-  <g opacity="0.55" filter="url(#soft)">
+  <g transform="translate(102.4 102.4) scale(0.8)">
+    <g opacity="0.55" filter="url(#soft)">
+      <path d="M512 250 L768 778 L256 778 Z"
+            fill="none"
+            stroke="#00E5FF"
+            stroke-width="56"
+            stroke-linejoin="round"
+            stroke-linecap="round"/>
+      <path d="M392 612 L632 612"
+            stroke="#00E5FF"
+            stroke-width="44"
+            stroke-linecap="round"/>
+    </g>
+
     <path d="M512 250 L768 778 L256 778 Z"
           fill="none"
-          stroke="#00E5FF"
-          stroke-width="56"
+          stroke="url(#stroke)"
+          stroke-width="52"
           stroke-linejoin="round"
           stroke-linecap="round"/>
+
     <path d="M392 612 L632 612"
-          stroke="#00E5FF"
-          stroke-width="44"
+          stroke="url(#bar)"
+          stroke-width="40"
           stroke-linecap="round"/>
+
+    <circle cx="512" cy="412" r="24" fill="#9FFBFF"/>
+    <circle cx="466" cy="528" r="24" fill="#00E5FF"/>
+    <circle cx="558" cy="528" r="24" fill="#00E5FF"/>
   </g>
-
-  <path d="M512 250 L768 778 L256 778 Z"
-        fill="none"
-        stroke="url(#stroke)"
-        stroke-width="52"
-        stroke-linejoin="round"
-        stroke-linecap="round"/>
-
-  <path d="M392 612 L632 612"
-        stroke="url(#bar)"
-        stroke-width="40"
-        stroke-linecap="round"/>
-
-  <circle cx="512" cy="412" r="24" fill="#9FFBFF"/>
-  <circle cx="466" cy="528" r="24" fill="#00E5FF"/>
-  <circle cx="558" cy="528" r="24" fill="#00E5FF"/>
 </svg>
