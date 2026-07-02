@@ -226,6 +226,13 @@ export interface WorkspaceState {
   addDevLog: (type: "log" | "error" | "warn" | "system", text: string) => void;
   clearDevLogs: () => void;
   setShowDevConsole: (show: boolean) => void;
+  
+  terminalTabs: { id: string; name: string; type: "dev-logs" | "local"; cwd?: string }[];
+  activeTerminalTabId: string | null;
+  initTerminalState: (isDev: boolean) => void;
+  addTerminalTab: (type: "dev-logs" | "local", cwd?: string) => void;
+  closeTerminalTab: (id: string) => void;
+  setActiveTerminalTabId: (id: string) => void;
 
   editorGroups: EditorGroup[];
   activeGroupId: string;
@@ -445,6 +452,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   setLastRename: (rename) => set({ lastRename: rename }),
   devLogs: [],
   showDevConsole: false,
+  terminalTabs: [],
+  activeTerminalTabId: null,
   skills: [
     {
       id: "skill_build",
@@ -1357,6 +1366,51 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   }),
   clearDevLogs: () => set({ devLogs: [] }),
   setShowDevConsole: (show) => set({ showDevConsole: show }),
+
+  initTerminalState: (isDev) => set((state) => {
+    if (state.terminalTabs.length > 0) return {};
+    const tabs = [];
+    if (isDev) {
+      tabs.push({ id: "dev-logs", name: "Dev Logs", type: "dev-logs" as const });
+    }
+    tabs.push({ id: `terminal-${Date.now()}`, name: "Terminal 1", type: "local" as const });
+    return {
+      terminalTabs: tabs,
+      activeTerminalTabId: tabs[0].id
+    };
+  }),
+
+  addTerminalTab: (type, cwd) => set((state) => {
+    const id = `terminal-${Date.now()}`;
+    const localCount = state.terminalTabs.filter(t => t.type === 'local').length + 1;
+    const name = type === 'dev-logs' ? 'Dev Logs' : `Terminal ${localCount}`;
+    const newTab = { id, name, type, cwd };
+    return {
+      terminalTabs: [...state.terminalTabs, newTab],
+      activeTerminalTabId: id,
+      showDevConsole: true
+    };
+  }),
+
+  closeTerminalTab: (id) => set((state) => {
+    const tabs = state.terminalTabs.filter(t => t.id !== id);
+    let activeId = state.activeTerminalTabId;
+    if (activeId === id) {
+      const idx = state.terminalTabs.findIndex(t => t.id === id);
+      if (tabs.length > 0) {
+        const nextIdx = Math.min(idx, tabs.length - 1);
+        activeId = tabs[nextIdx].id;
+      } else {
+        activeId = null;
+      }
+    }
+    return {
+      terminalTabs: tabs,
+      activeTerminalTabId: activeId
+    };
+  }),
+
+  setActiveTerminalTabId: (id) => set({ activeTerminalTabId: id }),
 
   openTab: (tab, groupId) => set((state) => {
     const targetGroupId = groupId || state.activeGroupId;

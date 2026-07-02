@@ -5,13 +5,11 @@ import { Workspace } from "./components/Workspace";
 import { useWorkspaceStore } from "./store";
 import { SearchPalette } from "./components/SearchPalette";
 import { AlertModal } from "./components/AlertModal";
+import { TerminalPanel } from "./components/TerminalPanel";
 
 function App() {
-  const devLogs = useWorkspaceStore((state) => state.devLogs);
-  const showDevConsole = useWorkspaceStore((state) => state.showDevConsole);
-  const setShowDevConsole = useWorkspaceStore((state) => state.setShowDevConsole);
-  const clearDevLogs = useWorkspaceStore((state) => state.clearDevLogs);
   const addDevLog = useWorkspaceStore((state) => state.addDevLog);
+  const initTerminalState = useWorkspaceStore((state) => state.initTerminalState);
   const [searchOpen, setSearchOpen] = useState(false);
 
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -62,7 +60,6 @@ function App() {
   const isSidebarDraggingRef = useRef(false);
   const sidebarWidthRef = useRef(sidebarWidth);
   const sidebarElementRef = useRef<HTMLDivElement>(null);
-  const consoleScrollRef = useRef<HTMLDivElement>(null);
 
   const handleSidebarMouseMove = useCallback((moveEvent: MouseEvent) => {
     if (!isSidebarDraggingRef.current) return;
@@ -131,6 +128,11 @@ function App() {
     });
   }, []);
 
+  // Initialize terminal bar state
+  useEffect(() => {
+    initTerminalState(import.meta.env.DEV);
+  }, [initTerminalState]);
+
   // Global console/rejection interceptor
   useEffect(() => {
     const originalLog = console.log;
@@ -179,12 +181,7 @@ function App() {
     };
   }, [addDevLog]);
 
-  // Dev Console Auto Scroll
-  useEffect(() => {
-    if (showDevConsole && consoleScrollRef.current) {
-      consoleScrollRef.current.scrollTop = consoleScrollRef.current.scrollHeight;
-    }
-  }, [devLogs, showDevConsole]);
+
 
   // Global Keyboard Shortcuts (Cmd+W or Ctrl+W to close active tab, Cmd+1 to toggle sidebar)
   // Also blocks reload (Cmd/Ctrl+R, F5) and devtools (F12, Cmd/Ctrl+Shift+I/J/C, Cmd/Ctrl+Alt+I)
@@ -291,67 +288,8 @@ function App() {
           {/* Workspace dynamic tabs and contents */}
           <Workspace />
 
-          {/* Collapsible Bottom Developer Console (Pinned Globally) */}
-          <div className={`border-t border-[var(--border-color)] bg-[var(--bg-header)] flex flex-col transition-all duration-300 ${
-            showDevConsole ? "h-60" : "h-9"
-          } z-10 overflow-hidden font-sans`}>
-            {/* Header Bar */}
-            <div
-              onClick={() => setShowDevConsole(!showDevConsole)}
-              className="h-9 px-4 flex items-center justify-between border-b border-[var(--border-color)]/60 bg-[var(--bg-app)]/60 hover:bg-[var(--bg-sidebar)]/20 cursor-pointer select-none text-[11px] font-mono text-[var(--text-muted)] flex-shrink-0"
-            >
-              <div className="flex items-center space-x-3">
-                <span className={`w-2 h-2 rounded-full ${
-                  devLogs.some(l => l.type === "error") ? "bg-rose-500 animate-pulse" : "bg-emerald-500"
-                }`} />
-                <span className="font-bold text-[var(--text-light)] uppercase tracking-wider">Dev Logs Terminal</span>
-                <span>
-                  ({devLogs.filter(l => l.type === "error").length} Errors, {devLogs.filter(l => l.type === "warn").length} Warnings)
-                </span>
-              </div>
-              <div className="flex items-center space-x-3">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    clearDevLogs();
-                  }}
-                  className="hover:bg-[var(--bg-app)] text-[var(--text-normal)] hover:text-[var(--text-light)] px-2 py-0.5 rounded text-[10px] uppercase font-bold transition-all border border-[var(--border-color)] hover:border-[var(--border-active)] cursor-pointer"
-                >
-                  Clear
-                </button>
-                <span className="text-[10px] text-[var(--text-muted)] font-bold uppercase">
-                  {showDevConsole ? "[ Collapse ]" : "[ Expand ]"}
-                </span>
-              </div>
-            </div>
-
-            {/* Outputs Scroll Container */}
-            {showDevConsole && (
-              <div 
-                ref={consoleScrollRef}
-                className="flex-1 p-4 font-mono text-[11px] overflow-y-auto space-y-1 bg-black text-zinc-400 select-text selection:bg-indigo-900 selection:text-white"
-              >
-                {devLogs.length === 0 ? (
-                  <span className="text-[var(--text-muted)] select-none">// No dev console logs captured yet.</span>
-                ) : (
-                  devLogs.map((log) => {
-                    const colors = {
-                      log: "text-zinc-400",
-                      warn: "text-amber-400 font-semibold",
-                      error: "text-rose-400 font-bold",
-                      system: "text-indigo-400 font-bold"
-                    };
-                    return (
-                      <div key={log.id} className="flex items-start space-x-2 leading-relaxed border-b border-zinc-950 pb-0.5 hover:bg-zinc-900/10">
-                        <span className="text-[var(--text-muted)] select-none">[{log.timestamp}]</span>
-                        <span className={colors[log.type]}>{log.text}</span>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            )}
-          </div>
+          {/* Collapsible Bottom Terminal Panel (Pinned Globally) */}
+          <TerminalPanel />
         </div>
       </div>
       {/* Search Command Palette Overlay */}

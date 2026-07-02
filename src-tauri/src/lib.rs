@@ -8,6 +8,9 @@ use std::sync::{Arc, Mutex};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tauri::Manager;
+use tauri::Emitter;
+use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem, MasterPty};
+use std::io::{Write, Read};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct FileEntry {
@@ -22,6 +25,14 @@ pub struct NodeFileTracker(pub Arc<Mutex<HashMap<String, Vec<String>>>>);
 pub struct CurrentExecutingNode(pub Arc<Mutex<Option<String>>>);
 
 pub struct SidecarState(pub Arc<Mutex<Option<CommandChild>>>);
+
+pub struct TerminalSession {
+    pub master: Box<dyn MasterPty + Send>,
+    pub writer: Box<dyn Write + Send>,
+}
+
+pub struct TerminalState(pub Arc<Mutex<HashMap<String, TerminalSession>>>);
+
 
 fn get_tab_id(tab_id: Option<String>) -> String {
     let t = tab_id.unwrap_or_default();
@@ -402,6 +413,137 @@ async fn log_to_terminal(level: String, message: String) {
 }
 
 #[tauri::command]
+async fn create_terminal_session(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, TerminalState>,
+    session_id: String,
+    cols: u16,
+    rows: u16,
+    cwd: Option<String>,
+) -> Result<(), String> {
+    println!("Rust [create_terminal_session] session_id: {}, cols: {}, rows: {}, cwd: {:?}", session_id, cols, rows, cwd);
+    
+    let shell = if cfg!(target_os = "windows") {
+        "powershell.exe".to_string()
+    } else {
+        std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string())
+    };
+
+    let pty_system = NativePtySystem::default();
+    let size = PtySize {
+        rows,
+        cols,
+        pixel_width: 0,
+        pixel_height: 0,
+    };
+
+    let pair = pty_system.openpty(size).map_err(|e| e.to_string())?;
+    
+    let mut cmd = CommandBuilder::new(&shell);
+    if let Some(ref cwd_dir) = cwd {
+        if !cwd_dir.is_empty() {
+            cmd.cwd(cwd_dir);
+        }
+    }
+    let _child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
+    let master = pair.master;
+    let mut reader = master.try_clone_reader().map_err(|e| e.to_string())?;
+    let writer = master.take_writer().map_err(|e| e.to_string())?;
+
+    {
+        let mut map = state.0.lock().map_err(|e| e.to_string())?;
+        map.insert(session_id.clone(), TerminalSession {
+            master,
+            writer,
+        });
+    }
+
+    let app_clone = app.clone();
+    let session_id_clone = session_id.clone();
+    std::thread::spawn(move || {
+        let mut buf = [0u8; 4096];
+        loop {
+            match reader.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    let data = String::from_utf8_lossy(&buf[..n]).to_string();
+                    #[derive(Clone, serde::Serialize)]
+                    struct TerminalOutputPayload {
+                        session_id: String,
+                        data: String,
+                    }
+                    let _ = app_clone.emit(
+                        "terminal-output",
+                        TerminalOutputPayload {
+                            session_id: session_id_clone.clone(),
+                            data,
+                        },
+                    );
+                }
+                Err(_) => break,
+            }
+        }
+        
+        #[derive(Clone, serde::Serialize)]
+        struct TerminalExitPayload {
+            session_id: String,
+        }
+        let _ = app_clone.emit(
+            "terminal-exit",
+            TerminalExitPayload {
+                session_id: session_id_clone,
+            },
+        );
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn write_to_terminal(
+    state: tauri::State<'_, TerminalState>,
+    session_id: String,
+    input: String,
+) -> Result<(), String> {
+    let mut map = state.0.lock().map_err(|e| e.to_string())?;
+    if let Some(session) = map.get_mut(&session_id) {
+        session.writer.write_all(input.as_bytes()).map_err(|e| e.to_string())?;
+        session.writer.flush().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn resize_terminal(
+    state: tauri::State<'_, TerminalState>,
+    session_id: String,
+    cols: u16,
+    rows: u16,
+) -> Result<(), String> {
+    let map = state.0.lock().map_err(|e| e.to_string())?;
+    if let Some(session) = map.get(&session_id) {
+        session.master.resize(PtySize {
+            rows,
+            cols,
+            pixel_width: 0,
+            pixel_height: 0,
+        }).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn close_terminal_session(
+    state: tauri::State<'_, TerminalState>,
+    session_id: String,
+) -> Result<(), String> {
+    let mut map = state.0.lock().map_err(|e| e.to_string())?;
+    map.remove(&session_id);
+    Ok(())
+}
+
+
+#[tauri::command]
 async fn move_file_or_dir(src: String, dest: String) -> Result<(), String> {
     let src_path = PathBuf::from(&src);
     let dest_path = PathBuf::from(&dest);
@@ -700,7 +842,6 @@ fn spawn_sidecar(app: &tauri::App) {
         }
     }
 }
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
@@ -712,6 +853,7 @@ pub fn run() {
         .manage(NodeFileTracker(Arc::new(Mutex::new(HashMap::new()))))
         .manage(CurrentExecutingNode(Arc::new(Mutex::new(None))))
         .manage(SidecarState(Arc::new(Mutex::new(None))))
+        .manage(TerminalState(Arc::new(Mutex::new(HashMap::new()))))
         .setup(|app| {
             // Spawn the bundled Node sidecar on startup (both dev and release).
             // The Node binary is bundled via `externalBin` and server.js via `resources`,
@@ -721,6 +863,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             log_to_terminal,
+            create_terminal_session,
+            write_to_terminal,
+            resize_terminal,
+            close_terminal_session,
             read_file_vfs,
             write_file_vfs,
             apply_vfs_to_disk,
