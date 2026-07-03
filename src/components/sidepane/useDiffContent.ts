@@ -4,7 +4,8 @@ import { invoke } from "@tauri-apps/api/core";
 export const useDiffContent = (
   selectedNodeId: string | null,
   activeDiffFile: string,
-  nodeStatus: string
+  nodeStatus: string,
+  tabId?: string
 ) => {
   const [originalCode, setOriginalCode] = useState("// Loading original content...");
   const [modifiedCode, setModifiedCode] = useState("// Loading modified content...");
@@ -20,7 +21,7 @@ export const useDiffContent = (
 
     try {
       console.log(`SidePane [fetchDiffContent] loading paths`, { activeDiffFile });
-      const modified: string = await invoke("read_file_vfs", { path: activeDiffFile });
+      const modified: string = await invoke("read_file_vfs", { path: activeDiffFile, tabId });
 
       let original = "";
       try {
@@ -51,7 +52,7 @@ export const useDiffContent = (
 
       try {
         console.log(`SidePane [fetchDiffContent] loading paths`, { activeDiffFile });
-        const modified: string = await invoke("read_file_vfs", { path: activeDiffFile });
+        const modified: string = await invoke("read_file_vfs", { path: activeDiffFile, tabId });
 
         let original = "";
         try {

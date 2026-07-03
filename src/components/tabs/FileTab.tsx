@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import Editor, { loader } from "@monaco-editor/react";
 import { useWorkspaceStore } from "../../store";
 import { invoke } from "@tauri-apps/api/core";
@@ -42,6 +42,16 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
   const targetGroup = editorGroups.find((g) => g.id === groupId);
   const isActive = targetGroup ? targetGroup.activeTabId === tab.id : false;
 
+  const canvasTabId = useMemo(() => {
+    const contexts = useWorkspaceStore.getState().canvasContexts;
+    for (const tId in contexts) {
+      const ctx = contexts[tId];
+      const hasNode = ctx.nodes.some((n: any) => n.data?.modifiedFiles?.includes(tab.key));
+      if (hasNode) return tId;
+    }
+    return undefined;
+  }, [tab.key]);
+
   // Load Git blame details
   useEffect(() => {
     if (!rootPath || !tab.key) return;
@@ -71,7 +81,7 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
     const fetchFileContent = async () => {
       try {
         console.log(`FileTab reading VFS path: ${tab.key}`);
-        const content: string = await invoke("read_file_vfs", { path: tab.key });
+        const content: string = await invoke("read_file_vfs", { path: tab.key, tabId: canvasTabId });
         setFileContent(content);
       } catch (err: any) {
         console.error("FileTab failed to read VFS:", err);

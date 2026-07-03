@@ -14,6 +14,7 @@ interface DiffTabContentProps {
   originalCode: string;
   modifiedCode: string;
   isDiffLoading?: boolean;
+  tabId?: string;
 }
 
 const getEditorLanguage = (filePath: string): string => {
@@ -47,7 +48,8 @@ export const DiffTabContent: React.FC<DiffTabContentProps> = ({
   setActiveDiffFile,
   originalCode,
   modifiedCode,
-  isDiffLoading
+  isDiffLoading,
+  tabId
 }) => {
   const [editedCode, setEditedCode] = useState<string>("");
   const [isDirty, setIsDirty] = useState(false);
@@ -107,8 +109,12 @@ export const DiffTabContent: React.FC<DiffTabContentProps> = ({
     if (!activeDiffFile || !isDirty) return;
     setIsSaving(true);
     try {
-      await invoke("write_file_vfs", { path: activeDiffFile, content: editedCode });
+      await invoke("write_file_vfs", { path: activeDiffFile, content: editedCode, tabId });
       setIsDirty(false);
+      if (tabId) {
+        const { canvasFileService } = await import("../../tabs/canvas/services/canvasFileService");
+        await canvasFileService.autoSaveCanvas(tabId);
+      }
     } catch (err) {
       console.error("Failed to save file:", err);
     } finally {

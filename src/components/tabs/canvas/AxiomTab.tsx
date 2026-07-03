@@ -350,7 +350,7 @@ export const AxiomTab: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
 
   const handleApplyChanges = async () => {
     try {
-      await invoke("apply_vfs_to_disk");
+      await invoke("apply_vfs_to_disk", { tabId: tab.id });
       // Set applied status to true
       useWorkspaceStore.getState().updateCanvasContext(tab.id, { isPipelineApplied: true });
       notify("Applied", "In-memory shadow VFS layout flushed to local storage disk.", "success");

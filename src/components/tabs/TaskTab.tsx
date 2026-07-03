@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { DiffEditor } from "@monaco-editor/react";
 import { Terminal, MessageSquare, Code, Sparkles, Save, RotateCcw, Octagon } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
@@ -36,6 +36,16 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, onStopExec
   const nodeLogs = rawNodeLogs || EMPTY_ARRAY;
   const nodeStatus = useWorkspaceStore((state) => state.nodeStatus[taskNodeId] || "idle");
 
+  const canvasTabId = useMemo(() => {
+    const contexts = useWorkspaceStore.getState().canvasContexts;
+    for (const tId in contexts) {
+      if (contexts[tId].nodes.some((n) => n.id === taskNodeId)) {
+        return tId;
+      }
+    }
+    return undefined;
+  }, [taskNodeId]);
+
   const [taskSubTab, setTaskSubTab] = useState<"diff" | "chat" | "console">("diff");
   const [chatMessage, setChatMessage] = useState("");
   const [originalCode, setOriginalCode] = useState("// Loading original content...");
@@ -71,7 +81,7 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, onStopExec
       setLoadingDiff(true);
       try {
         console.log(`TaskTab loading diff for: ${activeDiffFile}`);
-        const modified: string = await invoke("read_file_vfs", { path: activeDiffFile });
+        const modified: string = await invoke("read_file_vfs", { path: activeDiffFile, tabId: canvasTabId });
         
         let original = "";
         try {
@@ -123,8 +133,12 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, onStopExec
     if (!activeDiffFile || !isDirty) return;
     setIsSaving(true);
     try {
-      await invoke("write_file_vfs", { path: activeDiffFile, content: editedCode });
+      await invoke("write_file_vfs", { path: activeDiffFile, content: editedCode, tabId: canvasTabId });
       setIsDirty(false);
+      if (canvasTabId) {
+        const { canvasFileService } = await import("./canvas/services/canvasFileService");
+        await canvasFileService.autoSaveCanvas(canvasTabId);
+      }
     } catch (err) {
       console.error("Failed to save file:", err);
     } finally {

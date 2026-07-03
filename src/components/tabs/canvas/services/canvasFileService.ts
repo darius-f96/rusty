@@ -43,6 +43,14 @@ export const canvasFileService = {
     } catch (err) {
       console.warn("[canvasFileService] Could not export VFS tracker:", err);
     }
+
+    const nodeIds = new Set(context.nodes.map((n: any) => n.id));
+    const filteredTracker: Record<string, string[]> = {};
+    for (const nodeId of Object.keys(vfsTracker)) {
+      if (nodeIds.has(nodeId)) {
+        filteredTracker[nodeId] = vfsTracker[nodeId];
+      }
+    }
  
     const payload = {
       id: tabId,
@@ -55,7 +63,7 @@ export const canvasFileService = {
       edgeReconciliationStatus: context.edgeReconciliationStatus,
       isPipelineApplied: context.isPipelineApplied || false,
       vfsContents,
-      vfsTracker
+      vfsTracker: filteredTracker
     };
  
     const fileName = canvasFileService.sanitizeFileName(title);
@@ -71,6 +79,28 @@ export const canvasFileService = {
     useWorkspaceStore.getState().setFileTree(tree);
  
     return filePath;
+  },
+
+  autoSaveCanvas: async (tabId: string): Promise<string | null> => {
+    const state = useWorkspaceStore.getState();
+    const rootPath = state.rootPath;
+    if (!rootPath) return null;
+
+    let title = "Untitled Pipeline";
+    for (const group of state.editorGroups) {
+      const tab = group.openTabs.find((t) => t.id === tabId);
+      if (tab) {
+        title = tab.title;
+        break;
+      }
+    }
+
+    try {
+      return await canvasFileService.saveCanvas(tabId, title);
+    } catch (err) {
+      console.error("[canvasFileService] Auto-save failed:", err);
+      return null;
+    }
   },
  
   loadCanvasFromFile: async (filePath: string): Promise<any> => {

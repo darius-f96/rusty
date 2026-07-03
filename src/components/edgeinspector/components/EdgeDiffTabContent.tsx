@@ -20,6 +20,7 @@ interface EdgeDiffTabContentProps {
   loadDiffContent: (file: string) => Promise<void>;
   originalCode: string;
   modifiedCode: string;
+  tabId?: string;
 }
 
 const getEditorLanguage = (filePath: string): string => {
@@ -48,7 +49,8 @@ export const EdgeDiffTabContent: React.FC<EdgeDiffTabContentProps> = ({
   setDiffFile,
   loadDiffContent,
   originalCode,
-  modifiedCode
+  modifiedCode,
+  tabId
 }) => {
   const [editedCode, setEditedCode] = useState<string>("");
   const [isDirty, setIsDirty] = useState(false);
@@ -77,8 +79,12 @@ export const EdgeDiffTabContent: React.FC<EdgeDiffTabContentProps> = ({
     if (!diffFile || !isDirty) return;
     setIsSaving(true);
     try {
-      await invoke("write_file_vfs", { path: diffFile, content: editedCode });
+      await invoke("write_file_vfs", { path: diffFile, content: editedCode, tabId });
       setIsDirty(false);
+      if (tabId) {
+        const { canvasFileService } = await import("../../tabs/canvas/services/canvasFileService");
+        await canvasFileService.autoSaveCanvas(tabId);
+      }
     } catch (err) {
       console.error("Failed to save file:", err);
     } finally {

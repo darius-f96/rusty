@@ -41,7 +41,7 @@ export const VfsExplorer: React.FC<VfsExplorerProps> = ({ onClose, tabId }) => {
 
   const deleteNodeFiles = async (nodeId: string) => {
     try {
-      await vfsService.deleteNodeVfsFiles(nodeId);
+      await vfsService.deleteNodeVfsFiles(nodeId, tabId);
       await loadNodeFiles();
     } catch (err) {
       console.error(`[VfsExplorer] Failed to delete node files:`, err);
@@ -51,7 +51,7 @@ export const VfsExplorer: React.FC<VfsExplorerProps> = ({ onClose, tabId }) => {
   const deleteAllNodeFiles = async () => {
     try {
       for (const nf of nodeFiles) {
-        await vfsService.deleteNodeVfsFiles(nf.node_id);
+        await vfsService.deleteNodeVfsFiles(nf.node_id, tabId);
       }
       await loadNodeFiles();
     } catch (err) {

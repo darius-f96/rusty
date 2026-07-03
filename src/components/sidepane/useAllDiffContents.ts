@@ -10,7 +10,8 @@ export interface DiffFileContent {
 export const useAllDiffContents = (
   selectedNodeId: string | null,
   modifiedFiles: string[],
-  nodeStatus: string
+  nodeStatus: string,
+  tabId?: string
 ) => {
   const [diffContents, setDiffContents] = useState<DiffFileContent[]>([]);
 
@@ -27,7 +28,7 @@ export const useAllDiffContents = (
 
       for (const filePath of modifiedFiles) {
         try {
-          const modified: string = await invoke("read_file_vfs", { path: filePath });
+          const modified: string = await invoke("read_file_vfs", { path: filePath, tabId });
 
           let original = "";
           try {

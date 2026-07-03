@@ -239,7 +239,6 @@ async fn import_vfs_tracker(
 ) -> Result<(), String> {
     println!("Rust [import_vfs_tracker] importing tracking for {} nodes", tracker.len());
     let mut state = tracker_state.0.lock().map_err(|e| e.to_string())?;
-    state.clear();
     for (node_id, files) in tracker {
         state.insert(node_id, files);
     }

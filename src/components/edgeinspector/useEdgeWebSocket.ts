@@ -17,7 +17,8 @@ export const useEdgeWebSocket = (
   targetNode: any,
   sourceModifiedFiles: string[],
   diffFile: string,
-  loadDiffContent: (path: string) => Promise<void>
+  loadDiffContent: (path: string) => Promise<void>,
+  tabId?: string
 ) => {
   const [chatMessages, setChatMessages] = useState<{ role: string; content: string }[]>([]);
   const [chatInput, setChatInput] = useState("");
@@ -104,7 +105,7 @@ export const useEdgeWebSocket = (
         const msg = JSON.parse(event.data);
 
         if (msg.type === "read_file") {
-          invoke("read_file_vfs", { path: msg.path })
+          invoke("read_file_vfs", { path: msg.path, tabId })
             .then((content: any) => {
               if (socket.readyState === WebSocket.OPEN) {
                 socket.send(
@@ -131,12 +132,19 @@ export const useEdgeWebSocket = (
         }
 
         if (msg.type === "write_file") {
-          invoke("write_file_vfs", { path: msg.path, content: msg.content })
+          invoke("write_file_vfs", { path: msg.path, content: msg.content, tabId })
             .then(() => {
               if (socket.readyState === WebSocket.OPEN) {
                 socket.send(
                   JSON.stringify({ type: "write_file_response", requestId: msg.requestId })
                 );
+              }
+              if (tabId) {
+                import("../tabs/canvas/services/canvasFileService").then(({ canvasFileService }) => {
+                  canvasFileService.autoSaveCanvas(tabId);
+                }).catch((err) => {
+                  console.error("Failed to auto-save canvas on write_file in edge websocket:", err);
+                });
               }
             })
             .catch((err: any) => {

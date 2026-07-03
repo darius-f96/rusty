@@ -1243,7 +1243,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       const isTaskNode = nodeToDelete?.type === "taskNode";
 
       if (isTaskNode) {
-        vfsService.deleteNodeVfsFiles(id).catch(err => {
+        vfsService.deleteNodeVfsFiles(id, targetTabId).catch(err => {
           console.error(`[store] Failed to delete VFS files for node ${id}:`, err);
         });
       }

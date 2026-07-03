@@ -13,7 +13,8 @@ export const useEdgeDiff = (
   edge: any,
   sourceNode: any,
   targetNode: any,
-  sourceModifiedFiles: string[]
+  sourceModifiedFiles: string[],
+  tabId?: string
 ) => {
   const [conflictDetails, setConflictDetails] = useState<string>("");
   const [originalCode, setOriginalCode] = useState("// No conflict data loaded");
@@ -22,7 +23,7 @@ export const useEdgeDiff = (
 
   const loadDiffContent = async (filePath: string) => {
     try {
-      const modified: string = await invoke("read_file_vfs", { path: filePath });
+      const modified: string = await invoke("read_file_vfs", { path: filePath, tabId });
       let original = "";
       try {
         original = await invoke("read_file_disk", { path: filePath });

@@ -203,7 +203,7 @@ export const Workspace: React.FC = () => {
       const files: { path: string; content: string }[] = [];
       for (const filePath of modifiedPaths) {
         try {
-          const content = await invoke<string>("read_file_vfs", { path: filePath });
+          const content = await invoke<string>("read_file_vfs", { path: filePath, tabId: targetTabId });
           files.push({ path: filePath, content: content || "" });
         } catch (err: any) {
           console.warn(`[executeNode] could not read upstream file ${filePath}:`, err);
@@ -382,7 +382,7 @@ export const Workspace: React.FC = () => {
         if (data.type === "read_file") {
           try {
             console.log(`WebSocket [read_file] intercept for: ${data.path}`);
-            const content: string = await invoke("read_file_vfs", { path: data.path });
+            const content: string = await invoke("read_file_vfs", { path: data.path, tabId: targetTabId });
             socket.send(
               JSON.stringify({ type: "read_file_response", requestId: data.requestId, content })
             );
@@ -402,7 +402,7 @@ export const Workspace: React.FC = () => {
         if (data.type === "write_file") {
           try {
             console.log(`WebSocket [write_file] intercept for: ${data.path}`);
-            await invoke("write_file_vfs", { path: data.path, content: data.content, nodeId });
+            await invoke("write_file_vfs", { path: data.path, content: data.content, nodeId, tabId: targetTabId });
             socket.send(JSON.stringify({ type: "write_file_response", requestId: data.requestId }));
           } catch (err: any) {
             console.error("WebSocket [write_file] intercept error:", err);
@@ -440,6 +440,14 @@ export const Workspace: React.FC = () => {
           useWorkspaceStore.getState().updateTaskNode(nodeId, { modifiedFiles: modified });
           setNodeStatus(nodeId, "success");
           socket.close();
+
+          if (targetTabId) {
+            import("./tabs/canvas/services/canvasFileService").then(({ canvasFileService }) => {
+              canvasFileService.autoSaveCanvas(targetTabId);
+            }).catch((err) => {
+              console.error("Failed to auto-save canvas after execution complete:", err);
+            });
+          }
         }
 
         if (data.type === "execution_error" && data.nodeId === nodeId) {

@@ -6,9 +6,10 @@
  * calls state management hooks, and delegates view rendering to tab sub-components.
  */
 
-import React, { useState } from "react";
+import React, { useState, useContext } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
+import { CanvasTabContext } from "../tabs/canvas/CanvasTabContext";
 
 // Hooks
 import { useEdgeDiff } from "./useEdgeDiff";
@@ -26,6 +27,7 @@ interface EdgeInspectorPaneProps {
 }
 
 export const EdgeInspectorPane: React.FC<EdgeInspectorPaneProps> = ({ onClose }) => {
+  const { tabId } = useContext(CanvasTabContext);
   const selectedEdgeId = useWorkspaceStore((state) => state.selectedEdgeId);
   const edges = useWorkspaceStore((state) => state.edges);
   const nodes = useWorkspaceStore((state) => state.nodes);
@@ -45,7 +47,7 @@ export const EdgeInspectorPane: React.FC<EdgeInspectorPaneProps> = ({ onClose })
   const sourceModifiedFiles = (sourceNode?.data?.modifiedFiles as string[]) || [];
 
   // Diff hook
-  const diff = useEdgeDiff(edge, sourceNode, targetNode, sourceModifiedFiles);
+  const diff = useEdgeDiff(edge, sourceNode, targetNode, sourceModifiedFiles, tabId);
 
   // WebSocket hook
   const ws = useEdgeWebSocket(
@@ -54,7 +56,8 @@ export const EdgeInspectorPane: React.FC<EdgeInspectorPaneProps> = ({ onClose })
     targetNode,
     sourceModifiedFiles,
     diff.diffFile,
-    diff.loadDiffContent
+    diff.loadDiffContent,
+    tabId
   );
 
   const handleApproveReconciliation = () => {
@@ -96,6 +99,7 @@ export const EdgeInspectorPane: React.FC<EdgeInspectorPaneProps> = ({ onClose })
             loadDiffContent={diff.loadDiffContent}
             originalCode={diff.originalCode}
             modifiedCode={diff.modifiedCode}
+            tabId={tabId}
           />
         )}
 

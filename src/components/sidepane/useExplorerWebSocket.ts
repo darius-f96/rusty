@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useWorkspaceStore } from "../../store";
 import { invoke } from "@tauri-apps/api/core";
 import { notify } from "../../notificationStore";
@@ -53,6 +53,17 @@ const parseAndCreateContextNodes = (response: string, nodePosition: { x: number;
 export const useExplorerWebSocket = (selectedNode: any) => {
   const selectedNodeId = selectedNode?.id || null;
   const nodeStatus = useWorkspaceStore((state) => state.nodeStatus[selectedNodeId || ""] || "idle");
+
+  const tabId = useMemo(() => {
+    if (!selectedNodeId) return undefined;
+    const contexts = useWorkspaceStore.getState().canvasContexts;
+    for (const tId in contexts) {
+      if (contexts[tId].nodes.some((n) => n.id === selectedNodeId)) {
+        return tId;
+      }
+    }
+    return undefined;
+  }, [selectedNodeId]);
 
   const [explorerInput, setExplorerInput] = useState("");
   const [isSummarizing, setIsSummarizing] = useState(false);
@@ -241,7 +252,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
 
         if (msg.type === "read_file") {
           console.log(`[SidePane] Tool request: read_file ${msg.path}`);
-          invoke("read_file_vfs", { path: msg.path }).then((content: unknown) => {
+          invoke("read_file_vfs", { path: msg.path, tabId }).then((content: unknown) => {
             if (socket.readyState === WebSocket.OPEN) {
               socket.send(JSON.stringify({
                 type: "read_file_response",
@@ -471,7 +482,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
         }
 
         if (msg.type === "read_file") {
-          invoke("read_file_vfs", { path: msg.path }).then((content: unknown) => {
+          invoke("read_file_vfs", { path: msg.path, tabId }).then((content: unknown) => {
             if (socket.readyState === WebSocket.OPEN) {
               socket.send(JSON.stringify({
                 type: "read_file_response",

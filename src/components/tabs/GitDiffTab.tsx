@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { DiffEditor } from "@monaco-editor/react";
 import { useWorkspaceStore } from "../../store";
 import { invoke } from "@tauri-apps/api/core";
@@ -23,6 +23,16 @@ export const GitDiffTab: React.FC<GitDiffTabProps> = ({ tab, groupId }) => {
   const [loading, setLoading] = useState(true);
   const diffEditorRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const canvasTabId = useMemo(() => {
+    const contexts = useWorkspaceStore.getState().canvasContexts;
+    for (const tId in contexts) {
+      const ctx = contexts[tId];
+      const hasNode = ctx.nodes.some((n: any) => n.data?.modifiedFiles?.includes(tab.key));
+      if (hasNode) return tId;
+    }
+    return undefined;
+  }, [tab.key]);
   const { viewMode, isAutoMode, toggleViewMode, enableAutoMode, renderSideBySide } = useDiffViewMode(containerRef);
 
   useEffect(() => {
@@ -61,7 +71,7 @@ export const GitDiffTab: React.FC<GitDiffTabProps> = ({ tab, groupId }) => {
             filePath: tab.key,
           });
           try {
-            modified = await invoke("read_file_vfs", { path: tab.key });
+            modified = await invoke("read_file_vfs", { path: tab.key, tabId: canvasTabId });
           } catch (e) {
             try {
               modified = await invoke("read_file_disk", { path: tab.key });
