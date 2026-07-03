@@ -255,13 +255,20 @@ export const AxiomTab: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
   }, []);
 
   const onNodeClick = (_event: React.MouseEvent, node: any) => {
+    setSelectedEdgeId(null);
     if (node.type === "contextNode" || node.type === "mcpNode" || node.type === "stickyNode" || node.type === "boundaryNode") {
       return;
     }
     setSelectedNodeId(node.id);
   };
 
+  const onEdgeClick = useCallback((_event: React.MouseEvent, edge: any) => {
+    setSelectedNodeId(null);
+    setSelectedEdgeId(edge.id);
+  }, [setSelectedNodeId, setSelectedEdgeId]);
+
   const onPaneClick = () => {
+    setSelectedEdgeId(null);
     const currentSelectedId = useWorkspaceStore.getState().selectedNodeId;
     if (!currentSelectedId) {
       setContextMenu(null);
@@ -692,6 +699,7 @@ export const AxiomTab: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
               nodeTypes={nodeTypes}
               edgeTypes={edgeTypes}
               onNodeClick={onNodeClick}
+              onEdgeClick={onEdgeClick}
               onPaneClick={onPaneClick}
               onPaneContextMenu={onPaneContextMenu}
               onNodeContextMenu={onNodeContextMenu}

@@ -18,6 +18,7 @@ export const ReconciliationEdge: React.FC<EdgeProps> = ({
   targetPosition,
   style = {},
   markerEnd,
+  selected,
 }) => {
   const { tabId } = useContext(CanvasTabContext);
   const status = useWorkspaceStore(
@@ -53,12 +54,12 @@ export const ReconciliationEdge: React.FC<EdgeProps> = ({
         }
       : {};
 
-  const handleEdgeClick = (e: React.MouseEvent) => {
+
+
+  const handleBadgeClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (status === "unreconciled") {
-      setSelectedNodeId(null);
-      setSelectedEdgeId(id);
-    }
+    setSelectedNodeId(null);
+    setSelectedEdgeId(id);
   };
 
   return (
@@ -69,8 +70,7 @@ export const ReconciliationEdge: React.FC<EdgeProps> = ({
         fill="none"
         stroke="transparent"
         strokeWidth={20}
-        onClick={handleEdgeClick}
-        style={{ cursor: status === "unreconciled" ? "pointer" : "default" }}
+        style={{ cursor: "pointer" }}
       />
       <BaseEdge
         id={id}
@@ -78,15 +78,16 @@ export const ReconciliationEdge: React.FC<EdgeProps> = ({
         markerEnd={markerEnd}
         style={{
           ...style,
-          stroke: strokeColor,
-          strokeWidth: 2.5,
+          stroke: selected ? "#6366F1" : strokeColor,
+          strokeWidth: selected ? 4 : 2.5,
           strokeDasharray: dashArray,
-          filter:
-            status === "unreconciled"
-              ? "drop-shadow(0 0 4px rgba(239, 68, 68, 0.5))"
-              : status === "reconciled"
-              ? "drop-shadow(0 0 4px rgba(16, 185, 129, 0.4))"
-              : "none",
+          filter: selected
+            ? "drop-shadow(0 0 6px rgba(99, 102, 241, 0.6))"
+            : status === "unreconciled"
+            ? "drop-shadow(0 0 4px rgba(239, 68, 68, 0.5))"
+            : status === "reconciled"
+            ? "drop-shadow(0 0 4px rgba(16, 185, 129, 0.4))"
+            : "none",
           ...animationStyle,
         }}
       />
@@ -102,7 +103,7 @@ export const ReconciliationEdge: React.FC<EdgeProps> = ({
         >
           {status === "unreconciled" && (
             <button
-              onClick={handleEdgeClick}
+              onClick={handleBadgeClick}
               className="bg-rose-500/90 text-white text-[9px] font-mono font-bold px-2 py-0.5 rounded-full shadow-lg hover:bg-rose-400 transition-all cursor-pointer backdrop-blur-sm"
               title="Click to resolve conflicts"
             >

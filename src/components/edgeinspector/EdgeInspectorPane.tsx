@@ -68,6 +68,14 @@ export const EdgeInspectorPane: React.FC<EdgeInspectorPaneProps> = ({ onClose })
     }
   };
 
+  const handleDeleteEdge = () => {
+    if (selectedEdgeId && tabId) {
+      useWorkspaceStore.getState().onEdgesChangeForTab(tabId, [{ type: "remove", id: selectedEdgeId }]);
+      setSelectedEdgeId(null);
+      onClose();
+    }
+  };
+
   if (!edge || !sourceNode || !targetNode) return null;
 
   return (
@@ -77,6 +85,7 @@ export const EdgeInspectorPane: React.FC<EdgeInspectorPaneProps> = ({ onClose })
         sourceNode={sourceNode}
         targetNode={targetNode}
         onClose={onClose}
+        onDelete={handleDeleteEdge}
       />
 
       {/* Tabs */}

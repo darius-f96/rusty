@@ -115,3 +115,10 @@
   scrollbar-width: thick;
   scrollbar-color: var(--text-muted) var(--bg-app);
 }
+
+/* Style for selected React Flow edges (default type) */
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: #6366F1 !important;
+  stroke-width: 4px !important;
+  filter: drop-shadow(0 0 6px rgba(99, 102, 241, 0.6)) !important;
+}
