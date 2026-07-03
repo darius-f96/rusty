@@ -430,7 +430,7 @@ const FileTreeNode: React.FC<{
       try {
         const { canvasFileService } = await import("./tabs/canvas/services/canvasFileService");
         const parsedData = await canvasFileService.loadCanvasFromFile(node.path);
-        useWorkspaceStore.getState().loadCanvasTab(parsedData);
+        const tabId = useWorkspaceStore.getState().loadCanvasTab(parsedData);
 
         // Restore VFS contents and tracker if available so the VFS tab shows
         // the correct node -> file mapping when the canvas is reopened.
@@ -440,7 +440,7 @@ const FileTreeNode: React.FC<{
           await canvasFileService.restoreCanvasVfs(
             parsedData.vfsContents || {},
             parsedData.vfsTracker || {},
-            parsedData.id
+            tabId
           );
         }
       } catch (err: any) {

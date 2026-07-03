@@ -155,7 +155,7 @@ export interface WorkspaceState {
   onEdgesChangeForTab: (tabId: string, changes: any[]) => void;
   onConnectForTab: (tabId: string, connection: Connection) => void;
   updateCanvasContext: (tabId: string, updates: Partial<CanvasContext>) => void;
-  loadCanvasTab: (data: any) => void;
+  loadCanvasTab: (data: any) => string;
   createCanvasTab: (title?: string) => void;
   createAgentTab: (title?: string) => void;
 
@@ -703,96 +703,99 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     return updateContextAndSync(state, tabId, () => updates);
   }),
 
-  loadCanvasTab: (data) => set((state) => {
-    const tabId = data.id ? `${data.id}_${Date.now()}` : `canvas_${Date.now()}`;
-    const title = data.title || "Untitled Pipeline";
-    const newTab = {
-      id: tabId,
-      type: "canvas" as const,
-      title: title,
-      key: `canvas_${tabId}`
-    };
-    
-    let tabExists = false;
-    let targetGroupId = state.activeGroupId;
-    
-    for (const group of state.editorGroups) {
-      if (group.openTabs.some((t) => t.id === tabId)) {
-        tabExists = true;
-        targetGroupId = group.id;
-        break;
+  loadCanvasTab: (data) => {
+    const tabId = data.id || `canvas_${Date.now()}`;
+    set((state) => {
+      const title = data.title || "Untitled Pipeline";
+      const newTab = {
+        id: tabId,
+        type: "canvas" as const,
+        title: title,
+        key: `canvas_${tabId}`
+      };
+      
+      let tabExists = false;
+      let targetGroupId = state.activeGroupId;
+      
+      for (const group of state.editorGroups) {
+        if (group.openTabs.some((t) => t.id === tabId)) {
+          tabExists = true;
+          targetGroupId = group.id;
+          break;
+        }
       }
-    }
-    
-    let newGroups = state.editorGroups;
-    let newCanvasContexts = state.canvasContexts;
-    if (!tabExists) {
-      newGroups = state.editorGroups.map((group) => {
-        if (group.id === targetGroupId) {
-          return {
-            ...group,
-            openTabs: [...group.openTabs, newTab],
-            activeTabId: tabId
-          };
-        }
-        return group;
-      });
-      newCanvasContexts = {
-        ...state.canvasContexts,
-        [tabId]: {
-          nodes: data.nodes || [],
-          edges: data.edges || [],
-          nodeLogs: data.nodeLogs || {},
-          nodeStatus: data.nodeStatus || {},
-          globalChatHistory: data.globalChatHistory || {},
-          edgeReconciliationStatus: data.edgeReconciliationStatus || {},
-          isPipelineApplied: data.isPipelineApplied || false
-        }
+      
+      let newGroups = state.editorGroups;
+      let newCanvasContexts = state.canvasContexts;
+      if (!tabExists) {
+        newGroups = state.editorGroups.map((group) => {
+          if (group.id === targetGroupId) {
+            return {
+              ...group,
+              openTabs: [...group.openTabs, newTab],
+              activeTabId: tabId
+            };
+          }
+          return group;
+        });
+        newCanvasContexts = {
+          ...state.canvasContexts,
+          [tabId]: {
+            nodes: data.nodes || [],
+            edges: data.edges || [],
+            nodeLogs: data.nodeLogs || {},
+            nodeStatus: data.nodeStatus || {},
+            globalChatHistory: data.globalChatHistory || {},
+            edgeReconciliationStatus: data.edgeReconciliationStatus || {},
+            isPipelineApplied: data.isPipelineApplied || false
+          }
+        };
+      } else {
+        newGroups = state.editorGroups.map((group) => {
+          if (group.id === targetGroupId) {
+            return {
+              ...group,
+              activeTabId: tabId
+            };
+          }
+          return group;
+        });
+        newCanvasContexts = {
+          ...state.canvasContexts,
+          [tabId]: {
+            nodes: data.nodes || [],
+            edges: data.edges || [],
+            nodeLogs: data.nodeLogs || {},
+            nodeStatus: data.nodeStatus || {},
+            globalChatHistory: data.globalChatHistory || {},
+            edgeReconciliationStatus: data.edgeReconciliationStatus || {},
+            isPipelineApplied: data.isPipelineApplied || false
+          }
+        };
+      }
+      
+      const tempState = {
+        ...state,
+        editorGroups: newGroups,
+        activeGroupId: targetGroupId,
+        canvasContexts: newCanvasContexts
       };
-    } else {
-      newGroups = state.editorGroups.map((group) => {
-        if (group.id === targetGroupId) {
-          return {
-            ...group,
-            activeTabId: tabId
-          };
-        }
-        return group;
-      });
-      newCanvasContexts = {
-        ...state.canvasContexts,
-        [tabId]: {
-          nodes: data.nodes || [],
-          edges: data.edges || [],
-          nodeLogs: data.nodeLogs || {},
-          nodeStatus: data.nodeStatus || {},
-          globalChatHistory: data.globalChatHistory || {},
-          edgeReconciliationStatus: data.edgeReconciliationStatus || {},
-          isPipelineApplied: data.isPipelineApplied || false
-        }
+      const activeCtx = getOrCreateContext(tempState, tabId);
+      
+      return {
+        editorGroups: newGroups,
+        activeGroupId: targetGroupId,
+        canvasContexts: newCanvasContexts,
+        nodes: activeCtx.nodes,
+        edges: activeCtx.edges,
+        nodeLogs: activeCtx.nodeLogs,
+        nodeStatus: activeCtx.nodeStatus,
+        globalChatHistory: activeCtx.globalChatHistory,
+        edgeReconciliationStatus: activeCtx.edgeReconciliationStatus
       };
-    }
-    
-    const tempState = {
-      ...state,
-      editorGroups: newGroups,
-      activeGroupId: targetGroupId,
-      canvasContexts: newCanvasContexts
-    };
-    const activeCtx = getOrCreateContext(tempState, tabId);
-    
-    return {
-      editorGroups: newGroups,
-      activeGroupId: targetGroupId,
-      canvasContexts: newCanvasContexts,
-      nodes: activeCtx.nodes,
-      edges: activeCtx.edges,
-      nodeLogs: activeCtx.nodeLogs,
-      nodeStatus: activeCtx.nodeStatus,
-      globalChatHistory: activeCtx.globalChatHistory,
-      edgeReconciliationStatus: activeCtx.edgeReconciliationStatus
-    };
-  }),
+    });
+    return tabId;
+  },
 
   createCanvasTab: (title) => set((state) => {
     const tabId = `canvas_${Date.now()}`;
