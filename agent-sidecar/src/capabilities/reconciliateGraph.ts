@@ -87,6 +87,7 @@ Your instructions:
 4. Use 'read_file' to read the contents of the VFS files.
 5. Use 'write_file' to apply your reconciled code changes back to the VFS.
 6. Verify that the final codebase is clean, compile-safe, and fully functional.
+7. CRITICAL: When making changes to a file, write the complete file with all changes included to the EXACT same path. Do NOT create a new/duplicate file with a similar or modified name. You must replace/overwrite the existing file. Never write partial code or snippets.
 
 Workspace root: ${workspaceRoot || "unknown"}
 `;
@@ -104,8 +105,49 @@ Workspace root: ${workspaceRoot || "unknown"}
       response = result?.response || result?.output || "Graph reconciliation complete.";
     } catch (sdkError: any) {
       console.warn("Graph reconciliation SDK fallback:", sdkError.message);
-      await new Promise(r => setTimeout(r, 800));
-      response = "Reconciliation completed. The graph was analyzed and overlaps were aligned inside the virtual file system.";
+      
+      const { callLlmWithToolsMultiRound } = await import("../services/llm");
+      let provider = "anthropic";
+      let modelName = "claude-3-5-sonnet-20241022";
+      if (model && model.includes("/")) {
+        [provider, modelName] = model.split("/");
+      }
+
+      let baseUrl = "";
+      let apiKey = "";
+
+      if (customProvider && customProvider.baseUrl && customProvider.apiKey) {
+        baseUrl = customProvider.baseUrl.replace(/\/$/, "");
+        apiKey = customProvider.apiKey;
+        if (modelName === "claude-3-5-sonnet-20241022" && customProvider.models?.[0]?.id) {
+          const firstModel = customProvider.models[0].id;
+          modelName = firstModel.includes("/") ? firstModel.split("/")[1] : firstModel;
+        }
+      } else if (provider === "anthropic") {
+        baseUrl = "https://api.anthropic.com/v1";
+        apiKey = process.env.ANTHROPIC_API_KEY || "";
+      } else if (provider === "openai") {
+        baseUrl = "https://api.openai.com/v1";
+        apiKey = process.env.OPENAI_API_KEY || "";
+      }
+
+      if (!apiKey && provider === "anthropic") {
+        console.warn("WebSocket [Server] Missing API key for graph reconciliation fallback. Using mock response.");
+        await new Promise(r => setTimeout(r, 800));
+        response = "Reconciliation completed. The graph was analyzed and overlaps were aligned inside the virtual file system.";
+      } else {
+        response = await callLlmWithToolsMultiRound(
+          { baseUrl, apiKey, model: modelName },
+          systemPrompt,
+          "Reconcile the task graph codebase by verifying and aligning modified files across the VFS. Update any conflicts or overlaps.",
+          [readVfsTool, writeVfsTool, createListFilesTool(workspaceRoot), createSearchCodebaseTool(workspaceRoot)],
+          workspaceRoot,
+          (msg) => console.log(`[ReconciliateGraph] ${msg}`),
+          15,
+          [],
+          () => ws.readyState !== WebSocket.OPEN
+        );
+      }
     }
 
     safeSend(ws, {

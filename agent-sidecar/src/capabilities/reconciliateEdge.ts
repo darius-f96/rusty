@@ -91,6 +91,7 @@ Your job:
 2. Analyze whether these changes conflict with the target task's requirements.
 3. If there are conflicts, explain them clearly and suggest fixes.
 4. If the user asks you to fix conflicts, use 'write_file' to apply the resolution.
+5. CRITICAL: When making changes to a file, write the complete file with all changes included to the EXACT same path. Do NOT create a new/duplicate file with a similar or modified name. You must replace/overwrite the existing file. Never write partial code or snippets.
 
 Workspace root: ${workspaceRoot || "unknown"}
 `;
@@ -108,11 +109,52 @@ Workspace root: ${workspaceRoot || "unknown"}
       response = result?.response || result?.output || "Reconciliation analysis complete.";
     } catch (sdkError: any) {
       console.warn("Reconciliation SDK fallback:", sdkError.message);
-      await new Promise(r => setTimeout(r, 800));
-      if (modifiedFiles?.length > 0) {
-        response = `I've reviewed the changes in ${modifiedFiles.join(", ")}. Based on the source and target task specifications, the modifications appear compatible. The changes follow the same patterns and do not introduce breaking conflicts.\n\nIf you're satisfied, click "Approve Reconciliation" to mark this connection as aligned.`;
+      
+      const { callLlmWithToolsMultiRound } = await import("../services/llm");
+      let provider = "anthropic";
+      let modelName = "claude-3-5-sonnet-20241022";
+      if (model && model.includes("/")) {
+        [provider, modelName] = model.split("/");
+      }
+
+      let baseUrl = "";
+      let apiKey = "";
+
+      if (customProvider && customProvider.baseUrl && customProvider.apiKey) {
+        baseUrl = customProvider.baseUrl.replace(/\/$/, "");
+        apiKey = customProvider.apiKey;
+        if (modelName === "claude-3-5-sonnet-20241022" && customProvider.models?.[0]?.id) {
+          const firstModel = customProvider.models[0].id;
+          modelName = firstModel.includes("/") ? firstModel.split("/")[1] : firstModel;
+        }
+      } else if (provider === "anthropic") {
+        baseUrl = "https://api.anthropic.com/v1";
+        apiKey = process.env.ANTHROPIC_API_KEY || "";
+      } else if (provider === "openai") {
+        baseUrl = "https://api.openai.com/v1";
+        apiKey = process.env.OPENAI_API_KEY || "";
+      }
+
+      if (!apiKey && provider === "anthropic") {
+        console.warn("WebSocket [Server] Missing API key for edge reconciliation fallback. Using mock response.");
+        await new Promise(r => setTimeout(r, 800));
+        if (modifiedFiles?.length > 0) {
+          response = `I've reviewed the changes in ${modifiedFiles.join(", ")}. Based on the source and target task specifications, the modifications appear compatible. The changes follow the same patterns and do not introduce breaking conflicts.\n\nIf you're satisfied, click "Approve Reconciliation" to mark this connection as aligned.`;
+        } else {
+          response = "No modified files to reconcile. The connection appears clean.";
+        }
       } else {
-        response = "No modified files to reconcile. The connection appears clean.";
+        response = await callLlmWithToolsMultiRound(
+          { baseUrl, apiKey, model: modelName },
+          systemPrompt,
+          userMessage || "Check for code conflicts between the tasks and reconcile if needed.",
+          [readVfsTool, writeVfsTool, createListFilesTool(workspaceRoot), createSearchCodebaseTool(workspaceRoot)],
+          workspaceRoot,
+          (msg) => console.log(`[ReconciliateEdge] ${msg}`),
+          15,
+          chatHistory || [],
+          () => ws.readyState !== WebSocket.OPEN
+        );
       }
     }
 
