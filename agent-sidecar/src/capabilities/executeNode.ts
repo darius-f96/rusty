@@ -239,6 +239,8 @@ ${mcpToolDescriptions.length > 0 ? `\n--- MCP TOOL INTEGRATIONS ---\nThe followi
 Remember:
 ${toolListText}
 - Always output clean code without placeholder comments.
+- When making changes to a file, write the complete file with all changes included to the EXACT same path. Do NOT create a new/duplicate file with a similar or modified name (e.g. file_new.ts). You must replace/overwrite the existing file.
+- Never write partial code, snippet edits, or diffs into a file. Always output the full, complete file content.
 
 CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
 1. STRICT SCOPE CONTROL: Focus strictly on implementing ONLY what is requested in the user instructions. Do NOT edit, create, or delete any files or configurations that are not directly requested (for example, do not configure RedisConfig, properties files, or build dependencies unless explicitly asked to).

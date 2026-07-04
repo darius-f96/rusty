@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { DiffEditor } from "@monaco-editor/react";
-import { Terminal, MessageSquare, Code, Sparkles, Save, RotateCcw, Octagon } from "lucide-react";
+import { Terminal, MessageSquare, Code, Sparkles, Save, RotateCcw, Octagon, Trash2 } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
 import { CustomSelect } from "../CustomSelect";
 import { invoke } from "@tauri-apps/api/core";
@@ -243,6 +243,52 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, onStopExec
                 }))}
                 className="w-64"
               />
+              {activeDiffFile && (
+                <button
+                  onClick={async () => {
+                    if (confirm(`Are you sure you want to delete ${activeDiffFile.split("/").pop() || activeDiffFile} from this task's VFS?`)) {
+                      try {
+                        const { vfsService } = await import("../../services/vfsService");
+                        await vfsService.removeFileVfs(activeDiffFile, canvasTabId);
+                        const newFiles = modifiedFiles.filter((f) => f !== activeDiffFile);
+                        updateTaskNode(taskNodeId, { modifiedFiles: newFiles });
+                        if (canvasTabId) {
+                          const { canvasFileService } = await import("./canvas/services/canvasFileService");
+                          await canvasFileService.autoSaveCanvas(canvasTabId);
+                        }
+                      } catch (err) {
+                        console.error("Failed to delete VFS file:", err);
+                      }
+                    }
+                  }}
+                  className="p-1 text-[var(--text-muted)] hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors cursor-pointer"
+                  title="Delete this file from VFS"
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
+              <button
+                onClick={async () => {
+                  if (confirm("Are you sure you want to delete all files modified by this task node from the VFS?")) {
+                    try {
+                      const { vfsService } = await import("../../services/vfsService");
+                      await vfsService.deleteNodeVfsFiles(taskNodeId, canvasTabId);
+                      updateTaskNode(taskNodeId, { modifiedFiles: [] });
+                      if (canvasTabId) {
+                        const { canvasFileService } = await import("./canvas/services/canvasFileService");
+                        await canvasFileService.autoSaveCanvas(canvasTabId);
+                      }
+                    } catch (err) {
+                      console.error("Failed to delete all VFS files:", err);
+                    }
+                  }
+                }}
+                className="flex items-center space-x-1 px-1.5 py-0.5 text-[10px] text-[var(--text-muted)] hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors cursor-pointer animate-fade-in"
+                title="Delete all files from VFS"
+              >
+                <Trash2 size={12} />
+                <span>Delete All</span>
+              </button>
             </div>
             <DiffViewToggle
               viewMode={viewMode}

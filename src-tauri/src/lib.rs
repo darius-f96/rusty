@@ -95,7 +95,10 @@ async fn write_file_vfs(
 
     if let Some(nid) = node_id {
         let mut tracker = node_file_tracker.0.lock().map_err(|e| e.to_string())?;
-        tracker.entry(nid.clone()).or_insert_with(Vec::new).push(path.clone());
+        let entry = tracker.entry(nid.clone()).or_insert_with(Vec::new);
+        if !entry.contains(&path) {
+            entry.push(path.clone());
+        }
         println!("Rust [write_file_vfs] tracked file for node: {}", nid);
     }
 

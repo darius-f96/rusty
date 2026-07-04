@@ -19,7 +19,6 @@ import {
 import { useWorkspaceStore } from "../../../store";
 import { notify } from "../../../notificationStore";
 import { SidePane } from "../../sidepane/SidePane";
-import { EdgeInspectorPane } from "../../edgeinspector/EdgeInspectorPane";
 import { ReconciliationGraphPane } from "../../sidepane/ReconciliationGraphPane";
 import { ContextNode } from "../../nodes/ContextNode";
 import { TaskNode } from "../../nodes/TaskNode";
@@ -98,7 +97,6 @@ export const AxiomTab: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
   const addMcpNode = useWorkspaceStore((state) => state.addMcpNode);
   const addStickyNode = useWorkspaceStore((state) => state.addStickyNode);
   const addBoundaryNode = useWorkspaceStore((state) => state.addBoundaryNode);
-  const selectedEdgeId = useWorkspaceStore((state) => state.selectedEdgeId);
   const setSelectedEdgeId = useWorkspaceStore((state) => state.setSelectedEdgeId);
   const setEdgeStatus = useWorkspaceStore((state) => state.setEdgeStatus);
 
@@ -738,11 +736,7 @@ export const AxiomTab: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
         })()}
 
         {/* Edge Inspector Pane */}
-        {selectedEdgeId && !selectedNodeId && (
-          <EdgeInspectorPane
-            onClose={() => setSelectedEdgeId(null)}
-          />
-        )}
+
 
         {/* Reconciliation Graph Pane */}
         {showReconciliationGraphPane && (

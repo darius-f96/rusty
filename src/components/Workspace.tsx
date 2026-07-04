@@ -119,6 +119,15 @@ export const Workspace: React.FC = () => {
       console.warn(`[executeNode] Failed to query initial node files:`, err);
     }
 
+    // Always clear VFS files for this node before starting execution (both initial run and refinements)
+    try {
+      await vfsService.deleteNodeVfsFiles(nodeId, targetTabId);
+      storeState.updateTaskNode(nodeId, { modifiedFiles: [] });
+      initialNodeFiles = [];
+    } catch (err) {
+      console.error("Failed to delete VFS files on execution start:", err);
+    }
+
     // Resolve context using targetTabId
     const tabCtx = targetTabId ? storeState.canvasContexts[targetTabId] : null;
     const currentNodes = tabCtx ? tabCtx.nodes : storeState.nodes;
@@ -273,7 +282,7 @@ export const Workspace: React.FC = () => {
       chatHistoryToSend = store.getGlobalChatHistory(nodeId)
         .filter(m => m.role === "user" || m.role === "assistant")
         .map(m => ({ role: m.role, content: m.content }));
-      currentInstructions = customPrompt;
+      currentInstructions = `${customPrompt}\n\nIMPORTANT: The workspace files for this task have been cleared/reset. Please redo the entire implementation from scratch based on the full conversation history and this new request, writing all necessary files as complete new files in the VFS.`;
     } else {
       // Initial "Run Executor" procedure call
       store.clearGlobalChatHistory(nodeId);
