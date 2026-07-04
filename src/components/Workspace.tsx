@@ -107,6 +107,18 @@ export const Workspace: React.FC = () => {
     
     if (!node || node.type !== "taskNode") return;
 
+    // Query what files are currently tracked for this node before starting execution
+    let initialNodeFiles: string[] = [];
+    try {
+      const allFiles = await vfsService.getAllNodeVfsFiles();
+      const nodeEntry = allFiles.find((entry) => entry.node_id === nodeId);
+      if (nodeEntry) {
+        initialNodeFiles = [...nodeEntry.files];
+      }
+    } catch (err) {
+      console.warn(`[executeNode] Failed to query initial node files:`, err);
+    }
+
     // Resolve context using targetTabId
     const tabCtx = targetTabId ? storeState.canvasContexts[targetTabId] : null;
     const currentNodes = tabCtx ? tabCtx.nodes : storeState.nodes;
@@ -437,17 +449,42 @@ export const Workspace: React.FC = () => {
           if (consoleFlushTimeout) clearTimeout(consoleFlushTimeout);
           useWorkspaceStore.getState().updateGlobalChatMessage(nodeId, consoleMessageId, "");
 
-          useWorkspaceStore.getState().updateTaskNode(nodeId, { modifiedFiles: modified });
+          const uniqueModified: string[] = Array.from(new Set(modified)) as string[];
+          useWorkspaceStore.getState().updateTaskNode(nodeId, { modifiedFiles: uniqueModified });
           setNodeStatus(nodeId, "success");
           socket.close();
 
-          if (targetTabId) {
-            import("./tabs/canvas/services/canvasFileService").then(({ canvasFileService }) => {
-              canvasFileService.autoSaveCanvas(targetTabId);
-            }).catch((err) => {
-              console.error("Failed to auto-save canvas after execution complete:", err);
-            });
-          }
+          const cleanUpVfsAndTracker = async () => {
+            // Overwrite backend tracker list with clean unique new files
+            try {
+              await vfsService.importVfsTracker({ [nodeId]: uniqueModified });
+            } catch (err) {
+              console.error("Failed to overwrite VFS tracker for task:", err);
+            }
+
+            // Remove stale VFS files from the memory VFS
+            const staleFiles = initialNodeFiles.filter((f) => !uniqueModified.includes(f));
+            for (const staleFile of staleFiles) {
+              try {
+                await vfsService.removeFileVfs(staleFile, targetTabId);
+                console.log(`[executeNode] Flushed stale VFS file: ${staleFile}`);
+              } catch (err) {
+                console.error(`Failed to remove stale VFS file ${staleFile}:`, err);
+              }
+            }
+
+            // Auto-save the canvas tab to reflect changes
+            if (targetTabId) {
+              try {
+                const { canvasFileService } = await import("./tabs/canvas/services/canvasFileService");
+                await canvasFileService.autoSaveCanvas(targetTabId);
+              } catch (err) {
+                console.error("Failed to auto-save canvas after VFS sync:", err);
+              }
+            }
+          };
+
+          cleanUpVfsAndTracker();
         }
 
         if (data.type === "execution_error" && data.nodeId === nodeId) {

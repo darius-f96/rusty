@@ -8,6 +8,7 @@ export interface NodeFilesResponse {
 export interface VfsService {
   setCurrentExecutingNode(nodeId: string | null): Promise<void>;
   deleteNodeVfsFiles(nodeId: string, tabId?: string): Promise<void>;
+  removeFileVfs(path: string, tabId?: string): Promise<void>;
   getAllNodeVfsFiles(): Promise<NodeFilesResponse[]>;
   exportVfsContents(tabId?: string): Promise<Record<string, string>>;
   importVfsContents(files: Record<string, string>, tabId?: string): Promise<void>;
@@ -31,6 +32,16 @@ export const vfsService: VfsService = {
       console.log(`[vfsService] Deleted all VFS files for node: ${nodeId} in tab: ${tabId}`);
     } catch (err) {
       console.error(`[vfsService] delete_node_vfs_files failed:`, err);
+      throw err;
+    }
+  },
+
+  async removeFileVfs(path: string, tabId?: string): Promise<void> {
+    try {
+      await invoke("remove_file_vfs", { path, tabId: tabId || null });
+      console.log(`[vfsService] Removed VFS path: ${path} for tab: ${tabId}`);
+    } catch (err) {
+      console.error(`[vfsService] remove_file_vfs failed:`, err);
       throw err;
     }
   },

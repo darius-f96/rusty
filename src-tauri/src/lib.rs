@@ -136,6 +136,22 @@ async fn set_current_executing_node(
 }
 
 #[tauri::command]
+async fn remove_file_vfs(
+    state: tauri::State<'_, VfsState>,
+    path: String,
+    tab_id: Option<String>,
+) -> Result<(), String> {
+    let tid = get_tab_id(tab_id);
+    println!("Rust [remove_file_vfs] removing path: {} from VFS for tab: {}", path, tid);
+    let mut vfs = state.0.lock().map_err(|e| e.to_string())?;
+    if let Some(tab_map) = vfs.get_mut(&tid) {
+        tab_map.remove(&path);
+        println!("Rust [remove_file_vfs] removed from VFS: {}", path);
+    }
+    Ok(())
+}
+
+#[tauri::command]
 async fn delete_node_vfs_files(
     vfs_state: tauri::State<'_, VfsState>,
     tracker_state: tauri::State<'_, NodeFileTracker>,
@@ -870,6 +886,7 @@ pub fn run() {
             close_terminal_session,
             read_file_vfs,
             write_file_vfs,
+            remove_file_vfs,
             apply_vfs_to_disk,
             set_current_executing_node,
             delete_node_vfs_files,
