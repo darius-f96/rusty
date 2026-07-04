@@ -20,6 +20,7 @@ import { useWorkspaceStore } from "../../../store";
 import { notify } from "../../../notificationStore";
 import { SidePane } from "../../sidepane/SidePane";
 import { EdgeInspectorPane } from "../../edgeinspector/EdgeInspectorPane";
+import { ReconciliationGraphPane } from "../../sidepane/ReconciliationGraphPane";
 import { ContextNode } from "../../nodes/ContextNode";
 import { TaskNode } from "../../nodes/TaskNode";
 import { GlobalChatNode } from "../../nodes/GlobalChatNode";
@@ -130,8 +131,10 @@ export const AxiomTab: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
         setEdgeStatus(edge.id, "unreconciled");
       }
     });
+    setShowReconciliationGraphPane(true);
   }, [edges, edgeReconciliationStatus, setEdgeStatus]);
 
+  const [showReconciliationGraphPane, setShowReconciliationGraphPane] = useState(false);
   const [rfInstance, setRfInstance] = useState<any>(null);
   const connectionStartRef = useRef<any>(null);
   const initRef = useRef(false);
@@ -738,6 +741,14 @@ export const AxiomTab: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
         {selectedEdgeId && !selectedNodeId && (
           <EdgeInspectorPane
             onClose={() => setSelectedEdgeId(null)}
+          />
+        )}
+
+        {/* Reconciliation Graph Pane */}
+        {showReconciliationGraphPane && (
+          <ReconciliationGraphPane
+            onClose={() => setShowReconciliationGraphPane(false)}
+            tabId={tab.id}
           />
         )}
 
