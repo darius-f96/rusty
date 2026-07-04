@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, memo, useContext } from "react";
 import { Handle, Position } from "@xyflow/react";
-import { Sparkles, AlertCircle, CheckCircle2, Loader2, Pencil, Check, Trash2, Octagon } from "lucide-react";
+import { Sparkles, AlertCircle, CheckCircle2, Loader2, Pencil, Check, Trash2, Octagon, Minimize2, Maximize2 } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
 import { CanvasTabContext } from "../tabs/canvas/CanvasTabContext";
 
@@ -79,18 +79,33 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
           )}
         </div>
         
-        <div className="flex items-center space-x-1.5 flex-shrink-0">
+        <div className="flex items-center space-x-1 flex-shrink-0">
           {isEditing ? (
             <button
-              onClick={handleNameSave}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleNameSave();
+              }}
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
-              className="nodrag text-emerald-400 hover:text-emerald-300 p-0.5 rounded transition-colors"
+              className="nodrag text-emerald-400 hover:text-emerald-300 p-1 hover:bg-white/5 rounded transition-colors"
             >
-              <Check size={13} />
+              <Check size={14} />
             </button>
           ) : (
             <>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsMinimized(!isMinimized);
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+                className="nodrag text-[var(--text-muted)] hover:text-[var(--text-light)] p-1 hover:bg-white/5 rounded transition-colors"
+                title={isMinimized ? "Expand instructions" : "Minimize instructions"}
+              >
+                {isMinimized ? <Maximize2 size={14} /> : <Minimize2 size={14} />}
+              </button>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -98,10 +113,10 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
-                className="nodrag text-[var(--text-muted)] hover:text-[var(--text-light)] p-0.5 rounded transition-colors"
+                className="nodrag text-[var(--text-muted)] hover:text-[var(--text-light)] p-1 hover:bg-white/5 rounded transition-colors"
                 title="Rename node"
               >
-                <Pencil size={12} />
+                <Pencil size={14} />
               </button>
               <button
                 onClick={(e) => {
@@ -110,10 +125,10 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
-                className="nodrag text-[var(--text-muted)] hover:text-rose-400 p-0.5 rounded transition-colors"
+                className="nodrag text-[var(--text-muted)] hover:text-rose-400 p-1 hover:bg-rose-500/10 rounded transition-colors"
                 title="Delete node"
               >
-                <Trash2 size={12} />
+                <Trash2 size={14} />
               </button>
               {nodeStatus === "running" && (
                 <button
@@ -123,10 +138,10 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
                   onMouseDown={(e) => e.stopPropagation()}
-                  className="nodrag text-rose-400 hover:text-rose-300 p-0.5 rounded transition-colors"
+                  className="nodrag text-rose-400 hover:text-rose-300 p-1 hover:bg-rose-500/10 rounded transition-colors"
                   title="Stop execution"
                 >
-                  <Octagon size={12} />
+                  <Octagon size={14} />
                 </button>
               )}
             </>
@@ -142,37 +157,27 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
       </div>
 
       {/* Node Content */}
-      <div className="p-3">
-        {/* Query Prompt Input */}
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <label className="block text-[10px] uppercase font-semibold text-[var(--text-muted)] font-sans">
+      {!isMinimized && (
+        <div className="p-3 border-t border-[var(--border-color)]">
+          {/* Query Prompt Input */}
+          <div>
+            <label className="block text-[10px] uppercase font-semibold text-[var(--text-muted)] font-sans mb-1.5">
               Prompt Instructions
             </label>
-            <button
-              onClick={() => setIsMinimized(!isMinimized)}
+            <textarea
+              ref={textareaRef}
+              value={data.prompt}
+              onChange={handlePromptChange}
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
-              className="nodrag text-[9px] font-sans text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors flex items-center space-x-1 cursor-pointer"
-            >
-              {isMinimized ? <span>[Expand]</span> : <span>[Minimize]</span>}
-            </button>
+              onClick={(e) => e.stopPropagation()}
+              placeholder="e.g. Add error logs to standard handlers, optimize map lookups..."
+              className="nodrag w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded-lg p-2 text-xs font-sans leading-relaxed text-[var(--text-light)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--border-active)] resize-none overflow-hidden"
+              style={{ minHeight: "60px", height: "auto" }}
+            />
           </div>
-          <textarea
-            ref={textareaRef}
-            value={data.prompt}
-            onChange={handlePromptChange}
-            onPointerDown={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => e.stopPropagation()}
-            placeholder="e.g. Add error logs to standard handlers, optimize map lookups..."
-            className={`nodrag w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded-lg p-2 text-xs font-sans leading-relaxed text-[var(--text-light)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--border-active)] resize-none ${
-              isMinimized ? "overflow-y-auto" : "overflow-hidden"
-            }`}
-            style={isMinimized ? { height: "76px" } : { minHeight: "60px", height: "auto" }}
-          />
         </div>
-      </div>
+      )}
 
       {/* Handles */}
       {/* Task connections (horizontal: Left & Right) */}
