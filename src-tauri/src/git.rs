@@ -86,7 +86,7 @@ pub async fn git_status(root_dir: String) -> Result<GitStatusResult, String> {
 
     // 2. Query porcelain output to easily parse staged, unstaged, and untracked changes
     let status_output = Command::new("git")
-        .args(&["status", "--porcelain"])
+        .args(&["status", "--porcelain", "-u"])
         .current_dir(&root_dir)
         .output()
         .map_err(|e| e.to_string())?;
