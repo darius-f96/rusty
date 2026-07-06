@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { ReactFlow, Background, BackgroundVariant } from "@xyflow/react";
+import { ReactFlow, Background, BackgroundVariant, ReactFlowProvider, useViewport } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import {
   CheckSquare,
@@ -14,7 +14,8 @@ import {
   X,
   StickyNote,
   Square,
-  Plug
+  Plug,
+  Link2
 } from "lucide-react";
 import { useWorkspaceStore } from "../../../store";
 import { notify } from "../../../notificationStore";
@@ -51,7 +52,15 @@ interface AxiomTabProps {
   onStopExecution: (nodeId: string) => void;
 }
 
-export const AxiomTab: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopExecution }) => {
+export const AxiomTab: React.FC<AxiomTabProps> = (props) => {
+  return (
+    <ReactFlowProvider>
+      <AxiomTabContent {...props} />
+    </ReactFlowProvider>
+  );
+};
+
+const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopExecution }) => {
   const rootPath = useWorkspaceStore((state) => state.rootPath);
   
   // Resolve tab-specific context from the store
@@ -76,6 +85,10 @@ export const AxiomTab: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
       return { ...n, zIndex: n.zIndex ?? 10 };
     });
   }, [nodes]);
+
+  const selectedNodes = useMemo(() => {
+    return flowNodes.filter((n) => n.selected);
+  }, [flowNodes]);
 
   const onNodesChange = useCallback((changes: any[]) => {
     useWorkspaceStore.getState().onNodesChangeForTab(tab.id, changes);
@@ -224,6 +237,77 @@ export const AxiomTab: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
     [nodes, edges]
   );
 
+  const getPossibleConnection = useCallback((node1: any, node2: any) => {
+    if (!node1 || !node2 || node1.id === node2.id) return null;
+
+    const checkDirection = (src: any, dst: any) => {
+      // 1. Task -> Task
+      if (src.type === "taskNode" && dst.type === "taskNode") {
+        const conn = {
+          source: src.id,
+          target: dst.id,
+          sourceHandle: "task-out",
+          targetHandle: "task-in",
+        };
+        if (isValidConnection(conn)) {
+          const alreadyConnected = edges.some(
+            (e) =>
+              e.source === conn.source &&
+              e.target === conn.target &&
+              e.sourceHandle === conn.sourceHandle &&
+              e.targetHandle === conn.targetHandle
+          );
+          if (!alreadyConnected) return conn;
+        }
+      }
+
+      // 2. Context/MCP -> Task
+      if ((src.type === "contextNode" || src.type === "mcpNode") && dst.type === "taskNode") {
+        const isSrcAbove = src.position.y < dst.position.y;
+        const sourceHandle = isSrcAbove ? "context-out-bottom" : "context-out-top";
+        const targetHandle = isSrcAbove ? "context-in-top" : "context-in-bottom";
+
+        const conn = {
+          source: src.id,
+          target: dst.id,
+          sourceHandle,
+          targetHandle,
+        };
+        if (isValidConnection(conn)) {
+          const alreadyConnected = edges.some(
+            (e) =>
+              e.source === conn.source &&
+              e.target === conn.target &&
+              e.sourceHandle === conn.sourceHandle &&
+              e.targetHandle === conn.targetHandle
+          );
+          if (!alreadyConnected) return conn;
+        }
+      }
+
+      return null;
+    };
+
+    let firstTry = checkDirection(node1, node2);
+    if (firstTry) return firstTry;
+
+    let secondTry = checkDirection(node2, node1);
+    if (secondTry) return secondTry;
+
+    return null;
+  }, [isValidConnection, edges]);
+
+  const possibleConnection = useMemo(() => {
+    if (selectedNodes.length !== 2) return null;
+    return getPossibleConnection(selectedNodes[0], selectedNodes[1]);
+  }, [selectedNodes, getPossibleConnection]);
+
+  const handleConnectSelected = useCallback(() => {
+    if (possibleConnection) {
+      useWorkspaceStore.getState().onConnectForTab(tab.id, possibleConnection);
+    }
+  }, [possibleConnection, tab.id]);
+
   const [nodeMenuOpen, setNodeMenuOpen] = useState(false);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<{
@@ -255,12 +339,9 @@ export const AxiomTab: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
     return () => window.removeEventListener("click", handleGlobalClick);
   }, []);
 
-  const onNodeClick = (_event: React.MouseEvent, node: any) => {
+  const onNodeClick = (_event: React.MouseEvent, _node: any) => {
     setSelectedEdgeId(null);
-    if (node.type === "contextNode" || node.type === "mcpNode" || node.type === "stickyNode" || node.type === "boundaryNode") {
-      return;
-    }
-    setSelectedNodeId(node.id);
+    // Node selection is handled by React Flow. We do not automatically open the side pane here.
   };
 
   const onEdgeClick = useCallback((_event: React.MouseEvent, edge: any) => {
@@ -714,16 +795,25 @@ export const AxiomTab: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
               maxZoom={1.2}
               minZoom={0.2}
               elevateNodesOnSelect={false}
+              multiSelectionKeyCode={["Meta", "Control"]}
             >
               <Background color="#1f2937" gap={16} size={1} variant={BackgroundVariant.Dots} />
             </ReactFlow>
           </div>
+
+          {possibleConnection && selectedNodes.length === 2 && (
+            <FloatingConnectButton
+              nodeA={selectedNodes[0]}
+              nodeB={selectedNodes[1]}
+              onConnect={handleConnectSelected}
+            />
+          )}
         </div>
 
         {/* Sliding Drawer Inspector Pane */}
         {(() => {
           const selectedNode = flowNodes.find((n) => n.id === selectedNodeId);
-          const showSidePane = selectedNodeId && selectedNode && getNodeConfig(selectedNode.type || "").hasSidepane;
+          const showSidePane = selectedNodeId && selectedNode && selectedNodes.length === 1 && selectedNodes[0].id === selectedNodeId && getNodeConfig(selectedNode.type || "").hasSidepane;
           if (!showSidePane) return null;
           return (
             <SidePane
@@ -797,5 +887,47 @@ export const AxiomTab: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
         )}
       </div>
     </CanvasTabContext.Provider>
+  );
+};
+
+const FloatingConnectButton: React.FC<{
+  nodeA: any;
+  nodeB: any;
+  onConnect: () => void;
+}> = ({ nodeA, nodeB, onConnect }) => {
+  const { x: viewportX, y: viewportY, zoom } = useViewport();
+
+  const getCenter = (node: any) => {
+    const width = node.measured?.width ?? (node.type === "taskNode" ? 320 : 288);
+    const height = node.measured?.height ?? 120;
+    return {
+      x: node.position.x + width / 2,
+      y: node.position.y + height / 2,
+    };
+  };
+
+  const centerA = getCenter(nodeA);
+  const centerB = getCenter(nodeB);
+  const midX = (centerA.x + centerB.x) / 2;
+  const midY = (centerA.y + centerB.y) / 2;
+
+  const left = midX * zoom + viewportX;
+  const top = midY * zoom + viewportY;
+
+  return (
+    <button
+      onClick={onConnect}
+      style={{
+        position: "absolute",
+        left: `${left}px`,
+        top: `${top}px`,
+        transform: "translate(-50%, -50%)",
+        zIndex: 1000,
+      }}
+      className="bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/90 text-white rounded-full p-3 shadow-2xl border border-[var(--border-color)] cursor-pointer flex items-center justify-center transition-all hover:scale-110 active:scale-95 duration-200"
+      title="Connect nodes"
+    >
+      <Link2 size={18} />
+    </button>
   );
 };

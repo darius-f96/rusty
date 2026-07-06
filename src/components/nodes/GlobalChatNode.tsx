@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, memo, useContext } from "react";
-import { Pencil, Check, Trash2, Sparkles, X, Loader2, Plug, ChevronDown, Lightbulb } from "lucide-react";
+import { Pencil, Check, Trash2, Sparkles, X, Loader2, Plug, ChevronDown, Lightbulb, Settings } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
 import { processResponse } from "../../services/responseProcessingService";
 import { CanvasTabContext } from "../tabs/canvas/CanvasTabContext";
@@ -10,6 +10,7 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
   const deleteNode = useWorkspaceStore((state) => state.deleteNode);
   const mcpServers = useWorkspaceStore((state) => state.mcpServers);
   const nodeStatus = useWorkspaceStore((state) => (state.canvasContexts[tabId] || { nodeStatus: {} }).nodeStatus[id] || "idle");
+  const setSelectedNodeId = useWorkspaceStore((state) => state.setSelectedNodeId);
 
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(data.name || "Task Auditor");
@@ -228,6 +229,36 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
             <span>Select this node to discuss tasks and build context for TaskNodes.</span>
           </div>
         )}
+      </div>
+
+      {/* Node Footer */}
+      <div className="bg-black/10 px-3 py-1.5 border-t border-[var(--border-color)] flex items-center justify-between text-[10px] select-none flex-shrink-0">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setSelectedNodeId(id);
+            // Programmatically select this node in the Zustand store context
+            const store = useWorkspaceStore.getState();
+            const canvasContext = store.canvasContexts[tabId];
+            if (canvasContext) {
+              const updatedNodes = canvasContext.nodes.map((n) => ({
+                ...n,
+                selected: n.id === id,
+              }));
+              store.updateCanvasContext(tabId, { nodes: updatedNodes });
+            }
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          className="nodrag text-[var(--text-muted)] hover:text-amber-400 hover:scale-110 active:scale-95 transition-all p-0.5 rounded cursor-pointer flex items-center space-x-1 group"
+          title="Open Explorer Pane"
+        >
+          <Settings size={13} className="group-hover:rotate-45 transition-transform duration-300 pointer-events-none" />
+          <span className="font-sans text-[9px] font-semibold pointer-events-none">Open Pane</span>
+        </button>
+        <span className="text-[9px] font-sans text-[var(--text-muted)] pr-2">
+          Global Auditor
+        </span>
       </div>
 
       {/* Resize Handle */}

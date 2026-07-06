@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, memo, useContext } from "react";
 import { Handle, Position } from "@xyflow/react";
-import { Sparkles, AlertCircle, CheckCircle2, Loader2, Pencil, Check, Trash2, Octagon, Minimize2, Maximize2 } from "lucide-react";
+import { Sparkles, AlertCircle, CheckCircle2, Loader2, Pencil, Check, Trash2, Octagon, Minimize2, Maximize2, Settings } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
 import { CanvasTabContext } from "../tabs/canvas/CanvasTabContext";
 
@@ -9,6 +9,7 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
   const updateTaskNode = useWorkspaceStore((state) => state.updateTaskNode);
   const nodeStatus = useWorkspaceStore((state) => (state.canvasContexts[tabId] || { nodeStatus: {} }).nodeStatus[id] || "idle");
   const deleteNode = useWorkspaceStore((state) => state.deleteNode);
+  const setSelectedNodeId = useWorkspaceStore((state) => state.setSelectedNodeId);
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(data.name || "AI Executor Node");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -178,6 +179,36 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
           </div>
         </div>
       )}
+
+      {/* Node Footer */}
+      <div className="bg-black/10 px-3 py-1.5 border-t border-[var(--border-color)] flex items-center justify-between text-[10px] select-none">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setSelectedNodeId(id);
+            // Programmatically select this node in the Zustand store context
+            const store = useWorkspaceStore.getState();
+            const canvasContext = store.canvasContexts[tabId];
+            if (canvasContext) {
+              const updatedNodes = canvasContext.nodes.map((n) => ({
+                ...n,
+                selected: n.id === id,
+              }));
+              store.updateCanvasContext(tabId, { nodes: updatedNodes });
+            }
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          className="nodrag text-[var(--text-muted)] hover:text-[var(--accent-color)] hover:scale-110 active:scale-95 transition-all p-0.5 rounded cursor-pointer flex items-center space-x-1 group"
+          title="Open Details Pane"
+        >
+          <Settings size={13} className="group-hover:rotate-45 transition-transform duration-300 pointer-events-none" />
+          <span className="font-sans text-[9px] font-semibold pointer-events-none">Open Pane</span>
+        </button>
+        <span className="text-[9px] font-mono text-[var(--text-muted)] truncate max-w-[150px]">
+          {data.model || "default"}
+        </span>
+      </div>
 
       {/* Handles */}
       {/* Task connections (horizontal: Left & Right) */}

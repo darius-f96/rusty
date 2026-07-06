@@ -122,3 +122,11 @@
   stroke-width: 4px !important;
   filter: drop-shadow(0 0 6px rgba(99, 102, 241, 0.6)) !important;
 }
+
+/* Style for selected React Flow nodes */
+.react-flow__node.selected {
+  outline: 2px solid var(--accent-color) !important;
+  outline-offset: 2px;
+  border-radius: 12px;
+}
+

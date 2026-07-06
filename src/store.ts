@@ -689,7 +689,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
 
   onConnectForTab: (tabId, connection) => set((state) => {
     const isContext = connection.source?.startsWith("context");
-    const edgeStyle = isContext ? { stroke: "#10b981", strokeWidth: 2 } : undefined;
+    const isMcp = connection.source?.startsWith("mcp");
+    const edgeStyle = isContext
+      ? { stroke: "#10b981", strokeWidth: 2 }
+      : isMcp
+      ? { stroke: "#0ea5e9", strokeWidth: 2 }
+      : undefined;
     const newEdge = {
       ...connection,
       style: edgeStyle
