@@ -4,9 +4,10 @@ import { TabBarView } from "./TabBar.view";
 
 interface TabBarProps {
   groupId: string;
+  onCloseTab?: (tabId: string, groupId: string) => void;
 }
 
-export const TabBar: React.FC<TabBarProps> = ({ groupId }) => {
+export const TabBar: React.FC<TabBarProps> = ({ groupId, onCloseTab }) => {
   const group = useWorkspaceStore((state) => state.editorGroups.find((g) => g.id === groupId));
   const openTabs = group ? group.openTabs : [];
   const activeTabId = group ? group.activeTabId : null;
@@ -47,7 +48,7 @@ export const TabBar: React.FC<TabBarProps> = ({ groupId }) => {
       setDropdownOpen={setDropdownOpen}
       setActiveTabId={setActiveTabId}
       setActiveGroupId={setActiveGroupId}
-      closeTab={closeTab}
+      closeTab={onCloseTab || closeTab}
       splitTab={splitTab}
       moveTab={moveTab}
       tabsContainerRef={tabsContainerRef}

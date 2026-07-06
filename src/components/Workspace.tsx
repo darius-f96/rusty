@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import { useWorkspaceStore } from "../store";
 import { invoke } from "@tauri-apps/api/core";
 import { vfsService } from "../services/vfsService";
@@ -15,9 +15,18 @@ import { WorkspaceTab } from "./tabs/WorkspaceTab";
 import { AgentTab } from "./tabs/AgentTab";
 import { SkillsTab } from "./tabs/SkillsTab";
 import { McpIntegrationTab } from "./mcp/McpIntegrationTab";
+import { createPortal } from "react-dom";
+import { AlertTriangle, X, Save, HelpCircle } from "lucide-react";
+import { canvasFileService } from "./tabs/canvas/services/canvasFileService";
 
 export const Workspace: React.FC = () => {
   const rootPath = useWorkspaceStore((state) => state.rootPath);
+  const [closeIntercept, setCloseIntercept] = useState<{
+    tabId: string;
+    groupId: string;
+    type: "unsaved" | "running";
+    title: string;
+  } | null>(null);
   const editorGroups = useWorkspaceStore((state) => state.editorGroups);
   const groupSizes = useWorkspaceStore((state) => state.groupSizes);
   const setGroupSizes = useWorkspaceStore((state) => state.setGroupSizes);
@@ -580,6 +589,119 @@ export const Workspace: React.FC = () => {
     }
   };
 
+  const handleCloseTab = (tabId: string, groupId: string) => {
+    const tab = useWorkspaceStore.getState().editorGroups
+      .flatMap((g) => g.openTabs)
+      .find((t) => t.id === tabId);
+
+    if (!tab || tab.type !== "canvas") {
+      useWorkspaceStore.getState().closeTab(tabId, groupId);
+      return;
+    }
+
+    const context = useWorkspaceStore.getState().canvasContexts[tabId];
+    if (!context) {
+      useWorkspaceStore.getState().closeTab(tabId, groupId);
+      return;
+    }
+
+    // 1. Check for running processes
+    const hasRunningNodes = Object.values(context.nodeStatus || {}).some(
+      (status) => status === "running"
+    );
+
+    if (hasRunningNodes) {
+      setCloseIntercept({
+        tabId,
+        groupId,
+        type: "running",
+        title: tab.title
+      });
+      return;
+    }
+
+    // 2. Check for unsaved changes
+    const hasUnsavedChanges = !context.hasBeenSaved && (context.nodes.length > 0 || context.edges.length > 0);
+    if (hasUnsavedChanges) {
+      setCloseIntercept({
+        tabId,
+        groupId,
+        type: "unsaved",
+        title: tab.title
+      });
+      return;
+    }
+
+    // No running processes or unsaved changes, close immediately
+    useWorkspaceStore.getState().closeTab(tabId, groupId);
+  };
+
+  const handleConfirmCloseRunning = async () => {
+    if (!closeIntercept) return;
+    const { tabId, groupId } = closeIntercept;
+
+    // Stop all running nodes in this tab
+    const context = useWorkspaceStore.getState().canvasContexts[tabId];
+    if (context) {
+      Object.keys(context.nodeStatus || {}).forEach((nodeId) => {
+        if (context.nodeStatus[nodeId] === "running") {
+          stopExecution(nodeId);
+        }
+      });
+    }
+
+    // Save the clean "idle" status back to disk if this tab was already saved before
+    if (context?.hasBeenSaved) {
+      try {
+        await canvasFileService.saveCanvas(tabId, closeIntercept.title);
+      } catch (err) {
+        console.error("[Workspace] Failed to save canvas status to disk on close:", err);
+      }
+    }
+
+    // Next, check for unsaved changes
+    const hasUnsavedChanges = !context.hasBeenSaved && (context.nodes.length > 0 || context.edges.length > 0);
+    if (hasUnsavedChanges) {
+      setCloseIntercept({
+        tabId,
+        groupId,
+        type: "unsaved",
+        title: closeIntercept.title
+      });
+    } else {
+      setCloseIntercept(null);
+      useWorkspaceStore.getState().closeTab(tabId, groupId);
+    }
+  };
+
+  const handleSaveAndClose = async (saveTitle: string) => {
+    if (!closeIntercept) return;
+    const { tabId, groupId } = closeIntercept;
+
+    if (!saveTitle.trim()) {
+      notify("Invalid input", "Please enter a valid title", "info");
+      return;
+    }
+
+    try {
+      const filePath = await canvasFileService.saveCanvas(tabId, saveTitle);
+      useWorkspaceStore.getState().updateTabTitle(tabId, saveTitle);
+      useWorkspaceStore.getState().updateCanvasContext(tabId, { hasBeenSaved: true });
+      setCloseIntercept(null);
+      useWorkspaceStore.getState().closeTab(tabId, groupId);
+      notify("Saved", `Pipeline saved to: ${filePath}`, "success");
+    } catch (e: any) {
+      notify("Save failed", `Error saving pipeline: ${e.message || e}`, "error");
+    }
+  };
+
+  const handleDiscardAndClose = () => {
+    if (!closeIntercept) return;
+    const { tabId, groupId } = closeIntercept;
+    setCloseIntercept(null);
+    useWorkspaceStore.getState().closeTab(tabId, groupId);
+  };
+
   const renderTabPanel = (tabsList: any[], activeId: string | null, groupId: string) => {
     return tabsList.map((tab) => {
       const isActive = tab.id === activeId;
@@ -661,7 +783,7 @@ export const Workspace: React.FC = () => {
                 }
               }}
             >
-              <TabBar groupId={group.id} />
+              <TabBar groupId={group.id} onCloseTab={handleCloseTab} />
               <div className="flex-1 min-h-0 relative bg-[var(--bg-editor)] overflow-hidden">
                 {renderTabPanel(group.openTabs, group.activeTabId, group.id)}
               </div>
@@ -677,6 +799,125 @@ export const Workspace: React.FC = () => {
           </React.Fragment>
         );
       })}
+
+      {closeIntercept && closeIntercept.type === "running" && createPortal(
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-xl w-full max-w-md shadow-2xl overflow-hidden font-mono">
+            <div className="px-4 py-3 bg-[var(--bg-header)] border-b border-[var(--border-color)] flex items-center justify-between">
+              <span className="text-[var(--text-light)] text-sm font-bold flex items-center space-x-2">
+                <AlertTriangle size={16} className="text-amber-500 animate-pulse" />
+                <span>Active Processes Running</span>
+              </span>
+              <button
+                onClick={() => setCloseIntercept(null)}
+                className="text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="p-4 flex flex-col space-y-3">
+              <p className="text-xs text-[var(--text-normal)] leading-relaxed">
+                The Axiom tab <code className="text-amber-400 font-bold">"{closeIntercept.title}"</code> has active background processes running.
+              </p>
+              <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+                Closing this tab will stop all running agents and cancel ongoing operations. Are you sure you want to proceed?
+              </p>
+            </div>
+            <div className="px-4 py-3 bg-[var(--bg-header)] border-t border-[var(--border-color)] flex items-center justify-end space-x-2">
+              <button
+                onClick={() => setCloseIntercept(null)}
+                className="px-3.5 py-1.5 border border-[var(--border-color)] hover:bg-[var(--bg-canvas)] text-[var(--text-muted)] hover:text-[var(--text-light)] rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmCloseRunning}
+                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors shadow-md"
+              >
+                Stop Agents & Close
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {closeIntercept && closeIntercept.type === "unsaved" && createPortal(
+        <UnsavedChangesModal
+          title={closeIntercept.title}
+          onSave={handleSaveAndClose}
+          onDiscard={handleDiscardAndClose}
+          onCancel={() => setCloseIntercept(null)}
+        />,
+        document.body
+      )}
+    </div>
+  );
+};
+
+const UnsavedChangesModal: React.FC<{
+  title: string;
+  onSave: (saveTitle: string) => void;
+  onDiscard: () => void;
+  onCancel: () => void;
+}> = ({ title, onSave, onDiscard, onCancel }) => {
+  const [saveTitle, setSaveTitle] = useState(title);
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-xl w-full max-w-md shadow-2xl overflow-hidden font-mono">
+        <div className="px-4 py-3 bg-[var(--bg-header)] border-b border-[var(--border-color)] flex items-center justify-between">
+          <span className="text-[var(--text-light)] text-sm font-bold flex items-center space-x-2">
+            <HelpCircle size={16} className="text-sky-400" />
+            <span>Unsaved Axiom Canvas</span>
+          </span>
+          <button
+            onClick={onCancel}
+            className="text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer"
+          >
+            <X size={16} />
+          </button>
+        </div>
+        <div className="p-4 flex flex-col space-y-4">
+          <p className="text-xs text-[var(--text-normal)] leading-relaxed">
+            You have unsaved changes in <code className="text-sky-400 font-bold">"{title}"</code>. Enter a title to save your canvas before closing:
+          </p>
+          <div className="flex flex-col space-y-1">
+            <label htmlFor="modal-axiom-title-input" className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-semibold font-sans">Axiom Title</label>
+            <input
+              id="modal-axiom-title-input"
+              type="text"
+              value={saveTitle}
+              onChange={(e) => setSaveTitle(e.target.value)}
+              placeholder="e.g. my_pipeline"
+              className="w-full bg-[var(--bg-canvas)] border border-[var(--border-color)] focus:border-[var(--accent-color)] text-[var(--text-light)] rounded-lg px-3 py-2 text-sm outline-none transition-colors"
+            />
+          </div>
+        </div>
+        <div className="px-4 py-3 bg-[var(--bg-header)] border-t border-[var(--border-color)] flex items-center justify-between">
+          <button
+            onClick={onDiscard}
+            className="px-3 py-1.5 border border-rose-500/30 hover:bg-rose-500/10 text-rose-400 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+          >
+            Discard Changes
+          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={onCancel}
+              className="px-3.5 py-1.5 border border-[var(--border-color)] hover:bg-[var(--bg-canvas)] text-[var(--text-muted)] hover:text-[var(--text-light)] rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => onSave(saveTitle)}
+              className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors shadow-md flex items-center space-x-1"
+            >
+              <Save size={13} />
+              <span>Save & Close</span>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

@@ -116,6 +116,7 @@ export interface CanvasContext {
   edgeReconciliationStatus: Record<string, "idle" | "unreconciled" | "reconciled">;
   isPipelineApplied?: boolean;
   lastStickyColor?: string;
+  hasBeenSaved?: boolean;
 }
 
 export interface LspServerConfig {
@@ -752,7 +753,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
             nodeStatus: data.nodeStatus || {},
             globalChatHistory: data.globalChatHistory || {},
             edgeReconciliationStatus: data.edgeReconciliationStatus || {},
-            isPipelineApplied: data.isPipelineApplied || false
+            isPipelineApplied: data.isPipelineApplied || false,
+            hasBeenSaved: true
           }
         };
       } else {

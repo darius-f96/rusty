@@ -339,6 +339,18 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
     return () => window.removeEventListener("click", handleGlobalClick);
   }, []);
 
+  // Trigger auto-save when nodes, edges, or chat history change (if this canvas has been saved before)
+  useEffect(() => {
+    if (!context.hasBeenSaved) return;
+
+    const timer = setTimeout(() => {
+      console.log(`[AxiomTab] Auto-saving canvas tab: ${tab.id}`);
+      canvasFileService.autoSaveCanvas(tab.id);
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [nodes, edges, context.globalChatHistory, context.hasBeenSaved, tab.id]);
+
   const onNodeClick = (_event: React.MouseEvent, _node: any) => {
     setSelectedEdgeId(null);
     // Node selection is handled by React Flow. We do not automatically open the side pane here.
@@ -465,6 +477,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
       }
       const filePath = await canvasFileService.saveCanvas(tab.id, saveTitle);
       useWorkspaceStore.getState().updateTabTitle(tab.id, saveTitle);
+      useWorkspaceStore.getState().updateCanvasContext(tab.id, { hasBeenSaved: true });
       setShowSaveModal(false);
       notify("Saved", `Pipeline saved to: ${filePath}`, "success");
     } catch (e: any) {
