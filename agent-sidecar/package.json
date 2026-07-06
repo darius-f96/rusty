@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "ts-node src/server.ts",
     "build": "tsup src/server.ts --format cjs,esm --dts",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "postinstall": "rm -rf node_modules/@earendil-works/pi-coding-agent/node_modules/undici"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "^0.79.10",
@@ -15,7 +16,8 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "undici": "6.21.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
@@ -25,5 +27,8 @@
     "ts-node": "^10.9.2",
     "tsup": "^8.1.0",
     "typescript": "^5.5.2"
+  },
+  "overrides": {
+    "undici": "6.21.1"
   }
 }

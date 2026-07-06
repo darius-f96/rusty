@@ -50,7 +50,7 @@ export const LlmSetupTab: React.FC = () => {
       try {
         const proxyUrl = "http://localhost:4000/proxy/models";
         const targetUrl = activeCustomProviderId === "opencode" 
-          ? "https://opencode.ai/zen/v1" 
+          ? (baseUrl.trim() || "https://opencode.ai/zen/v1") 
           : baseUrl.trim() || selectedProvider?.baseUrl || "";
 
         const res = await fetch(proxyUrl, {
@@ -109,7 +109,7 @@ export const LlmSetupTab: React.FC = () => {
     try {
       const proxyUrl = "http://localhost:4000/proxy/models";
       const targetUrl = activeCustomProviderId === "opencode" 
-        ? "https://opencode.ai/zen/v1" 
+        ? (baseUrl.trim() || "https://opencode.ai/zen/v1") 
         : baseUrl.trim() || selectedProvider?.baseUrl || "";
       
       const res = await fetch(proxyUrl, {
