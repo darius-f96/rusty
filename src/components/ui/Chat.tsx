@@ -15,11 +15,30 @@ interface ChatProps {
   isStreaming?: boolean;
   streamingMessageId?: string | null;
   compact?: boolean;
+  scrollKey?: string;
 }
 
-export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, streamingMessageId = null, compact = false }) => {
+export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, streamingMessageId = null, compact = false, scrollKey }) => {
   const [collapsedConsoles, setCollapsedConsoles] = useState<Record<string, boolean>>({});
   const consoleContentRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleScroll = () => {
+    if (scrollKey && containerRef.current) {
+      localStorage.setItem(`chat_scroll_${scrollKey}`, String(containerRef.current.scrollTop));
+    }
+  };
+
+  useEffect(() => {
+    if (scrollKey && containerRef.current) {
+      const savedScroll = localStorage.getItem(`chat_scroll_${scrollKey}`);
+      if (savedScroll) {
+        containerRef.current.scrollTop = parseInt(savedScroll, 10);
+      } else {
+        containerRef.current.scrollTop = containerRef.current.scrollHeight;
+      }
+    }
+  }, [scrollKey]);
 
   const toggleConsoleCollapse = (id: string) => {
     setCollapsedConsoles((prev) => ({
@@ -156,7 +175,11 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
   }, [messages, isStreaming]);
 
   return (
-    <div className={`flex-1 overflow-y-auto ${compact ? "px-1" : "px-4"} py-4 space-y-4 scrollbar-wider min-h-0 min-w-0`}>
+    <div
+      ref={containerRef}
+      onScroll={handleScroll}
+      className={`flex-1 overflow-y-auto ${compact ? "px-1" : "px-4"} py-4 space-y-4 scrollbar-wider min-h-0 min-w-0`}
+    >
       {messages.length === 0 ? (
         <div className="h-full flex flex-col items-center justify-center text-center text-[var(--text-muted)] select-none py-12">
           <Sparkles size={32} className="text-violet-500/40 animate-pulse mb-3" />

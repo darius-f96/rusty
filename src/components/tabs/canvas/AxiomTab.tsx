@@ -357,9 +357,13 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
   };
 
   const onEdgeClick = useCallback((_event: React.MouseEvent, edge: any) => {
-    setSelectedNodeId(null);
+    const currentSelectedId = useWorkspaceStore.getState().selectedNodeId;
+    const selectedNodeInThisCanvas = nodes.find((n) => n.id === currentSelectedId);
+    if (!selectedNodeInThisCanvas || selectedNodeInThisCanvas.type !== "globalChatNode") {
+      setSelectedNodeId(null);
+    }
     setSelectedEdgeId(edge.id);
-  }, [setSelectedNodeId, setSelectedEdgeId]);
+  }, [setSelectedNodeId, setSelectedEdgeId, nodes]);
 
   const onPaneClick = () => {
     setSelectedEdgeId(null);
@@ -826,7 +830,11 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
         {/* Sliding Drawer Inspector Pane */}
         {(() => {
           const selectedNode = flowNodes.find((n) => n.id === selectedNodeId);
-          const showSidePane = selectedNodeId && selectedNode && selectedNodes.length === 1 && selectedNodes[0].id === selectedNodeId && getNodeConfig(selectedNode.type || "").hasSidepane;
+          const showSidePane = selectedNodeId && selectedNode && (
+            selectedNode.type === "globalChatNode"
+              ? true
+              : (selectedNodes.length === 1 && selectedNodes[0].id === selectedNodeId)
+          ) && getNodeConfig(selectedNode.type || "").hasSidepane;
           if (!showSidePane) return null;
           return (
             <SidePane

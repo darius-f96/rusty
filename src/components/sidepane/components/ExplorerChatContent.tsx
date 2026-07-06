@@ -83,6 +83,7 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
         isStreaming={nodeStatus === "running"}
         streamingMessageId={streamingMessageId}
         compact
+        scrollKey={selectedNode?.id}
       />
 
       {/* Reusable Chat Input area */}
