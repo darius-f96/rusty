@@ -11,7 +11,7 @@ import path from "path";
 import fs from "fs";
 import { safeSend, getNextId, registerPendingRequest } from "../services/websocket";
 import { createListFilesTool, createSearchCodebaseTool, listFilesRecursive } from "../services/tools";
-import { callLlmWithToolsMultiRound, LlmConfig } from "../services/llm";
+import { callLlmWithToolsMultiRoundStreaming, LlmConfig } from "../services/llm";
 import { createMcpTools, McpServerConfig } from "../services/mcpClient";
 
 export async function globalExplore(ws: WebSocket, data: any): Promise<void> {
@@ -181,7 +181,7 @@ IMPORTANT: End your response with a section marked "--- SUMMARY ---" that contai
         throw new Error("No API key available. Use simulation fallback.");
       }
 
-      console.log(`WebSocket [Server] Calling LLM: ${llmConfig.model} at ${llmConfig.baseUrl}`);
+      console.log(`WebSocket [Server] Calling LLM (streaming): ${llmConfig.model} at ${llmConfig.baseUrl}`);
 
       const augmentedPrompt = planOnly
         ? `${PLAN_ONLY_INSTRUCTIONS}${prompt}\n<user prompt>`
@@ -190,13 +190,18 @@ IMPORTANT: End your response with a section marked "--- SUMMARY ---" that contai
       console.log(`WebSocket [Server] planOnly=${planOnly}, original prompt length=${prompt.length}, augmented length=${augmentedPrompt.length}`);
       console.log(`WebSocket [Server] augmented prompt preview: ${augmentedPrompt.substring(0, 300)}...`);
 
-      const responseText = await callLlmWithToolsMultiRound(
+      const sendToken = (token: string) => {
+        safeSend(ws, { type: "token", content: token });
+      };
+
+      const responseText = await callLlmWithToolsMultiRoundStreaming(
         llmConfig,
         systemPrompt,
         augmentedPrompt,
         tools,
         workspaceRoot,
         sendLog,
+        sendToken,
         50,
         chatHistory || [],
         () => ws.readyState !== WebSocket.OPEN

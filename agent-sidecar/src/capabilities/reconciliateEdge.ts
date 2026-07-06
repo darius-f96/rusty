@@ -110,7 +110,7 @@ Workspace root: ${workspaceRoot || "unknown"}
     } catch (sdkError: any) {
       console.warn("Reconciliation SDK fallback:", sdkError.message);
       
-      const { callLlmWithToolsMultiRound } = await import("../services/llm");
+      const { callLlmWithToolsMultiRoundStreaming } = await import("../services/llm");
       let provider = "anthropic";
       let modelName = "claude-3-5-sonnet-20241022";
       if (model && model.includes("/")) {
@@ -144,13 +144,15 @@ Workspace root: ${workspaceRoot || "unknown"}
           response = "No modified files to reconcile. The connection appears clean.";
         }
       } else {
-        response = await callLlmWithToolsMultiRound(
+        const edgeSendLog = (msg: string) => console.log(`[ReconciliateEdge] ${msg}`);
+        response = await callLlmWithToolsMultiRoundStreaming(
           { baseUrl, apiKey, model: modelName },
           systemPrompt,
           userMessage || "Check for code conflicts between the tasks and reconcile if needed.",
           [readVfsTool, writeVfsTool, createListFilesTool(workspaceRoot), createSearchCodebaseTool(workspaceRoot)],
           workspaceRoot,
-          (msg) => console.log(`[ReconciliateEdge] ${msg}`),
+          edgeSendLog,
+          () => {}, // No token streaming for edge reconciliation
           15,
           chatHistory || [],
           () => ws.readyState !== WebSocket.OPEN

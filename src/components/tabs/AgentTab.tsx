@@ -277,6 +277,14 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
           return;
         }
 
+        if (msg.type === "token" && msg.tabId === tab.id) {
+          consoleBufferRef.current += msg.content;
+          if (consoleMessageIdRef.current) {
+            updateAgentMessage(tab.id, consoleMessageIdRef.current, consoleBufferRef.current);
+          }
+          return;
+        }
+
         if (msg.type === "read_file") {
           invoke("read_file_disk", { path: msg.path }).then((content: unknown) => {
             if (socket.readyState === WebSocket.OPEN) {

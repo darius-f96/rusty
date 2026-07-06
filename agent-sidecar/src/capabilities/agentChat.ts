@@ -10,7 +10,7 @@ import { WebSocket } from "ws";
 import path from "path";
 import { safeSend, getNextId, registerPendingRequest } from "../services/websocket";
 import { createListFilesTool, createSearchCodebaseTool } from "../services/tools";
-import { callLlmWithToolsMultiRound, LlmConfig } from "../services/llm";
+import { callLlmWithToolsMultiRoundStreaming, LlmConfig } from "../services/llm";
 import { createLspTools } from "../services/lspTools";
 
 export async function agentChat(ws: WebSocket, data: any): Promise<void> {
@@ -181,15 +181,20 @@ Guidelines:
       throw new Error("No API key available.");
     }
 
-    console.log(`WebSocket [Server] agent_chat Calling LLM: ${llmConfig.model} at ${llmConfig.baseUrl}`);
+    console.log(`WebSocket [Server] agent_chat Calling LLM (streaming): ${llmConfig.model} at ${llmConfig.baseUrl}`);
 
-    const responseText = await callLlmWithToolsMultiRound(
+    const sendToken = (token: string) => {
+      safeSend(ws, { type: "token", tabId, content: token });
+    };
+
+    const responseText = await callLlmWithToolsMultiRoundStreaming(
       llmConfig,
       systemPrompt,
       message,
       tools,
       workspaceRoot,
       sendLog,
+      sendToken,
       30,
       chatHistory || [],
       () => ws.readyState !== WebSocket.OPEN

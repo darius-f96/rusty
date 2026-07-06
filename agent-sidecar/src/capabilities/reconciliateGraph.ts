@@ -106,7 +106,7 @@ Workspace root: ${workspaceRoot || "unknown"}
     } catch (sdkError: any) {
       console.warn("Graph reconciliation SDK fallback:", sdkError.message);
       
-      const { callLlmWithToolsMultiRound } = await import("../services/llm");
+      const { callLlmWithToolsMultiRoundStreaming } = await import("../services/llm");
       let provider = "anthropic";
       let modelName = "claude-3-5-sonnet-20241022";
       if (model && model.includes("/")) {
@@ -136,13 +136,15 @@ Workspace root: ${workspaceRoot || "unknown"}
         await new Promise(r => setTimeout(r, 800));
         response = "Reconciliation completed. The graph was analyzed and overlaps were aligned inside the virtual file system.";
       } else {
-        response = await callLlmWithToolsMultiRound(
+        const graphSendLog = (msg: string) => console.log(`[ReconciliateGraph] ${msg}`);
+        response = await callLlmWithToolsMultiRoundStreaming(
           { baseUrl, apiKey, model: modelName },
           systemPrompt,
           "Reconcile the task graph codebase by verifying and aligning modified files across the VFS. Update any conflicts or overlaps.",
           [readVfsTool, writeVfsTool, createListFilesTool(workspaceRoot), createSearchCodebaseTool(workspaceRoot)],
           workspaceRoot,
-          (msg) => console.log(`[ReconciliateGraph] ${msg}`),
+          graphSendLog,
+          () => {}, // No token streaming for graph reconciliation
           15,
           [],
           () => ws.readyState !== WebSocket.OPEN

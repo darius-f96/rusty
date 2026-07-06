@@ -298,7 +298,7 @@ CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
     }
 
     if (useMultiRound) {
-      const { callLlmWithToolsMultiRound } = await import("../services/llm");
+      const { callLlmWithToolsMultiRoundStreaming } = await import("../services/llm");
       let provider = "anthropic";
       let modelName = "claude-3-5-sonnet-20241022";
       if (model && model.includes("/")) {
@@ -333,13 +333,17 @@ CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
           response: `[Simulated Refactoring]\n\nBased on your prompt: "${instructions}", I have successfully simulated modifications on the connected files.`
         };
       } else {
-        const responseText = await callLlmWithToolsMultiRound(
+        const sendToken = (token: string) => {
+          safeSend(ws, { type: "token", nodeId, content: token });
+        };
+        const responseText = await callLlmWithToolsMultiRoundStreaming(
           { baseUrl, apiKey, model: modelName },
           systemPrompt,
           instructions,
           tools,
           workspaceRoot,
           sendLog,
+          sendToken,
           200,
           chatHistory || [],
           () => ws.readyState !== WebSocket.OPEN

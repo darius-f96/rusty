@@ -409,6 +409,12 @@ export const Workspace: React.FC = () => {
           return;
         }
 
+        if (data.type === "token" && data.nodeId === nodeId) {
+          consoleBuffer += data.content;
+          flushConsole();
+          return;
+        }
+
         if (data.type === "read_file") {
           try {
             console.log(`WebSocket [read_file] intercept for: ${data.path}`);
