@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, memo, useContext } from "react";
-import { Pencil, Check, Trash2, Sparkles, X, Loader2, Plug, ChevronDown, Lightbulb, Settings } from "lucide-react";
+import { Pencil, Check, Trash2, Sparkles, X, Loader2, Plug, ChevronDown, Lightbulb, Settings, BookOpen } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
 import { processResponse } from "../../services/responseProcessingService";
 import { CanvasTabContext } from "../tabs/canvas/CanvasTabContext";
@@ -9,12 +9,14 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
   const updateNode = useWorkspaceStore((state) => state.updateTaskNode);
   const deleteNode = useWorkspaceStore((state) => state.deleteNode);
   const mcpServers = useWorkspaceStore((state) => state.mcpServers);
+  const skills = useWorkspaceStore((state) => state.skills);
   const nodeStatus = useWorkspaceStore((state) => (state.canvasContexts[tabId] || { nodeStatus: {} }).nodeStatus[id] || "idle");
   const setSelectedNodeId = useWorkspaceStore((state) => state.setSelectedNodeId);
 
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(data.name || "Task Auditor");
   const [mcpMenuOpen, setMcpMenuOpen] = useState(false);
+  const [skillMenuOpen, setSkillMenuOpen] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
   // Resize state
@@ -161,11 +163,63 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
         ref={contentRef}
         className="p-3 flex-1 flex flex-col min-h-0 overflow-y-auto scrollbar-wider"
       >
-        {/* MCP server selector — route requests through Jira, Confluence, etc */}
+        {/* Skill selector — determines system prompt, enabled tools, and MCP servers */}
+        <div className="flex-shrink-0 mb-1.5">
+          <div className="relative">
+            <button
+              onClick={(e) => { e.stopPropagation(); setSkillMenuOpen(!skillMenuOpen); setMcpMenuOpen(false); }}
+              onPointerDown={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="nodrag w-full bg-[var(--bg-app)]/60 border border-[var(--border-color)] rounded-lg px-2 py-1.5 text-[10px] font-sans text-left flex items-center justify-between hover:border-amber-500/50 transition-colors"
+              title="Select a skill to use its system prompt, tools, and MCP servers"
+            >
+              <span className="flex items-center space-x-1.5 min-w-0">
+                <BookOpen size={11} className="text-amber-400 flex-shrink-0" />
+                <span className={data.skillId ? "text-[var(--text-light)] truncate" : "text-[var(--text-muted)] truncate"}>
+                  {data.skillId
+                    ? (skills.find((s: any) => s.id === data.skillId)?.name || data.skillId)
+                    : "Skill: default auditor"}
+                </span>
+              </span>
+              <ChevronDown size={11} className="text-[var(--text-muted)] flex-shrink-0 ml-2" />
+            </button>
+            {skillMenuOpen && (
+              <div
+                className="absolute z-30 left-0 right-0 mt-1 bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-lg shadow-xl py-1 max-h-44 overflow-y-auto"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  onClick={(e) => { e.stopPropagation(); updateNode(id, { skillId: "" }); setSkillMenuOpen(false); }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="w-full text-left px-2.5 py-1.5 hover:bg-[var(--accent-bg)] text-[10px] font-sans text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors"
+                >
+                  Default auditor
+                </button>
+                {skills.filter((s: any) => s.id !== "skill_task_auditor").map((s: any) => (
+                  <button
+                    key={s.id}
+                    onClick={(e) => { e.stopPropagation(); updateNode(id, { skillId: s.id }); setSkillMenuOpen(false); }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    className="w-full text-left px-2.5 py-1.5 hover:bg-[var(--accent-bg)] text-[10px] font-sans text-[var(--text-normal)] hover:text-[var(--text-light)] transition-colors flex items-center justify-between"
+                  >
+                    <span className="truncate">{s.name}</span>
+                    {Array.isArray(s.mcpServers) && s.mcpServers.length > 0 && (
+                      <span className="text-[8px] font-mono ml-2 text-sky-400 flex-shrink-0">
+                        <Plug size={8} className="inline mr-0.5" />{s.mcpServers.length} MCP
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* MCP server selector — override or add a single MCP server directly on the node */}
         <div className="flex-shrink-0 mb-2">
           <div className="relative">
             <button
-              onClick={(e) => { e.stopPropagation(); setMcpMenuOpen(!mcpMenuOpen); }}
+              onClick={(e) => { e.stopPropagation(); setMcpMenuOpen(!mcpMenuOpen); setSkillMenuOpen(false); }}
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
               className="nodrag w-full bg-[var(--bg-app)]/60 border border-[var(--border-color)] rounded-lg px-2 py-1.5 text-[10px] font-sans text-left flex items-center justify-between hover:border-amber-500/50 transition-colors"
@@ -174,7 +228,7 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
               <span className="flex items-center space-x-1.5 min-w-0">
                 <Plug size={11} className="text-sky-400 flex-shrink-0" />
                 <span className={data.mcpServerName ? "text-[var(--text-light)] truncate" : "text-[var(--text-muted)] truncate"}>
-                  {data.mcpServerName ? (mcpServers[data.mcpServerName]?.displayName || data.mcpServerName) : "MCP: none"}
+                  {data.mcpServerName ? (mcpServers[data.mcpServerName]?.displayName || data.mcpServerName) : "MCP override: none"}
                 </span>
               </span>
               <ChevronDown size={11} className="text-[var(--text-muted)] flex-shrink-0 ml-2" />
@@ -189,7 +243,7 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
                   onPointerDown={(e) => e.stopPropagation()}
                   className="w-full text-left px-2.5 py-1.5 hover:bg-[var(--accent-bg)] text-[10px] font-sans text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors"
                 >
-                  MCP: none
+                  MCP override: none
                 </button>
                 {Object.keys(mcpServers).map((name) => {
                   const srv = mcpServers[name];

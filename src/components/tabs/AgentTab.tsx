@@ -245,6 +245,13 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
         preferredModel: selectedSkill.preferredModel,
       } : null;
 
+      // Resolve MCP servers declared in the active skill.
+      const mcpServersMap = useWorkspaceStore.getState().mcpServers;
+      const skillMcpNames: string[] = selectedSkill?.mcpServers || [];
+      const mcpServers = skillMcpNames
+        .map((name: string) => mcpServersMap[name])
+        .filter((srv: any): srv is NonNullable<typeof srv> => !!srv);
+
       socket.send(JSON.stringify({
         type: "agent_chat",
         tabId: tab.id,
@@ -260,6 +267,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
             ? prov
             : null,
         skill: skillData,
+        mcpServers,
         lspSettings: useWorkspaceStore.getState().lspSettings,
       }));
     };

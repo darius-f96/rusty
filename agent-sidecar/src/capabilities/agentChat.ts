@@ -12,12 +12,14 @@ import { safeSend, getNextId, registerPendingRequest } from "../services/websock
 import { createListFilesTool, createSearchCodebaseTool } from "../services/tools";
 import { callLlmWithToolsMultiRoundStreaming, LlmConfig } from "../services/llm";
 import { createLspTools } from "../services/lspTools";
+import { createMcpTools, McpServerConfig } from "../services/mcpClient";
 
 export async function agentChat(ws: WebSocket, data: any): Promise<void> {
-  const { tabId, message, model, workspaceRoot, chatHistory, customProvider, skill, lspSettings } = data;
-  console.log(`WebSocket [Server] agent_chat starting`, { tabId, workspaceRoot, model, hasSkill: !!skill, lspEnabled: lspSettings?.enabled });
+  const { tabId, message, model, workspaceRoot, chatHistory, customProvider, skill, lspSettings, mcpServers } = data;
+  console.log(`WebSocket [Server] agent_chat starting`, { tabId, workspaceRoot, model, hasSkill: !!skill, lspEnabled: lspSettings?.enabled, mcpCount: mcpServers?.length || 0 });
 
   const modifiedFiles = new Set<string>();
+  const mcpDisposers: Array<() => void> = [];
 
   const sendLog = (logMessage: string) => {
     safeSend(ws, { type: "log", tabId, message: logMessage });
@@ -106,6 +108,23 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
     ];
     const tools = allTools.filter((t: any) => enabledToolNames.includes(t.name));
 
+    // Connect to MCP servers and register their tools
+    const mcpToolLines: string[] = [];
+    if (Array.isArray(mcpServers) && mcpServers.length > 0) {
+      for (const server of mcpServers as McpServerConfig[]) {
+        try {
+          const { tools: mcpTools, dispose } = await createMcpTools(server, sendLog);
+          mcpDisposers.push(dispose);
+          for (const t of mcpTools) {
+            tools.push(t);
+            mcpToolLines.push(`- '${t.name}': ${t.description}`);
+          }
+        } catch (err: any) {
+          sendLog(`MCP server "${server.name}" could not be loaded: ${err.message}`);
+        }
+      }
+    }
+
     const toolDescriptions: Record<string, string> = {
       read_file: "- 'read_file': Read any file in the workspace (input: {\"path\": \"file/path\"}).",
       write_file: "- 'write_file': Write or edit a file (input: {\"path\": \"file/path\", \"content\": \"full content\"}).",
@@ -132,6 +151,7 @@ Guidelines:
 - Be concise and focused. Only modify what is requested.
 - Output clean code without placeholder comments.
 - Once done, summarize the changes you made.
+${mcpToolLines.length > 0 ? `\nMCP integration tools (external data sources):\n${mcpToolLines.join("\n")}\n` : ""}
 `;
 
     const systemPrompt = skill?.systemPrompt || defaultSystemPrompt;
@@ -222,5 +242,14 @@ Guidelines:
       tabId,
       error: err.message
     });
+  } finally {
+    // Clean up MCP server connections
+    for (const dispose of mcpDisposers) {
+      try {
+        dispose();
+      } catch (err) {
+        console.error("Error disposing MCP connection:", err);
+      }
+    }
   }
 }

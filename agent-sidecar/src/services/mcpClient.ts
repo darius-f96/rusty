@@ -57,10 +57,12 @@ function resolveEnv(input: string): string {
   return input.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, name) => process.env[name] || "");
 }
 
-function buildHeaders(server: McpServerConfig): Record<string, string> {
+function buildHeaders(server: any): Record<string, string> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "Accept": "application/json, text/event-stream",
+    ...(server.headers || {}),
+    ...(server.transport?.headers || {})
   };
   const auth = server.auth || { type: "none" };
   if (auth.type === "apiKey" && auth.header) {
@@ -169,9 +171,9 @@ class HttpMcpClient extends McpClient {
   private timeoutMs: number;
   private postEndpoint: string | null = null; // for legacy SSE transport
 
-  constructor(server: McpServerConfig) {
+  constructor(server: any) {
     super();
-    this.url = server.transport.url || "";
+    this.url = server.transport?.url || server.url || "";
     this.headers = buildHeaders(server);
     this.timeoutMs = server.timeout || 30000;
   }
@@ -240,18 +242,19 @@ class StdioMcpClient extends McpClient {
   private pending = new Map<number, { resolve: (v: any) => void; reject: (e: any) => void }>();
   private buffer = "";
 
-  constructor(private server: McpServerConfig) {
+  constructor(private server: any) {
     super();
   }
 
   private ensureProcess(): void {
     if (this.proc) return;
-    const cmd = this.server.transport.command;
+    const cmd = this.server.transport?.command || this.server.command;
     if (!cmd) throw new Error("stdio MCP server missing command");
-    const args = this.server.transport.args || [];
+    const args = this.server.transport?.args || this.server.args || [];
     const env = { ...process.env };
-    for (const [k, v] of Object.entries(this.server.transport.env || {})) {
-      env[k] = resolveEnv(v);
+    const envSource = this.server.transport?.env || this.server.env || {};
+    for (const [k, v] of Object.entries(envSource)) {
+      env[k] = resolveEnv(v as string);
     }
     this.proc = spawn(cmd, args, { env, stdio: ["pipe", "pipe", "pipe"] });
 
@@ -332,14 +335,14 @@ class WebSocketMcpClient extends McpClient {
   private ws: WebSocket | null = null;
   private pending = new Map<number, { resolve: (v: any) => void; reject: (e: any) => void }>();
 
-  constructor(private server: McpServerConfig) {
+  constructor(private server: any) {
     super();
   }
 
   private ensureSocket(): Promise<void> {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) return Promise.resolve();
     return new Promise((resolve, reject) => {
-      const url = this.server.transport.url;
+      const url = this.server.transport?.url || this.server.url;
       if (!url) { reject(new Error("websocket MCP missing url")); return; }
       const ws = new WebSocket(url, { headers: buildHeaders(this.server) } as any);
       this.ws = ws;
@@ -394,8 +397,8 @@ class WebSocketMcpClient extends McpClient {
   }
 }
 
-function createClient(server: McpServerConfig): McpClient {
-  const type = server.transport.type;
+function createClient(server: any): McpClient {
+  const type = server.transport?.type || server.type;
   if (type === "stdio") return new StdioMcpClient(server);
   if (type === "websocket") return new WebSocketMcpClient(server);
   return new HttpMcpClient(server); // http + sse
@@ -406,29 +409,32 @@ function createClient(server: McpServerConfig): McpClient {
  * and return LLM-compatible tool descriptors. Each tool's `execute` calls the
  * remote `tools/call` method.
  */
-export async function createMcpTools(server: McpServerConfig, sendLog: SendLog): Promise<McpToolsResult> {
+export async function createMcpTools(server: any, sendLog: SendLog, serverNameFallback?: string): Promise<McpToolsResult> {
   const noop: SendLog = sendLog || (() => {});
-  if (!server.enabled) {
-    noop(`MCP server "${server.name}" is disabled — skipping.`);
+  const serverName = server.name || serverNameFallback || "mcp_server";
+  const enabled = server.enabled !== false;
+  if (!enabled) {
+    noop(`MCP server "${serverName}" is disabled — skipping.`);
     return { tools: [], dispose: () => {} };
   }
 
   const client = createClient(server);
-  const prefix = `mcp__${server.name}__`;
+  const prefix = `mcp__${serverName}__`;
 
   try {
-    noop(`Connecting to MCP server "${server.name}" (${server.transport.type})...`);
+    const transportType = server.transport?.type || server.type || "http";
+    noop(`Connecting to MCP server "${serverName}" (${transportType})...`);
     await client.initialize();
     const rawTools = await client.listTools();
-    noop(`MCP "${server.name}" exposed ${rawTools.length} tool(s).`);
+    noop(`MCP "${serverName}" exposed ${rawTools.length} tool(s).`);
 
     const tools: McpTool[] = rawTools.map((t: any) => ({
       name: `${prefix}${t.name}`,
-      description: `[MCP:${server.name}] ${t.description || t.name}`,
+      description: `[MCP:${serverName}] ${t.description || t.name}`,
       inputSchema: t.inputSchema || { type: "object", properties: {} },
       execute: async (args: any) => {
         try {
-          noop(`MCP call: ${server.name}/${t.name}`);
+          noop(`MCP call: ${serverName}/${t.name}`);
           return await client.callTool(t.name, args);
         } catch (err: any) {
           return `MCP tool "${t.name}" failed: ${err.message}`;
@@ -441,7 +447,7 @@ export async function createMcpTools(server: McpServerConfig, sendLog: SendLog):
       dispose: () => client.close(),
     };
   } catch (err: any) {
-    noop(`MCP connect failed for "${server.name}": ${err.message}`);
+    noop(`MCP connect failed for "${serverName}": ${err.message}`);
     client.close();
     return { tools: [], dispose: () => {} };
   }

@@ -199,12 +199,29 @@ export const Workspace: React.FC = () => {
         if (!server) return null;
         return {
           server,
-          nodeId: n.id,
+          nodeId: n.id as string | undefined,
           description: (n.data.description as string) || "",
           nodeName: (n.data.name as string) || "MCP Context",
         };
       })
       .filter((c): c is Exclude<typeof c, null> => c !== null);
+
+    // Also include MCP servers declared in the selected skill
+    if (selectedSkill && Array.isArray(selectedSkill.mcpServers)) {
+      for (const name of selectedSkill.mcpServers) {
+        if (!mcpContext.some((c) => c.server.name === name)) {
+          const server = mcpServersMap[name];
+          if (server) {
+            mcpContext.push({
+              server,
+              nodeId: undefined,
+              description: "",
+              nodeName: server.displayName || server.name,
+            });
+          }
+        }
+      }
+    }
 
     // Also surface MCP fetch intents in the context descriptions sent to the LLM.
     const mcpDescriptions = mcpContext.map(
@@ -254,7 +271,9 @@ export const Workspace: React.FC = () => {
     
     // Set connected MCP nodes status to running
     mcpContext.forEach((ctx) => {
-      setNodeStatus(ctx.nodeId, "running");
+      if (ctx.nodeId) {
+        setNodeStatus(ctx.nodeId, "running");
+      }
     });
 
     addLog(nodeId, `Connecting to local agent sidecar...`);

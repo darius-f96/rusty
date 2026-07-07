@@ -6,7 +6,11 @@ const SKILLS_DIR = ".axiom/skills";
 export const skillsService = {
   async saveSkill(rootPath: string, skill: Skill): Promise<void> {
     const dirPath = `${rootPath}/${SKILLS_DIR}`;
-    await invoke("create_directory", { path: dirPath });
+    try {
+      await invoke("create_directory", { path: dirPath });
+    } catch (e) {
+      // Ignore if directory already exists
+    }
     const filePath = `${dirPath}/${skill.id}.json`;
     await invoke("write_file_disk", { path: filePath, content: JSON.stringify(skill, null, 2) });
   },

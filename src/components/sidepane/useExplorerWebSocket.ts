@@ -203,21 +203,30 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       const currentExploreModel = selectedNode?.data?.exploreModel || currentActiveModel;
       const chatHistory = useWorkspaceStore.getState().globalChatHistory[selectedNodeId] || [];
 
-      // Always use task-auditor skill for this node type.
+      // Resolve skill: prefer the skill selected on the node, fall back to task-auditor.
       const skills = useWorkspaceStore.getState().skills;
+      const nodeSkillId = selectedNode?.data?.skillId as string | undefined;
+      const selectedCustomSkill = nodeSkillId ? skills.find((s: any) => s.id === nodeSkillId) : null;
       const auditorSkill = skills.find((s: any) => s.id === "skill_task_auditor");
-      const skillData = auditorSkill ? {
-        systemPrompt: auditorSkill.systemPrompt,
-        enabledTools: auditorSkill.enabledTools,
-        preferredModel: auditorSkill.preferredModel,
+      const activeSkill = selectedCustomSkill || auditorSkill;
+      const skillData = activeSkill ? {
+        systemPrompt: activeSkill.systemPrompt,
+        enabledTools: activeSkill.enabledTools,
+        preferredModel: activeSkill.preferredModel,
       } : null;
 
-      // Resolve an MCP server selected on the node, if any.
+      // Build MCP server list from:
+      //  1. The active skill's mcpServers (by name → resolved from the store)
+      //  2. Any explicit MCP server override selected directly on the node
       const mcpServerName = selectedNode?.data?.mcpServerName as string | undefined;
       const mcpServersMap = useWorkspaceStore.getState().mcpServers;
-      const mcpServers = mcpServerName && mcpServersMap[mcpServerName]
-        ? [mcpServersMap[mcpServerName]]
-        : [];
+      const mcpServerNames = Array.from(new Set([
+        ...(activeSkill?.mcpServers || []),
+        ...(mcpServerName ? [mcpServerName] : [])
+      ]));
+      const mcpServers = mcpServerNames
+        .map((name) => mcpServersMap[name])
+        .filter((srv): srv is Exclude<typeof srv, undefined> => !!srv);
 
       socket.send(JSON.stringify({
         type: "global_explore",

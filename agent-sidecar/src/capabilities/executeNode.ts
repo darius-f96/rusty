@@ -261,6 +261,7 @@ CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
       try {
         const { createAgentSession } = await import("@earendil-works/pi-coding-agent");
         const { getModel } = await import("@earendil-works/pi-ai");
+        const { writeMcpConfig, getPiMcpResourceLoader } = await import("../services/piMcp");
 
         let selectedModel;
         if (model && model.includes("/")) {
@@ -278,11 +279,16 @@ CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
           return name;
         });
 
+        // Write current MCP configuration to workspace .pi/mcp.json and retrieve a Pi ResourceLoader loading the MCP extension.
+        await writeMcpConfig(workspaceRoot, mcpContext);
+        const resourceLoader = await getPiMcpResourceLoader(workspaceRoot, mcpContext.length > 0);
+
         const { session } = await createAgentSession({
           cwd: workspaceRoot,
           model: selectedModel,
           tools: sdkToolNames,
-          customTools: tools as any
+          customTools: tools as any,
+          resourceLoader
         });
 
         sendLog("Executing agent reasoning loop...");
