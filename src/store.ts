@@ -119,6 +119,16 @@ export interface CanvasContext {
   hasBeenSaved?: boolean;
 }
 
+export interface CanvasHistorySnapshot {
+  nodes: Node[];
+  edges: Edge[];
+}
+
+export interface CanvasHistory {
+  past: CanvasHistorySnapshot[];
+  future: CanvasHistorySnapshot[];
+}
+
 export interface LspServerConfig {
   serverPath: string;
   args: string[];
@@ -152,6 +162,7 @@ export interface WorkspaceState {
   edgeReconciliationStatus: Record<string, "idle" | "unreconciled" | "reconciled">;
   
   canvasContexts: Record<string, CanvasContext>;
+  canvasHistories: Record<string, CanvasHistory>;
   onNodesChangeForTab: (tabId: string, changes: any[]) => void;
   onEdgesChangeForTab: (tabId: string, changes: any[]) => void;
   onConnectForTab: (tabId: string, connection: Connection) => void;
@@ -159,6 +170,8 @@ export interface WorkspaceState {
   loadCanvasTab: (data: any) => string;
   createCanvasTab: (title?: string) => void;
   createAgentTab: (title?: string) => void;
+  undoCanvasTab: (tabId: string) => void;
+  redoCanvasTab: (tabId: string) => void;
 
   agentChats: Record<string, AgentMessage[]>;
   agentStreams: Record<string, string>;
@@ -324,11 +337,30 @@ const findTabIdByEdgeId = (state: WorkspaceState, edgeId: string): string => {
   return getActiveCanvasTabId(state);
 };
 
+const MAX_HISTORY = 50;
+
+// Pushes a snapshot to the past stack for a given tab, clears future
+const pushHistoryToState = (
+  state: WorkspaceState,
+  tabId: string,
+  snapshot: CanvasHistorySnapshot
+): Record<string, CanvasHistory> => {
+  const existing = state.canvasHistories?.[tabId] || { past: [], future: [] };
+  const newPast = [...existing.past, snapshot];
+  if (newPast.length > MAX_HISTORY) newPast.shift();
+  return {
+    ...state.canvasHistories,
+    [tabId]: { past: newPast, future: [] }
+  };
+};
+
 // Helper to update context and sync to top-level state
+// trackHistory: if true, saves {nodes, edges} snapshot to undo history before applying changes
 const updateContextAndSync = (
   state: WorkspaceState,
   tabId: string,
-  updater: (ctx: CanvasContext) => Partial<CanvasContext>
+  updater: (ctx: CanvasContext) => Partial<CanvasContext>,
+  trackHistory = false
 ): Partial<WorkspaceState> => {
   const ctx = getOrCreateContext(state, tabId);
   const updates = updater(ctx);
@@ -362,9 +394,15 @@ const updateContextAndSync = (
     edgeReconciliationStatus: {},
     isPipelineApplied: false
   };
+
+  // Push history snapshot before the change if requested
+  const newCanvasHistories = trackHistory
+    ? pushHistoryToState(state, tabId, { nodes: ctx.nodes, edges: ctx.edges })
+    : state.canvasHistories;
   
   return {
     canvasContexts: newCanvasContexts,
+    canvasHistories: newCanvasHistories,
     nodes: activeCtx.nodes,
     edges: activeCtx.edges,
     nodeLogs: activeCtx.nodeLogs,
@@ -534,6 +572,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       isPipelineApplied: false
     }
   },
+  canvasHistories: {
+    canvas: { past: [], future: [] }
+  },
   activeThemeId: localStorage.getItem("selected_theme") || "spaceDust",
   setActiveThemeId: (themeId) => {
     const t = themes[themeId] || themes.spaceDust;
@@ -579,6 +620,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
           edgeReconciliationStatus: {},
           isPipelineApplied: false
         }
+      },
+      canvasHistories: {
+        canvas: { past: [], future: [] }
       },
       expandedPaths: {},
   revealPath: null,
@@ -677,7 +721,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     return updateContextAndSync(state, tabId, (ctx) => ({
       nodes: applyNodeChanges(changes, ctx.nodes),
       ...(!structural ? { isPipelineApplied: ctx.isPipelineApplied } : {})
-    }));
+    }), structural);
   }),
 
   onEdgesChangeForTab: (tabId, changes) => set((state) => {
@@ -685,7 +729,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     return updateContextAndSync(state, tabId, (ctx) => ({
       edges: applyEdgeChanges(changes, ctx.edges),
       ...(!structural ? { isPipelineApplied: ctx.isPipelineApplied } : {})
-    }));
+    }), structural);
   }),
 
   onConnectForTab: (tabId, connection) => set((state) => {
@@ -702,11 +746,85 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     };
     return updateContextAndSync(state, tabId, (ctx) => ({
       edges: addEdge(newEdge, ctx.edges)
-    }));
+    }), true);
   }),
 
   updateCanvasContext: (tabId, updates) => set((state) => {
     return updateContextAndSync(state, tabId, () => updates);
+  }),
+
+  undoCanvasTab: (tabId) => set((state) => {
+    const history = state.canvasHistories?.[tabId] || { past: [], future: [] };
+    if (history.past.length === 0) return {};
+
+    const snapshot = history.past[history.past.length - 1];
+    const newPast = history.past.slice(0, -1);
+    const ctx = getOrCreateContext(state, tabId);
+    const newFuture = [{ nodes: ctx.nodes, edges: ctx.edges }, ...history.future];
+    if (newFuture.length > MAX_HISTORY) newFuture.pop();
+
+    const newCanvasContexts = {
+      ...state.canvasContexts,
+      [tabId]: { ...ctx, nodes: snapshot.nodes, edges: snapshot.edges }
+    };
+    const newCanvasHistories = {
+      ...state.canvasHistories,
+      [tabId]: { past: newPast, future: newFuture }
+    };
+
+    const tempState = { ...state, canvasContexts: newCanvasContexts };
+    const activeTabId = getActiveCanvasTabId(tempState);
+    const activeCtx = newCanvasContexts[activeTabId] || {
+      nodes: [], edges: [], nodeLogs: {}, nodeStatus: {},
+      globalChatHistory: {}, edgeReconciliationStatus: {}, isPipelineApplied: false
+    };
+    return {
+      canvasContexts: newCanvasContexts,
+      canvasHistories: newCanvasHistories,
+      nodes: activeCtx.nodes,
+      edges: activeCtx.edges,
+      nodeLogs: activeCtx.nodeLogs,
+      nodeStatus: activeCtx.nodeStatus,
+      globalChatHistory: activeCtx.globalChatHistory,
+      edgeReconciliationStatus: activeCtx.edgeReconciliationStatus
+    };
+  }),
+
+  redoCanvasTab: (tabId) => set((state) => {
+    const history = state.canvasHistories?.[tabId] || { past: [], future: [] };
+    if (history.future.length === 0) return {};
+
+    const snapshot = history.future[0];
+    const newFuture = history.future.slice(1);
+    const ctx = getOrCreateContext(state, tabId);
+    const newPast = [...history.past, { nodes: ctx.nodes, edges: ctx.edges }];
+    if (newPast.length > MAX_HISTORY) newPast.shift();
+
+    const newCanvasContexts = {
+      ...state.canvasContexts,
+      [tabId]: { ...ctx, nodes: snapshot.nodes, edges: snapshot.edges }
+    };
+    const newCanvasHistories = {
+      ...state.canvasHistories,
+      [tabId]: { past: newPast, future: newFuture }
+    };
+
+    const tempState = { ...state, canvasContexts: newCanvasContexts };
+    const activeTabId = getActiveCanvasTabId(tempState);
+    const activeCtx = newCanvasContexts[activeTabId] || {
+      nodes: [], edges: [], nodeLogs: {}, nodeStatus: {},
+      globalChatHistory: {}, edgeReconciliationStatus: {}, isPipelineApplied: false
+    };
+    return {
+      canvasContexts: newCanvasContexts,
+      canvasHistories: newCanvasHistories,
+      nodes: activeCtx.nodes,
+      edges: activeCtx.edges,
+      nodeLogs: activeCtx.nodeLogs,
+      nodeStatus: activeCtx.nodeStatus,
+      globalChatHistory: activeCtx.globalChatHistory,
+      edgeReconciliationStatus: activeCtx.edgeReconciliationStatus
+    };
   }),
 
   loadCanvasTab: (data) => {
@@ -1043,7 +1161,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     };
     return updateContextAndSync(state, targetTabId, (ctx) => ({
       nodes: [...ctx.nodes, newNode]
-    }));
+    }), true);
   }),
 
   addTaskNode: (x, y, tabId) => set((state) => {
@@ -1079,7 +1197,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     };
     return updateContextAndSync(state, targetTabId, (ctx) => ({
       nodes: [...ctx.nodes, newNode]
-    }));
+    }), true);
   }),
 
   addGlobalChatNode: (x, y, tabId) => set((state) => {
@@ -1117,7 +1235,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     };
     return updateContextAndSync(state, targetTabId, (ctx) => ({
       nodes: [...ctx.nodes, newNode]
-    }));
+    }), true);
   }),
 
   addMcpNode: (x, y, tabId) => set((state) => {
@@ -1152,7 +1270,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     };
     return updateContextAndSync(state, targetTabId, (ctx) => ({
       nodes: [...ctx.nodes, newNode]
-    }));
+    }), true);
   }),
 
   addStickyNode: (x, y, tabId, color) => set((state) => {
@@ -1191,7 +1309,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     return updateContextAndSync(state, targetTabId, (ctx) => ({
       nodes: [...ctx.nodes, newNode],
       lastStickyColor: lastColor
-    }));
+    }), true);
   }),
 
   addBoundaryNode: (x, y, tabId) => set((state) => {
@@ -1214,7 +1332,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     };
     return updateContextAndSync(state, targetTabId, (ctx) => ({
       nodes: [...ctx.nodes, newNode]
-    }));
+    }), true);
   }),
 
   updateTaskNode: (id, data) => set((state) => {
@@ -1267,7 +1385,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         nodeLogs: newNodeLogs,
         nodeStatus: newNodeStatus
       };
-    });
+    }, true);
     return {
       ...updates,
       selectedNodeId: state.selectedNodeId === id ? null : state.selectedNodeId
@@ -1826,7 +1944,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     return updateContextAndSync(state, targetTabId, (ctx) => ({
       nodes: [...ctx.nodes, newContextNode],
       edges: [...ctx.edges, newEdge]
-    }));
+    }), true);
   }),
 
   getGlobalChatHistory: (nodeId): GlobalChatMessage[] => {

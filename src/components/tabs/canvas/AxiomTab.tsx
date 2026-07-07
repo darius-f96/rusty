@@ -351,6 +351,28 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
     return () => clearTimeout(timer);
   }, [nodes, edges, context.globalChatHistory, context.hasBeenSaved, tab.id]);
 
+  // Undo / Redo keyboard shortcuts (Cmd+Z / Cmd+Shift+Z)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!e.metaKey && !e.ctrlKey) return;
+      if (e.key !== "z" && e.key !== "Z") return;
+
+      // Don't intercept when user is typing in a text input or textarea
+      const active = document.activeElement as HTMLElement | null;
+      if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable)) return;
+
+      e.preventDefault();
+      if (e.shiftKey) {
+        useWorkspaceStore.getState().redoCanvasTab(tab.id);
+      } else {
+        useWorkspaceStore.getState().undoCanvasTab(tab.id);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [tab.id]);
+
   const onNodeClick = (_event: React.MouseEvent, _node: any) => {
     setSelectedEdgeId(null);
     // Node selection is handled by React Flow. We do not automatically open the side pane here.
