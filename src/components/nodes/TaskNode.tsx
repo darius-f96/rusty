@@ -54,9 +54,9 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
   };
 
   return (
-    <div className={`w-80 rounded-xl border text-[var(--text-normal)] overflow-hidden transition-all duration-300 ${statusStyles[nodeStatus].border}`}>
+    <div className={`w-80 rounded-lg border text-[var(--text-normal)] overflow-hidden transition-all duration-300 ${statusStyles[nodeStatus].border}`}>
       {/* Node Header (Draggable surface) */}
-      <div className="flex items-center justify-between border-b border-[var(--border-color)] bg-black/15 px-3 py-2 select-none cursor-move">
+      <div className="flex items-center justify-between border-b border-[var(--border-color)]/70 bg-black/15 px-3 py-2 select-none cursor-move">
         <div className="flex items-center space-x-2 flex-1 mr-2 min-w-0">
           <Sparkles size={14} className={nodeStatus === "running" ? "text-[var(--accent-color)] animate-spin flex-shrink-0" : "text-[var(--accent-color)] flex-shrink-0"} />
           
@@ -159,10 +159,10 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
 
       {/* Node Content */}
       {!isMinimized && (
-        <div className="p-3 border-t border-[var(--border-color)]">
+        <div className="p-3 border-t border-[var(--border-color)]/70">
           {/* Query Prompt Input */}
           <div>
-            <label className="block text-[10px] uppercase font-semibold text-[var(--text-muted)] font-sans mb-1.5">
+            <label className="block text-[9px] uppercase font-bold text-[var(--text-muted)] font-mono mb-1.5">
               Prompt Instructions
             </label>
             <textarea
@@ -173,7 +173,7 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
               placeholder="e.g. Add error logs to standard handlers, optimize map lookups..."
-              className="nodrag w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded-lg p-2 text-xs font-sans leading-relaxed text-[var(--text-light)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--border-active)] resize-none overflow-hidden"
+              className="nodrag w-full bg-black/20 border border-[var(--border-color)]/70 rounded p-2 text-[11px] font-mono leading-relaxed text-[var(--text-light)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--border-active)] resize-none overflow-hidden"
               style={{ minHeight: "60px", height: "auto" }}
             />
           </div>

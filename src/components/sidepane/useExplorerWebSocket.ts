@@ -50,6 +50,8 @@ const parseAndCreateContextNodes = (response: string, nodePosition: { x: number;
   return created;
 };
 
+const activeExplorerSockets = new Map<string, WebSocket>();
+
 export const useExplorerWebSocket = (selectedNode: any) => {
   const selectedNodeId = selectedNode?.id || null;
   const nodeStatus = useWorkspaceStore((state) => state.nodeStatus[selectedNodeId || ""] || "idle");
@@ -120,10 +122,17 @@ export const useExplorerWebSocket = (selectedNode: any) => {
   };
 
   useEffect(() => {
-    return () => {
-      if (explorerSocketRef.current) {
-        explorerSocketRef.current.close();
+    if (selectedNodeId) {
+      const existing = activeExplorerSockets.get(selectedNodeId);
+      if (existing && existing.readyState === WebSocket.OPEN) {
+        explorerSocketRef.current = existing;
       }
+    }
+  }, [selectedNodeId]);
+
+  useEffect(() => {
+    return () => {
+      // Do NOT close the WebSocket connection on unmount so the sidecar exploration keeps running!
     };
   }, []);
 
@@ -173,6 +182,9 @@ export const useExplorerWebSocket = (selectedNode: any) => {
     try {
       socket = new WebSocket("ws://localhost:4000");
       explorerSocketRef.current = socket;
+      if (selectedNodeId) {
+        activeExplorerSockets.set(selectedNodeId, socket);
+      }
     } catch (err: any) {
       console.error("Failed to construct Explorer WebSocket:", err);
       addLog(selectedNodeId, `Fatal: Failed to construct Explorer WebSocket: ${err.message}`);
@@ -390,16 +402,23 @@ export const useExplorerWebSocket = (selectedNode: any) => {
           "error"
         );
       }
+      if (selectedNodeId) {
+        activeExplorerSockets.delete(selectedNodeId);
+      }
       setStreamingMessageId(null);
       explorerSocketRef.current = null;
     };
   };
 
   const handleStopExplorer = () => {
-    if (explorerSocketRef.current) {
-      explorerSocketRef.current.close();
-      explorerSocketRef.current = null;
+    const socket = selectedNodeId ? activeExplorerSockets.get(selectedNodeId) : explorerSocketRef.current;
+    if (socket) {
+      socket.close();
     }
+    if (selectedNodeId) {
+      activeExplorerSockets.delete(selectedNodeId);
+    }
+    explorerSocketRef.current = null;
     setStreamingMessageId(null);
     setNodeStatus(selectedNodeId || "", "idle");
   };
@@ -421,6 +440,9 @@ export const useExplorerWebSocket = (selectedNode: any) => {
     try {
       socket = new WebSocket("ws://localhost:4000");
       explorerSocketRef.current = socket;
+      if (selectedNodeId) {
+        activeExplorerSockets.set(selectedNodeId, socket);
+      }
     } catch (err: any) {
       console.error("Failed to construct Summarize WebSocket:", err);
       addLog(selectedNodeId, `Fatal: Failed to construct Summarize WebSocket: ${err.message}`);

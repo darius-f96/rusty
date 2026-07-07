@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Plus, Send, X, FileText, Folder, Paperclip, Square } from "lucide-react";
+import { Send, X, FileText, Folder, Paperclip, Square } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { searchService } from "../../services/searchService";
@@ -245,12 +245,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   return (
-    <div className="w-full flex flex-col relative bg-[var(--bg-app)] border border-[var(--border-color)] rounded-xl shadow-md p-2">
+    <div className="w-full flex flex-col relative bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-lg shadow-sm focus-within:border-[var(--accent-color)]/40 transition-colors">
       {/* 1. Autocomplete Dropdown */}
       {showSuggestions && suggestions.length > 0 && (
         <div
           ref={suggestionsRef}
-          className="absolute left-2 bottom-full mb-1 z-[150] w-72 max-h-48 overflow-y-auto bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-lg shadow-xl py-1"
+          className="absolute left-0 bottom-full mb-1 z-[150] w-full max-h-48 overflow-y-auto bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-lg shadow-xl py-1 font-mono animate-in fade-in slide-in-from-bottom-2 duration-150"
         >
           <div className="px-3 py-1 border-b border-[var(--border-color)]/40 text-[9px] font-mono text-[var(--text-muted)] uppercase tracking-wider">
             Autolink Files
@@ -283,14 +283,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
       {/* 2. Attachments Preview Drawer */}
       {attachments.length > 0 && (
-        <div className="flex flex-wrap gap-2 px-2 pb-2 mb-2 border-b border-[var(--border-color)]/40">
+        <div className="flex flex-wrap gap-1.5 px-3 pt-3 pb-2 border-b border-[var(--border-color)]/20 bg-black/10">
           {attachments.map((att) => (
             <div
               key={att.path}
-              className="flex items-center space-x-1.5 px-2 py-0.5 rounded bg-[var(--bg-sidebar)]/80 border border-[var(--border-color)]/60 text-[10px] font-mono text-[var(--text-light)]"
+              className="flex items-center space-x-1.5 px-2 py-0.5 rounded bg-black/35 border border-[var(--border-color)]/50 text-[10px] font-mono text-[var(--text-light)]"
             >
-              <Paperclip size={10} className="text-violet-400" />
-              <span className="truncate max-w-[120px]">{att.name}</span>
+              <Paperclip size={10} className="text-[var(--accent-color)]" />
+              <span className="truncate max-w-[150px]">{att.name}</span>
               <button
                 onClick={() => handleRemoveAttachment(att.path)}
                 className="text-[var(--text-muted)] hover:text-rose-400 transition-colors p-0.5 rounded-full"
@@ -302,20 +302,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         </div>
       )}
 
-      {/* 3. Input Text Box Row */}
-      <div className="flex items-end space-x-2 min-h-[36px]">
-        {/* Upload Button */}
-        <button
-          type="button"
-          onClick={handleAddAttachment}
-          disabled={disabled}
-          className="p-2 rounded-lg bg-[var(--bg-sidebar)]/50 border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-light)] hover:border-[var(--border-active)] transition-all cursor-pointer flex-shrink-0"
-          title="Add context file (+)"
-        >
-          <Plus size={16} />
-        </button>
-
-        {/* Scalable Textarea */}
+      {/* 3. Text Area Input */}
+      <div className="px-3 pt-2.5 pb-1">
         <textarea
           ref={textareaRef}
           value={value}
@@ -323,31 +311,59 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           disabled={disabled}
-          className="flex-1 bg-transparent border-none outline-none py-1.5 text-xs text-[var(--text-light)] placeholder-[var(--text-muted)] resize-none font-sans leading-relaxed min-h-[20px] select-text focus:ring-0 focus:outline-none"
+          className="w-full bg-transparent border-none outline-none py-1 text-xs text-[var(--text-light)] placeholder-[var(--text-muted)] resize-none font-sans leading-relaxed min-h-[36px] select-text focus:ring-0 focus:outline-none"
           rows={1}
           style={{ height: "auto", maxHeight: "200px" }}
         />
+      </div>
 
-        {/* Send or Stop Button */}
-        {isStreaming && onStop ? (
+      {/* 4. Controls Footer Row */}
+      <div className="flex items-center justify-between px-3 py-2 bg-black/10 border-t border-[var(--border-color)]/25 text-[10px] font-mono text-[var(--text-muted)] select-none rounded-b-lg">
+        <div className="flex items-center space-x-3">
+          {/* Upload Button */}
           <button
             type="button"
-            onClick={onStop}
-            className="p-2 rounded-lg bg-rose-600 text-white hover:bg-rose-500 transition-all cursor-pointer flex-shrink-0 shadow-md flex items-center justify-center animate-pulse border-none"
-            title="Stop process"
+            onClick={handleAddAttachment}
+            disabled={disabled}
+            className="flex items-center space-x-1 px-2 py-1 rounded bg-[var(--bg-app)] border border-[var(--border-color)] hover:text-[var(--text-light)] hover:border-[var(--accent-color)]/40 transition-all cursor-pointer text-[10px] text-[var(--text-normal)]"
+            title="Attach file to prompt context"
           >
-            <Square size={14} fill="currentColor" />
+            <Paperclip size={11} className="text-[var(--accent-color)]" />
+            <span>Add Context</span>
           </button>
-        ) : (
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={disabled || (!value.trim() && attachments.length === 0)}
-            className="p-2 rounded-lg bg-[var(--accent-color)] disabled:opacity-40 disabled:hover:bg-[var(--accent-color)] text-white hover:bg-[var(--accent-color)]/80 transition-all cursor-pointer flex-shrink-0 shadow-md flex items-center justify-center"
-          >
-            <Send size={14} />
-          </button>
-        )}
+
+          <span className="text-[9px] text-[var(--text-muted)]/60 font-light hidden xs:inline">
+            Use @ to reference workspace files
+          </span>
+        </div>
+
+        <div className="flex items-center space-x-3">
+          <span className="text-[9px] text-[var(--text-muted)]/60 hidden md:inline">
+            Enter to submit, Shift+Enter for new line
+          </span>
+
+          {/* Send or Stop Button */}
+          {isStreaming && onStop ? (
+            <button
+              type="button"
+              onClick={onStop}
+              className="flex items-center space-x-1.5 px-3 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white font-semibold transition-all cursor-pointer shadow-sm animate-pulse text-[10px]"
+            >
+              <Square size={9} fill="currentColor" />
+              <span>STOP</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={disabled || (!value.trim() && attachments.length === 0)}
+              className="flex items-center space-x-1.5 px-3 py-1 rounded bg-[var(--accent-color)] disabled:opacity-40 disabled:hover:bg-[var(--accent-color)] text-white hover:bg-[var(--accent-color)]/80 font-semibold transition-all cursor-pointer shadow-sm text-[10px]"
+            >
+              <Send size={9} />
+              <span>PROMPT</span>
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -90,10 +90,10 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
   return (
     <div 
       style={{ width: `${width}px`, height: `${height}px` }}
-      className={`rounded-xl border bg-[var(--bg-sidebar)] text-[var(--text-normal)] overflow-hidden flex flex-col transition-[border-color,box-shadow] duration-300 shadow-xl relative ${statusBorder[nodeStatus]}`}
+      className={`rounded-lg border bg-[var(--bg-sidebar)] text-[var(--text-normal)] overflow-hidden flex flex-col transition-[border-color,box-shadow] duration-300 shadow-lg relative ${statusBorder[nodeStatus]}`}
     >
       {/* Node Header */}
-      <div className="flex items-center justify-between border-b border-[var(--border-color)] bg-gradient-to-r from-amber-600/15 to-transparent px-3 py-2 select-none cursor-move flex-shrink-0">
+      <div className="flex items-center justify-between border-b border-[var(--border-color)]/70 bg-black/15 px-3 py-2 select-none cursor-move flex-shrink-0">
         <div className="flex items-center space-x-2 flex-1 mr-2 min-w-0">
           <Lightbulb size={14} className={`text-amber-400 flex-shrink-0 ${nodeStatus === "running" ? "animate-spin" : ""}`} />
           {isEditing ? (
@@ -164,13 +164,13 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
         className="p-3 flex-1 flex flex-col min-h-0 overflow-y-auto scrollbar-wider"
       >
         {/* Skill selector — determines system prompt, enabled tools, and MCP servers */}
-        <div className="flex-shrink-0 mb-1.5">
+        <div className="flex-shrink-0 mb-1.5 font-mono">
           <div className="relative">
             <button
               onClick={(e) => { e.stopPropagation(); setSkillMenuOpen(!skillMenuOpen); setMcpMenuOpen(false); }}
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
-              className="nodrag w-full bg-[var(--bg-app)]/60 border border-[var(--border-color)] rounded-lg px-2 py-1.5 text-[10px] font-sans text-left flex items-center justify-between hover:border-amber-500/50 transition-colors"
+              className="nodrag w-full bg-[var(--bg-app)] border border-[var(--border-color)]/70 rounded px-2 py-1 text-[10px] font-mono text-left flex items-center justify-between hover:border-[var(--accent-color)]/40 transition-colors"
               title="Select a skill to use its system prompt, tools, and MCP servers"
             >
               <span className="flex items-center space-x-1.5 min-w-0">
@@ -178,29 +178,29 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
                 <span className={data.skillId ? "text-[var(--text-light)] truncate" : "text-[var(--text-muted)] truncate"}>
                   {data.skillId
                     ? (skills.find((s: any) => s.id === data.skillId)?.name || data.skillId)
-                    : "Skill: default auditor"}
+                    : "SKILL: default auditor"}
                 </span>
               </span>
               <ChevronDown size={11} className="text-[var(--text-muted)] flex-shrink-0 ml-2" />
             </button>
             {skillMenuOpen && (
               <div
-                className="absolute z-30 left-0 right-0 mt-1 bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-lg shadow-xl py-1 max-h-44 overflow-y-auto"
+                className="absolute z-30 left-0 right-0 mt-1 bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded shadow-xl py-1 max-h-44 overflow-y-auto font-mono"
                 onClick={(e) => e.stopPropagation()}
               >
                 <button
                   onClick={(e) => { e.stopPropagation(); updateNode(id, { skillId: "" }); setSkillMenuOpen(false); }}
                   onPointerDown={(e) => e.stopPropagation()}
-                  className="w-full text-left px-2.5 py-1.5 hover:bg-[var(--accent-bg)] text-[10px] font-sans text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors"
+                  className="w-full text-left px-2.5 py-1.5 hover:bg-[var(--accent-bg)] text-[10px] font-mono text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors"
                 >
-                  Default auditor
+                  default auditor
                 </button>
                 {skills.filter((s: any) => s.id !== "skill_task_auditor").map((s: any) => (
                   <button
                     key={s.id}
                     onClick={(e) => { e.stopPropagation(); updateNode(id, { skillId: s.id }); setSkillMenuOpen(false); }}
                     onPointerDown={(e) => e.stopPropagation()}
-                    className="w-full text-left px-2.5 py-1.5 hover:bg-[var(--accent-bg)] text-[10px] font-sans text-[var(--text-normal)] hover:text-[var(--text-light)] transition-colors flex items-center justify-between"
+                    className="w-full text-left px-2.5 py-1.5 hover:bg-[var(--accent-bg)] text-[10px] font-mono text-[var(--text-normal)] hover:text-[var(--text-light)] transition-colors flex items-center justify-between"
                   >
                     <span className="truncate">{s.name}</span>
                     {Array.isArray(s.mcpServers) && s.mcpServers.length > 0 && (
@@ -216,13 +216,13 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
         </div>
 
         {/* MCP server selector — override or add a single MCP server directly on the node */}
-        <div className="flex-shrink-0 mb-2">
+        <div className="flex-shrink-0 mb-2 font-mono">
           <div className="relative">
             <button
               onClick={(e) => { e.stopPropagation(); setMcpMenuOpen(!mcpMenuOpen); setSkillMenuOpen(false); }}
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
-              className="nodrag w-full bg-[var(--bg-app)]/60 border border-[var(--border-color)] rounded-lg px-2 py-1.5 text-[10px] font-sans text-left flex items-center justify-between hover:border-amber-500/50 transition-colors"
+              className="nodrag w-full bg-[var(--bg-app)] border border-[var(--border-color)]/70 rounded px-2 py-1 text-[10px] font-mono text-left flex items-center justify-between hover:border-[var(--accent-color)]/40 transition-colors"
               title="Route requests through an MCP server (Jira, Confluence, etc)"
             >
               <span className="flex items-center space-x-1.5 min-w-0">
@@ -235,13 +235,13 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
             </button>
             {mcpMenuOpen && (
               <div
-                className="absolute z-30 left-0 right-0 mt-1 bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-lg shadow-xl py-1 max-h-44 overflow-y-auto"
+                className="absolute z-30 left-0 right-0 mt-1 bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded shadow-xl py-1 max-h-44 overflow-y-auto font-mono"
                 onClick={(e) => e.stopPropagation()}
               >
                 <button
                   onClick={(e) => { e.stopPropagation(); updateNode(id, { mcpServerName: "" }); setMcpMenuOpen(false); }}
                   onPointerDown={(e) => e.stopPropagation()}
-                  className="w-full text-left px-2.5 py-1.5 hover:bg-[var(--accent-bg)] text-[10px] font-sans text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors"
+                  className="w-full text-left px-2.5 py-1.5 hover:bg-[var(--accent-bg)] text-[10px] font-mono text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors"
                 >
                   MCP override: none
                 </button>
@@ -252,7 +252,7 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
                       key={name}
                       onClick={(e) => { e.stopPropagation(); updateNode(id, { mcpServerName: name }); setMcpMenuOpen(false); }}
                       onPointerDown={(e) => e.stopPropagation()}
-                      className="w-full text-left px-2.5 py-1.5 hover:bg-[var(--accent-bg)] text-[10px] font-sans text-[var(--text-normal)] hover:text-[var(--text-light)] transition-colors flex items-center justify-between"
+                      className="w-full text-left px-2.5 py-1.5 hover:bg-[var(--accent-bg)] text-[10px] font-mono text-[var(--text-normal)] hover:text-[var(--text-light)] transition-colors flex items-center justify-between"
                     >
                       <span className="truncate">{srv.displayName || srv.name}</span>
                       <span className="text-[8px] font-mono ml-2 text-[var(--text-muted)]">{srv.transport.type}</span>
@@ -266,11 +266,11 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
 
         {summaryText ? (
           <div className="flex flex-col flex-1 min-h-0 space-y-1.5">
-            <div className="text-[9px] uppercase font-bold text-amber-400 font-sans tracking-wide flex-shrink-0">
+            <div className="text-[9px] uppercase font-bold text-amber-400 font-mono tracking-wide flex-shrink-0">
               Background Context
             </div>
             <div
-              className="nodrag text-xs font-sans font-medium text-[var(--text-light)] leading-relaxed flex-1 min-h-0 whitespace-pre-wrap bg-[var(--bg-app)]/50 rounded-lg p-2.5 border border-[var(--border-color)] w-full antialiased subpixel-antialiased select-text overflow-y-auto scrollbar-wider"
+              className="nodrag text-[11px] font-mono text-[var(--text-normal)] leading-relaxed flex-1 min-h-0 whitespace-pre-wrap bg-black/20 rounded-md p-2.5 border border-[var(--border-color)]/70 w-full antialiased subpixel-antialiased select-text overflow-y-auto scrollbar-wider"
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
             >
