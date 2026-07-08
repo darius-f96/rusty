@@ -456,6 +456,21 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         { id: "openai/gpt-4o", name: "GPT-4o" },
         { id: "openai/gpt-4o-mini", name: "GPT-4o Mini" }
       ]
+    },
+    {
+      id: "github-copilot",
+      name: "GitHub Copilot",
+      baseUrl: "https://models.github.ai/inference",
+      apiKey: "",
+      apiType: "openai-completions",
+      models: [
+        { id: "github-copilot/openai/gpt-4o", name: "GPT-4o" },
+        { id: "github-copilot/openai/gpt-4o-mini", name: "GPT-4o Mini" },
+        { id: "github-copilot/openai/o1-mini", name: "o1-mini" },
+        { id: "github-copilot/meta/llama-3.3-70b-instruct", name: "Llama 3.3 70B" },
+        { id: "github-copilot/mistral-ai/mistral-large-2411", name: "Mistral Large" },
+        { id: "github-copilot/microsoft/phi-4", name: "Phi-4" }
+      ]
     }
   ],
   activeCustomProviderId: "opencode",
@@ -2016,7 +2031,28 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
 
     if (config) {
       const updates: Partial<WorkspaceState> = {};
-      if (config.customProviders) updates.customProviders = config.customProviders;
+      if (config.customProviders) {
+        // Merge saved providers with current defaults: ensure all built-in providers exist
+        // while restoring any user-saved API keys, models, and settings per provider.
+        const currentDefaults = useWorkspaceStore.getState().customProviders;
+        const savedMap = new Map(config.customProviders.map(p => [p.id, p]));
+        const merged = currentDefaults.map(defaultProvider => {
+          const saved = savedMap.get(defaultProvider.id);
+          if (saved) {
+            // Merge: keep saved apiKey, baseUrl, and models; fall back to defaults otherwise
+            return { ...defaultProvider, ...saved };
+          }
+          return defaultProvider; // New built-in provider not yet in saved config
+        });
+        // Also keep any user-added custom providers that are not built-in defaults
+        const defaultIds = new Set(currentDefaults.map(p => p.id));
+        for (const saved of config.customProviders) {
+          if (!defaultIds.has(saved.id)) {
+            merged.push(saved);
+          }
+        }
+        updates.customProviders = merged;
+      }
       if (config.activeCustomProviderId !== undefined) updates.activeCustomProviderId = config.activeCustomProviderId;
       if (config.activeModel) updates.activeModel = config.activeModel;
       if (config.mcpServers) updates.mcpServers = config.mcpServers;

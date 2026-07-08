@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useWorkspaceStore, CustomProvider } from "../../store";
-import { Cpu, Key, Globe, Plus, ShieldCheck, Save, Layers, Lock, Unlock, HelpCircle as HelpIcon, RefreshCw } from "lucide-react";
+import { Cpu, Key, Globe, Plus, ShieldCheck, Save, Layers, Lock, Unlock, HelpCircle as HelpIcon, RefreshCw, GitBranch } from "lucide-react";
 import { CustomSelect } from "../CustomSelect";
 import { notify } from "../../notificationStore";
 
@@ -51,6 +51,8 @@ export const LlmSetupTab: React.FC = () => {
         const proxyUrl = "http://localhost:4000/proxy/models";
         const targetUrl = activeCustomProviderId === "opencode" 
           ? (baseUrl.trim() || "https://opencode.ai/zen/v1") 
+          : activeCustomProviderId === "github-copilot"
+          ? "https://models.github.ai/catalog"
           : baseUrl.trim() || selectedProvider?.baseUrl || "";
 
         const res = await fetch(proxyUrl, {
@@ -69,10 +71,11 @@ export const LlmSetupTab: React.FC = () => {
           if (data && Array.isArray(data.data)) {
             const mapped = data.data.map((m: any) => {
               const prefix = activeCustomProviderId + "/";
-              const id = m.id.startsWith(prefix) ? m.id : `${prefix}${m.id}`;
+              const modelId = m.id || m.name || "";
+              const id = modelId.startsWith(prefix) ? modelId : `${prefix}${modelId}`;
               return {
                 id,
-                name: m.id.split("/").pop() || m.id
+                name: m.friendly_name || m.display_name || modelId.split("/").pop() || modelId
               };
             });
             if (mapped.length > 0) {
@@ -110,6 +113,8 @@ export const LlmSetupTab: React.FC = () => {
       const proxyUrl = "http://localhost:4000/proxy/models";
       const targetUrl = activeCustomProviderId === "opencode" 
         ? (baseUrl.trim() || "https://opencode.ai/zen/v1") 
+        : activeCustomProviderId === "github-copilot"
+        ? "https://models.github.ai/catalog"
         : baseUrl.trim() || selectedProvider?.baseUrl || "";
       
       const res = await fetch(proxyUrl, {
@@ -133,10 +138,11 @@ export const LlmSetupTab: React.FC = () => {
       if (data && Array.isArray(data.data)) {
         const mapped = data.data.map((m: any) => {
           const prefix = activeCustomProviderId + "/";
-          const id = m.id.startsWith(prefix) ? m.id : `${prefix}${m.id}`;
+          const modelId = m.id || m.name || "";
+          const id = modelId.startsWith(prefix) ? modelId : `${prefix}${modelId}`;
           return {
             id,
-            name: m.id.split("/").pop() || m.id
+            name: m.friendly_name || m.display_name || modelId.split("/").pop() || modelId
           };
         });
         
@@ -206,6 +212,8 @@ export const LlmSetupTab: React.FC = () => {
         return "Connects directly to Anthropic's Claude API. If API Key is left blank, it falls back to the ANTHROPIC_API_KEY environment variable defined in the agent sidecar startup environment.";
       case "opencode":
         return "Connects to OpenCode Zen/Go models using your developer API token. The base URL defaults to https://opencode.ai/zen/go/v1. Find your API Key in your OpenCode account dashboard.";
+      case "github-copilot":
+        return "Connects to GitHub Models via the official OpenAI-compatible inference API. Requires a GitHub Personal Access Token (PAT) with the 'models:read' scope. Generate one at GitHub → Settings → Developer settings → Personal access tokens. You can click 'Fetch Models' after saving to load the full GitHub Models catalog.";
       default:
         return "Custom OpenAI-compatible provider (e.g. Ollama, LM Studio, vLLM, or LiteLLM gateway). Configure the URL and models as needed.";
     }
@@ -247,6 +255,8 @@ export const LlmSetupTab: React.FC = () => {
                   statusColor = "bg-rose-500/80";
                 }
 
+                const isGithubCopilot = p.id === "github-copilot";
+
                 return (
                   <div
                     key={p.id}
@@ -263,8 +273,9 @@ export const LlmSetupTab: React.FC = () => {
                     }`}
                   >
                     <div className="flex flex-col min-w-0 pr-2">
-                      <span className="text-xs font-bold text-[var(--text-light)] group-hover:text-[var(--accent-color)] transition-colors">
-                        {p.name}
+                      <span className="text-xs font-bold text-[var(--text-light)] group-hover:text-[var(--accent-color)] transition-colors flex items-center space-x-1.5">
+                        {isGithubCopilot && <GitBranch size={11} className="text-[var(--text-muted)] flex-shrink-0" />}
+                        <span>{p.name}</span>
                       </span>
                       <span className="text-[10px] text-[var(--text-muted)] font-mono truncate mt-0.5 max-w-[180px]">
                         {p.baseUrl || "Built-in API endpoint"}
@@ -421,6 +432,8 @@ export const LlmSetupTab: React.FC = () => {
                     placeholder={
                       selectedProvider.id === "openai" || selectedProvider.id === "anthropic"
                         ? "Enter key (falls back to process.env if left empty)"
+                        : selectedProvider.id === "github-copilot"
+                        ? "GitHub PAT with models:read scope (ghp_... or github_pat_...)"
                         : "Enter your API Key / Auth Token"
                     }
                     value={apiKey}
@@ -431,6 +444,12 @@ export const LlmSetupTab: React.FC = () => {
                   {(selectedProvider.id === "openai" || selectedProvider.id === "anthropic") && !apiKey && (
                     <span className="text-[10px] text-[var(--text-muted)] leading-relaxed italic block mt-1 font-mono">
                       ℹ Environment Variable configuration will be active for this provider since no custom key is provided.
+                    </span>
+                  )}
+                  {selectedProvider.id === "github-copilot" && !apiKey && (
+                    <span className="text-[10px] text-amber-400/80 leading-relaxed italic block mt-1 font-mono flex items-center space-x-1">
+                      <GitBranch size={10} className="flex-shrink-0" />
+                      <span>A GitHub PAT with <strong>models:read</strong> scope is required. Generate one at GitHub → Settings → Developer settings → Personal access tokens.</span>
                     </span>
                   )}
                 </div>
@@ -450,6 +469,12 @@ export const LlmSetupTab: React.FC = () => {
                     disabled={selectedProvider.id === "openai" || selectedProvider.id === "anthropic"}
                     className="w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded-xl px-3.5 py-2.5 text-xs text-[var(--text-light)] font-mono focus:outline-none focus:border-[var(--border-active)] placeholder-[var(--text-muted)]/70 disabled:opacity-50 disabled:cursor-not-allowed shadow-inner"
                   />
+
+                  {selectedProvider.id === "github-copilot" && (
+                    <span className="text-[10px] text-[var(--text-muted)] leading-relaxed italic block mt-1 font-mono">
+                      GitHub Models inference endpoint. You can change this if using a custom proxy or organizational endpoint.
+                    </span>
+                  )}
 
                   {(selectedProvider.id === "openai" || selectedProvider.id === "anthropic") && (
                     <span className="text-[10px] text-[var(--text-muted)] leading-relaxed italic block mt-1 font-mono">
