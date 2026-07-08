@@ -8,6 +8,7 @@
 
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { VfsRegistry } from "../../services/vfs";
 
 export const useEdgeDiff = (
   edge: any,
@@ -23,7 +24,8 @@ export const useEdgeDiff = (
 
   const loadDiffContent = async (filePath: string) => {
     try {
-      const modified: string = await invoke("read_file_vfs", { path: filePath, tabId });
+      const vfs = VfsRegistry.getOrCreate(tabId);
+      const modified: string = await vfs.readFile(filePath);
       let original = "";
       try {
         original = await invoke("read_file_disk", { path: filePath });

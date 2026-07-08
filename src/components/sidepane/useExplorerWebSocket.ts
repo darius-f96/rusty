@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useWorkspaceStore } from "../../store";
-import { invoke } from "@tauri-apps/api/core";
+import { VfsRegistry } from "../../services/vfs";
 import { notify } from "../../notificationStore";
 const CONTEXT_NODE_CREATION_MARKER = "[CREATE_CONTEXT_NODES]";
 
@@ -273,7 +273,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
 
         if (msg.type === "read_file") {
           console.log(`[SidePane] Tool request: read_file ${msg.path}`);
-          invoke("read_file_vfs", { path: msg.path, tabId }).then((content: unknown) => {
+          VfsRegistry.getOrCreate(tabId).readFile(msg.path).then((content: unknown) => {
             if (socket.readyState === WebSocket.OPEN) {
               socket.send(JSON.stringify({
                 type: "read_file_response",
@@ -513,7 +513,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
         }
 
         if (msg.type === "read_file") {
-          invoke("read_file_vfs", { path: msg.path, tabId }).then((content: unknown) => {
+          VfsRegistry.getOrCreate(tabId).readFile(msg.path).then((content: unknown) => {
             if (socket.readyState === WebSocket.OPEN) {
               socket.send(JSON.stringify({
                 type: "read_file_response",

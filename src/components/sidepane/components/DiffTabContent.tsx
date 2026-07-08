@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import { DiffEditor } from "@monaco-editor/react";
 import { CustomSelect } from "../../CustomSelect";
-import { invoke } from "@tauri-apps/api/core";
+import { VfsRegistry } from "../../../services/vfs";
 import { Save, RotateCcw, Trash2 } from "lucide-react";
 import { useDiffViewMode } from "../../../hooks/useDiffViewMode";
 import { DiffViewToggle } from "../../ui/DiffViewToggle";
@@ -111,7 +111,7 @@ export const DiffTabContent: React.FC<DiffTabContentProps> = ({
     if (!activeDiffFile || !isDirty) return;
     setIsSaving(true);
     try {
-      await invoke("write_file_vfs", { path: activeDiffFile, content: editedCode, tabId });
+      await VfsRegistry.getOrCreate(tabId).writeFile(activeDiffFile, editedCode);
       setIsDirty(false);
       if (tabId) {
         const { canvasFileService } = await import("../../tabs/canvas/services/canvasFileService");
@@ -153,8 +153,7 @@ export const DiffTabContent: React.FC<DiffTabContentProps> = ({
                 onClick={async () => {
                   if (confirm(`Are you sure you want to delete ${activeDiffFile.split("/").pop() || activeDiffFile} from this task's VFS?`)) {
                     try {
-                      const { vfsService } = await import("../../../services/vfsService");
-                      await vfsService.removeFileVfs(activeDiffFile, tabId);
+                      await VfsRegistry.getOrCreate(tabId).removeFile(activeDiffFile);
                       const newFiles = modifiedFiles.filter((f) => f !== activeDiffFile);
                       updateTaskNode(selectedNode.id, { modifiedFiles: newFiles });
                       if (tabId) {
@@ -176,8 +175,7 @@ export const DiffTabContent: React.FC<DiffTabContentProps> = ({
               onClick={async () => {
                 if (confirm("Are you sure you want to delete all files modified by this task node from the VFS?")) {
                   try {
-                    const { vfsService } = await import("../../../services/vfsService");
-                    await vfsService.deleteNodeVfsFiles(selectedNode.id, tabId);
+                    await VfsRegistry.getOrCreate(tabId).deleteNodeFiles(selectedNode.id);
                     updateTaskNode(selectedNode.id, { modifiedFiles: [] });
                     if (tabId) {
                       const { canvasFileService } = await import("../../tabs/canvas/services/canvasFileService");

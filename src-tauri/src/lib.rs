@@ -21,7 +21,7 @@ pub struct FileEntry {
 }
 
 pub struct VfsState(pub Arc<Mutex<HashMap<String, HashMap<String, String>>>>);
-pub struct NodeFileTracker(pub Arc<Mutex<HashMap<String, Vec<String>>>>);
+pub struct NodeFileTracker(pub Arc<Mutex<HashMap<String, HashMap<String, Vec<String>>>>>);
 pub struct CurrentExecutingNode(pub Arc<Mutex<Option<String>>>);
 
 pub struct SidecarState(pub Arc<Mutex<Option<CommandChild>>>);
@@ -95,11 +95,12 @@ async fn write_file_vfs(
 
     if let Some(nid) = node_id {
         let mut tracker = node_file_tracker.0.lock().map_err(|e| e.to_string())?;
-        let entry = tracker.entry(nid.clone()).or_insert_with(Vec::new);
+        let tab_tracker = tracker.entry(tid.clone()).or_insert_with(HashMap::new);
+        let entry = tab_tracker.entry(nid.clone()).or_insert_with(Vec::new);
         if !entry.contains(&path) {
             entry.push(path.clone());
         }
-        println!("Rust [write_file_vfs] tracked file for node: {}", nid);
+        println!("Rust [write_file_vfs] tracked file for node: {} under tab: {}", nid, tid);
     }
 
     Ok(())
@@ -164,17 +165,21 @@ async fn delete_node_vfs_files(
     let tid = get_tab_id(tab_id);
     println!("Rust [delete_node_vfs_files] deleting all VFS files for node: {} under tab: {}", node_id, tid);
     let mut tracker = tracker_state.0.lock().map_err(|e| e.to_string())?;
-    if let Some(files) = tracker.remove(&node_id) {
-        println!("Rust [delete_node_vfs_files] found {} files to delete: {:?}", files.len(), files);
-        let mut vfs = vfs_state.0.lock().map_err(|e| e.to_string())?;
-        if let Some(tab_map) = vfs.get_mut(&tid) {
-            for file_path in files {
-                tab_map.remove(&file_path);
-                println!("Rust [delete_node_vfs_files] removed from VFS: {}", file_path);
+    if let Some(tab_tracker) = tracker.get_mut(&tid) {
+        if let Some(files) = tab_tracker.remove(&node_id) {
+            println!("Rust [delete_node_vfs_files] found {} files to delete: {:?}", files.len(), files);
+            let mut vfs = vfs_state.0.lock().map_err(|e| e.to_string())?;
+            if let Some(tab_map) = vfs.get_mut(&tid) {
+                for file_path in files {
+                    tab_map.remove(&file_path);
+                    println!("Rust [delete_node_vfs_files] removed from VFS: {}", file_path);
+                }
             }
+        } else {
+            println!("Rust [delete_node_vfs_files] no files tracked for node: {} under tab: {}", node_id, tid);
         }
     } else {
-        println!("Rust [delete_node_vfs_files] no files tracked for node: {}", node_id);
+        println!("Rust [delete_node_vfs_files] no files tracked for tab: {}", tid);
     }
     Ok(())
 }
@@ -188,17 +193,23 @@ struct NodeFilesResponse {
 #[tauri::command]
 async fn get_all_node_vfs_files(
     tracker_state: tauri::State<'_, NodeFileTracker>,
+    tab_id: Option<String>,
 ) -> Result<Vec<NodeFilesResponse>, String> {
-    println!("Rust [get_all_node_vfs_files] fetching all tracked files");
+    let tid = get_tab_id(tab_id);
+    println!("Rust [get_all_node_vfs_files] fetching tracked files for tab: {}", tid);
     let tracker = tracker_state.0.lock().map_err(|e| e.to_string())?;
-    let result: Vec<NodeFilesResponse> = tracker
-        .iter()
-        .map(|(node_id, files)| NodeFilesResponse {
-            node_id: node_id.clone(),
-            files: files.clone(),
-        })
-        .collect();
-    println!("Rust [get_all_node_vfs_files] found {} nodes with tracked files", result.len());
+    let result: Vec<NodeFilesResponse> = if let Some(tab_tracker) = tracker.get(&tid) {
+        tab_tracker
+            .iter()
+            .map(|(node_id, files)| NodeFilesResponse {
+                node_id: node_id.clone(),
+                files: files.clone(),
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    println!("Rust [get_all_node_vfs_files] found {} nodes with tracked files for tab: {}", result.len(), tid);
     Ok(result)
 }
 
@@ -240,14 +251,18 @@ async fn import_vfs_contents(
 #[tauri::command]
 async fn export_vfs_tracker(
     tracker_state: tauri::State<'_, NodeFileTracker>,
+    tab_id: Option<String>,
 ) -> Result<std::collections::HashMap<String, Vec<String>>, String> {
-    println!("Rust [export_vfs_tracker] exporting all node file tracking");
+    let tid = get_tab_id(tab_id);
+    println!("Rust [export_vfs_tracker] exporting node file tracking for tab: {}", tid);
     let tracker = tracker_state.0.lock().map_err(|e| e.to_string())?;
-    let result: std::collections::HashMap<String, Vec<String>> = tracker
-        .iter()
-        .map(|(node_id, files)| (node_id.clone(), files.clone()))
-        .collect();
-    println!("Rust [export_vfs_tracker] exported tracking for {} nodes", result.len());
+    let mut result = std::collections::HashMap::new();
+    if let Some(tab_tracker) = tracker.get(&tid) {
+        for (node_id, files) in tab_tracker {
+            result.insert(node_id.clone(), files.clone());
+        }
+    }
+    println!("Rust [export_vfs_tracker] exported tracking for {} nodes in tab: {}", result.len(), tid);
     Ok(result)
 }
 
@@ -255,13 +270,16 @@ async fn export_vfs_tracker(
 async fn import_vfs_tracker(
     tracker_state: tauri::State<'_, NodeFileTracker>,
     tracker: std::collections::HashMap<String, Vec<String>>,
+    tab_id: Option<String>,
 ) -> Result<(), String> {
-    println!("Rust [import_vfs_tracker] importing tracking for {} nodes", tracker.len());
+    let tid = get_tab_id(tab_id);
+    println!("Rust [import_vfs_tracker] importing tracking for {} nodes in tab: {}", tracker.len(), tid);
     let mut state = tracker_state.0.lock().map_err(|e| e.to_string())?;
+    let tab_tracker = state.entry(tid.clone()).or_insert_with(HashMap::new);
     for (node_id, files) in tracker {
-        state.insert(node_id, files);
+        tab_tracker.insert(node_id, files);
     }
-    println!("Rust [import_vfs_tracker] import complete");
+    println!("Rust [import_vfs_tracker] import complete for tab: {}", tid);
     Ok(())
 }
 

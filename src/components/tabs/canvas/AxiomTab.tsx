@@ -29,6 +29,7 @@ import { ReconciliationEdge } from "../../ReconciliationEdge";
 import { StickyNode } from "../../nodes/sticky";
 import { BoundaryNode } from "../../nodes/boundary";
 import { invoke } from "@tauri-apps/api/core";
+import { VfsRegistry } from "../../../services/vfs";
 import { CanvasTabContext } from "./CanvasTabContext";
 import { canvasFileService } from "./services/canvasFileService";
 import { getNodeConfig } from "../../nodes/AxiomNodeConfig";
@@ -477,7 +478,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
 
   const handleApplyChanges = async () => {
     try {
-      await invoke("apply_vfs_to_disk", { tabId: tab.id });
+      await VfsRegistry.getOrCreate(tab.id).flushToDisk();
       // Set applied status to true
       useWorkspaceStore.getState().updateCanvasContext(tab.id, { isPipelineApplied: true });
       notify("Applied", "In-memory shadow VFS layout flushed to local storage disk.", "success");

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import Editor, { loader } from "@monaco-editor/react";
 import { useWorkspaceStore } from "../../store";
 import { invoke } from "@tauri-apps/api/core";
+import { VfsRegistry } from "../../services/vfs";
 import { getFileTypeDetails } from "../../services/fileTypeService";
 import { themes, defineMonacoTheme } from "../../theme";
 import { GitBranch, History, TreePine } from "lucide-react";
@@ -81,7 +82,7 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
     const fetchFileContent = async () => {
       try {
         console.log(`FileTab reading VFS path: ${tab.key}`);
-        const content: string = await invoke("read_file_vfs", { path: tab.key, tabId: canvasTabId });
+        const content: string = await VfsRegistry.getOrCreate(canvasTabId).readFile(tab.key);
         setFileContent(content);
       } catch (err: any) {
         console.error("FileTab failed to read VFS:", err);

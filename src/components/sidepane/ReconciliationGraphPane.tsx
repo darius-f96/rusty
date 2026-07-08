@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { GitMerge, Play, Loader2, Settings, FileCode, MessageSquare, X } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
 import { invoke } from "@tauri-apps/api/core";
+import { VfsRegistry } from "../../services/vfs";
 import { notify } from "../../notificationStore";
 import { EdgeDiffTabContent } from "../edgeinspector/components/EdgeDiffTabContent";
 import { useResizable } from "./useResizable";
@@ -79,7 +80,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
     if (!filePath) return;
     setIsDiffLoading(true);
     try {
-      const modified: string = await invoke("read_file_vfs", { path: filePath, tabId });
+      const modified: string = await VfsRegistry.getOrCreate(tabId).readFile(filePath);
       let original = "";
       try {
         original = await invoke("read_file_disk", { path: filePath });
@@ -143,7 +144,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
 
         if (msg.type === "read_file") {
           console.log(`[ReconciliateGraph] Sidecar reading file: ${msg.path}`);
-          invoke("read_file_vfs", { path: msg.path, tabId })
+          VfsRegistry.getOrCreate(tabId).readFile(msg.path)
             .then((content) => {
               if (socket.readyState === WebSocket.OPEN) {
                 socket.send(JSON.stringify({ type: "read_file_response", requestId: msg.requestId, content }));
@@ -159,7 +160,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
 
         if (msg.type === "write_file") {
           console.log(`[ReconciliateGraph] Sidecar writing file: ${msg.path}`);
-          invoke("write_file_vfs", { path: msg.path, content: msg.content, tabId })
+          VfsRegistry.getOrCreate(tabId).writeFile(msg.path, msg.content)
             .then(() => {
               if (socket.readyState === WebSocket.OPEN) {
                 socket.send(JSON.stringify({ type: "write_file_response", requestId: msg.requestId }));

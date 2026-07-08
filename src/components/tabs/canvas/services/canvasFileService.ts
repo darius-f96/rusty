@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useWorkspaceStore } from "../../../../store";
-import { vfsService } from "../../../../services/vfsService";
+import { persistenceOrchestrator } from "../../../../services/vfs";
 
 export const canvasFileService = {
   getCanvasDir: (rootPath: string) => {
@@ -31,25 +31,12 @@ export const canvasFileService = {
     };
 
     // Export VFS contents and the node -> file tracker to include in the canvas.
-    let vfsContents: Record<string, string> = {};
-    let vfsTracker: Record<string, string[]> = {};
-    try {
-      vfsContents = await vfsService.exportVfsContents(tabId);
-    } catch (err) {
-      console.warn("[canvasFileService] Could not export VFS contents:", err);
-    }
-    try {
-      vfsTracker = await vfsService.exportVfsTracker();
-    } catch (err) {
-      console.warn("[canvasFileService] Could not export VFS tracker:", err);
-    }
-
     const nodeIds = new Set(context.nodes.map((n: any) => n.id));
-    const filteredTracker: Record<string, string[]> = {};
-    for (const nodeId of Object.keys(vfsTracker)) {
-      if (nodeIds.has(nodeId)) {
-        filteredTracker[nodeId] = vfsTracker[nodeId];
-      }
+    let vfsSnapshot = { contents: {}, tracker: {} };
+    try {
+      vfsSnapshot = await persistenceOrchestrator.captureVfsForSave(tabId, nodeIds);
+    } catch (err) {
+      console.warn("[canvasFileService] Could not export VFS state for save:", err);
     }
  
     const payload = {
@@ -62,8 +49,8 @@ export const canvasFileService = {
       globalChatHistory: context.globalChatHistory,
       edgeReconciliationStatus: context.edgeReconciliationStatus,
       isPipelineApplied: context.isPipelineApplied || false,
-      vfsContents,
-      vfsTracker: filteredTracker
+      vfsContents: vfsSnapshot.contents,
+      vfsTracker: vfsSnapshot.tracker
     };
  
     const fileName = canvasFileService.sanitizeFileName(title);
@@ -114,21 +101,11 @@ export const canvasFileService = {
     vfsTracker: Record<string, string[]>,
     tabId: string
   ): Promise<void> => {
-    const hasContents = vfsContents && Object.keys(vfsContents).length > 0;
-    const hasTracker = vfsTracker && Object.keys(vfsTracker).length > 0;
-    if (!hasContents && !hasTracker) {
-      console.log("[canvasFileService] No VFS state to restore");
-      return;
-    }
     try {
-      if (hasContents) {
-        await vfsService.importVfsContents(vfsContents, tabId);
-        console.log(`[canvasFileService] Restored ${Object.keys(vfsContents).length} VFS files for tab: ${tabId}`);
-      }
-      if (hasTracker) {
-        await vfsService.importVfsTracker(vfsTracker);
-        console.log(`[canvasFileService] Restored VFS tracker for ${Object.keys(vfsTracker).length} nodes`);
-      }
+      await persistenceOrchestrator.restoreVfsFromSave(tabId, {
+        contents: vfsContents || {},
+        tracker: vfsTracker || {},
+      });
     } catch (err) {
       console.error("[canvasFileService] Failed to restore VFS state:", err);
       throw err;

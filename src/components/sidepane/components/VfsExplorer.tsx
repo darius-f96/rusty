@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Folder, Trash2, RefreshCw, X, ChevronRight, ChevronDown } from "lucide-react";
-import { vfsService, NodeFilesResponse } from "../../../services/vfsService";
+import { VfsRegistry, NodeFilesEntry } from "../../../services/vfs";
 import { useWorkspaceStore } from "../../../store";
 
 interface VfsExplorerProps {
@@ -9,14 +9,14 @@ interface VfsExplorerProps {
 }
 
 export const VfsExplorer: React.FC<VfsExplorerProps> = ({ onClose, tabId }) => {
-  const [nodeFiles, setNodeFiles] = useState<NodeFilesResponse[]>([]);
+  const [nodeFiles, setNodeFiles] = useState<NodeFilesEntry[]>([]);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
 
   const loadNodeFiles = async () => {
     setLoading(true);
     try {
-      const files = await vfsService.getAllNodeVfsFiles();
+      const files = await VfsRegistry.getOrCreate(tabId).getAllNodeFiles();
       setNodeFiles(files);
     } catch (err) {
       console.error(`[VfsExplorer] Failed to load node files:`, err);
@@ -27,7 +27,7 @@ export const VfsExplorer: React.FC<VfsExplorerProps> = ({ onClose, tabId }) => {
 
   useEffect(() => {
     loadNodeFiles();
-  }, []);
+  }, [tabId]);
 
   const toggleNode = (nodeId: string) => {
     const newExpanded = new Set(expandedNodes);
@@ -41,7 +41,7 @@ export const VfsExplorer: React.FC<VfsExplorerProps> = ({ onClose, tabId }) => {
 
   const deleteNodeFiles = async (nodeId: string) => {
     try {
-      await vfsService.deleteNodeVfsFiles(nodeId, tabId);
+      await VfsRegistry.getOrCreate(tabId).deleteNodeFiles(nodeId);
       await loadNodeFiles();
     } catch (err) {
       console.error(`[VfsExplorer] Failed to delete node files:`, err);
@@ -51,7 +51,7 @@ export const VfsExplorer: React.FC<VfsExplorerProps> = ({ onClose, tabId }) => {
   const deleteAllNodeFiles = async () => {
     try {
       for (const nf of nodeFiles) {
-        await vfsService.deleteNodeVfsFiles(nf.node_id, tabId);
+        await VfsRegistry.getOrCreate(tabId).deleteNodeFiles(nf.node_id);
       }
       await loadNodeFiles();
     } catch (err) {

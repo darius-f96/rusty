@@ -4,6 +4,7 @@ import { Terminal, MessageSquare, Code, Sparkles, Save, RotateCcw, Octagon, Tras
 import { useWorkspaceStore } from "../../store";
 import { CustomSelect } from "../CustomSelect";
 import { invoke } from "@tauri-apps/api/core";
+import { VfsRegistry } from "../../services/vfs";
 import { getFileTypeDetails } from "../../services/fileTypeService";
 import { useDiffViewMode } from "../../hooks/useDiffViewMode";
 import { DiffViewToggle } from "../ui/DiffViewToggle";
@@ -80,8 +81,7 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, onStopExec
     const fetchDiffContent = async () => {
       setLoadingDiff(true);
       try {
-        console.log(`TaskTab loading diff for: ${activeDiffFile}`);
-        const modified: string = await invoke("read_file_vfs", { path: activeDiffFile, tabId: canvasTabId });
+        const modified: string = await VfsRegistry.getOrCreate(canvasTabId).readFile(activeDiffFile);
         
         let original = "";
         try {
@@ -133,7 +133,7 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, onStopExec
     if (!activeDiffFile || !isDirty) return;
     setIsSaving(true);
     try {
-      await invoke("write_file_vfs", { path: activeDiffFile, content: editedCode, tabId: canvasTabId });
+      await VfsRegistry.getOrCreate(canvasTabId).writeFile(activeDiffFile, editedCode);
       setIsDirty(false);
       if (canvasTabId) {
         const { canvasFileService } = await import("./canvas/services/canvasFileService");
@@ -248,8 +248,7 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, onStopExec
                   onClick={async () => {
                     if (confirm(`Are you sure you want to delete ${activeDiffFile.split("/").pop() || activeDiffFile} from this task's VFS?`)) {
                       try {
-                        const { vfsService } = await import("../../services/vfsService");
-                        await vfsService.removeFileVfs(activeDiffFile, canvasTabId);
+                        await VfsRegistry.getOrCreate(canvasTabId).removeFile(activeDiffFile);
                         const newFiles = modifiedFiles.filter((f) => f !== activeDiffFile);
                         updateTaskNode(taskNodeId, { modifiedFiles: newFiles });
                         if (canvasTabId) {
@@ -271,8 +270,7 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, onStopExec
                 onClick={async () => {
                   if (confirm("Are you sure you want to delete all files modified by this task node from the VFS?")) {
                     try {
-                      const { vfsService } = await import("../../services/vfsService");
-                      await vfsService.deleteNodeVfsFiles(taskNodeId, canvasTabId);
+                      await VfsRegistry.getOrCreate(canvasTabId).deleteNodeFiles(taskNodeId);
                       updateTaskNode(taskNodeId, { modifiedFiles: [] });
                       if (canvasTabId) {
                         const { canvasFileService } = await import("./canvas/services/canvasFileService");

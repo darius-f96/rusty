@@ -8,7 +8,7 @@
 import React, { useState, useRef, useCallback } from "react";
 import { DiffEditor } from "@monaco-editor/react";
 import { CustomSelect } from "../../CustomSelect";
-import { invoke } from "@tauri-apps/api/core";
+import { VfsRegistry } from "../../../services/vfs";
 import { Save, RotateCcw } from "lucide-react";
 import { useDiffViewMode } from "../../../hooks/useDiffViewMode";
 import { DiffViewToggle } from "../../ui/DiffViewToggle";
@@ -79,7 +79,7 @@ export const EdgeDiffTabContent: React.FC<EdgeDiffTabContentProps> = ({
     if (!diffFile || !isDirty) return;
     setIsSaving(true);
     try {
-      await invoke("write_file_vfs", { path: diffFile, content: editedCode, tabId });
+      await VfsRegistry.getOrCreate(tabId).writeFile(diffFile, editedCode);
       setIsDirty(false);
       if (tabId) {
         const { canvasFileService } = await import("../../tabs/canvas/services/canvasFileService");

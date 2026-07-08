@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { VfsRegistry } from "../../services/vfs";
 
 export interface DiffFileContent {
   path: string;
@@ -28,7 +29,7 @@ export const useAllDiffContents = (
 
       for (const filePath of modifiedFiles) {
         try {
-          const modified: string = await invoke("read_file_vfs", { path: filePath, tabId });
+          const modified: string = await VfsRegistry.getOrCreate(tabId).readFile(filePath);
 
           let original = "";
           try {

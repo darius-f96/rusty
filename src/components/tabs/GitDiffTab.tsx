@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { DiffEditor } from "@monaco-editor/react";
 import { useWorkspaceStore } from "../../store";
 import { invoke } from "@tauri-apps/api/core";
+import { VfsRegistry } from "../../services/vfs";
 import { getFileTypeDetails } from "../../services/fileTypeService";
 import { useDiffViewMode } from "../../hooks/useDiffViewMode";
 import { DiffViewToggle } from "../ui/DiffViewToggle";
@@ -71,7 +72,7 @@ export const GitDiffTab: React.FC<GitDiffTabProps> = ({ tab, groupId }) => {
             filePath: tab.key,
           });
           try {
-            modified = await invoke("read_file_vfs", { path: tab.key, tabId: canvasTabId });
+            modified = await VfsRegistry.getOrCreate(canvasTabId).readFile(tab.key);
           } catch (e) {
             try {
               modified = await invoke("read_file_disk", { path: tab.key });

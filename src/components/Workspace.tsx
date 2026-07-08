@@ -1,7 +1,6 @@
 import React, { useRef, useEffect, useState } from "react";
 import { useWorkspaceStore } from "../store";
-import { invoke } from "@tauri-apps/api/core";
-import { vfsService } from "../services/vfsService";
+import { VfsRegistry, setExecutingNode } from "../services/vfs";
 import { notify } from "../notificationStore";
 import { TabBar } from "./TabBar";
 import { AxiomTab } from "./tabs/canvas/AxiomTab";
@@ -116,25 +115,14 @@ export const Workspace: React.FC = () => {
     
     if (!node || node.type !== "taskNode") return;
 
-    // Query what files are currently tracked for this node before starting execution
+    // Prepare the VFS for this node's execution (query current files, then clear them)
+    const vfs = VfsRegistry.getOrCreate(targetTabId);
     let initialNodeFiles: string[] = [];
     try {
-      const allFiles = await vfsService.getAllNodeVfsFiles();
-      const nodeEntry = allFiles.find((entry) => entry.node_id === nodeId);
-      if (nodeEntry) {
-        initialNodeFiles = [...nodeEntry.files];
-      }
-    } catch (err) {
-      console.warn(`[executeNode] Failed to query initial node files:`, err);
-    }
-
-    // Always clear VFS files for this node before starting execution (both initial run and refinements)
-    try {
-      await vfsService.deleteNodeVfsFiles(nodeId, targetTabId);
+      initialNodeFiles = await vfs.prepareForExecution(nodeId);
       storeState.updateTaskNode(nodeId, { modifiedFiles: [] });
-      initialNodeFiles = [];
     } catch (err) {
-      console.error("Failed to delete VFS files on execution start:", err);
+      console.error("Failed to prepare VFS for execution:", err);
     }
 
     // Resolve context using targetTabId
@@ -250,7 +238,7 @@ export const Workspace: React.FC = () => {
       const files: { path: string; content: string }[] = [];
       for (const filePath of modifiedPaths) {
         try {
-          const content = await invoke<string>("read_file_vfs", { path: filePath, tabId: targetTabId });
+          const content = await vfs.readFile(filePath);
           files.push({ path: filePath, content: content || "" });
         } catch (err: any) {
           console.warn(`[executeNode] could not read upstream file ${filePath}:`, err);
@@ -380,7 +368,7 @@ export const Workspace: React.FC = () => {
     socket.onopen = () => {
       console.log("WebSocket connection opened to sidecar");
       addLog(nodeId, "Connection established. Dispatching task execution details...");
-      vfsService.setCurrentExecutingNode(nodeId).catch(err => {
+      setExecutingNode(nodeId).catch(err => {
         console.error(`[Workspace] Failed to set current executing node:`, err);
       });
 
@@ -437,7 +425,7 @@ export const Workspace: React.FC = () => {
         if (data.type === "read_file") {
           try {
             console.log(`WebSocket [read_file] intercept for: ${data.path}`);
-            const content: string = await invoke("read_file_vfs", { path: data.path, tabId: targetTabId });
+            const content: string = await vfs.readFile(data.path);
             socket.send(
               JSON.stringify({ type: "read_file_response", requestId: data.requestId, content })
             );
@@ -457,7 +445,7 @@ export const Workspace: React.FC = () => {
         if (data.type === "write_file") {
           try {
             console.log(`WebSocket [write_file] intercept for: ${data.path}`);
-            await invoke("write_file_vfs", { path: data.path, content: data.content, nodeId, tabId: targetTabId });
+            await vfs.writeFile(data.path, data.content, nodeId);
             socket.send(JSON.stringify({ type: "write_file_response", requestId: data.requestId }));
           } catch (err: any) {
             console.error("WebSocket [write_file] intercept error:", err);
@@ -498,22 +486,11 @@ export const Workspace: React.FC = () => {
           socket.close();
 
           const cleanUpVfsAndTracker = async () => {
-            // Overwrite backend tracker list with clean unique new files
+            // Finalize VFS: overwrite tracker and remove stale files
             try {
-              await vfsService.importVfsTracker({ [nodeId]: uniqueModified });
+              await vfs.finalizeExecution(nodeId, uniqueModified, initialNodeFiles);
             } catch (err) {
-              console.error("Failed to overwrite VFS tracker for task:", err);
-            }
-
-            // Remove stale VFS files from the memory VFS
-            const staleFiles = initialNodeFiles.filter((f) => !uniqueModified.includes(f));
-            for (const staleFile of staleFiles) {
-              try {
-                await vfsService.removeFileVfs(staleFile, targetTabId);
-                console.log(`[executeNode] Flushed stale VFS file: ${staleFile}`);
-              } catch (err) {
-                console.error(`Failed to remove stale VFS file ${staleFile}:`, err);
-              }
+              console.error("Failed to finalize VFS after execution:", err);
             }
 
             // Auto-save the canvas tab to reflect changes
@@ -591,7 +568,7 @@ export const Workspace: React.FC = () => {
         );
       }
       if (socketsRef.current.size === 0) {
-        vfsService.setCurrentExecutingNode(null).catch(err => {
+        setExecutingNode(null).catch(err => {
           console.error(`[Workspace] Failed to clear current executing node:`, err);
         });
       }
@@ -608,7 +585,7 @@ export const Workspace: React.FC = () => {
     setNodeStatus(nodeId, "idle");
     addLog(nodeId, "Execution stopped by user.");
     if (socketsRef.current.size === 0) {
-      vfsService.setCurrentExecutingNode(null).catch(err => {
+      setExecutingNode(null).catch(err => {
         console.error(`[Workspace] Failed to clear current executing node on stop:`, err);
       });
     }

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { VfsRegistry } from "../../services/vfs";
 
 export const useDiffContent = (
   selectedNodeId: string | null,
@@ -21,7 +22,7 @@ export const useDiffContent = (
 
     try {
       console.log(`SidePane [fetchDiffContent] loading paths`, { activeDiffFile });
-      const modified: string = await invoke("read_file_vfs", { path: activeDiffFile, tabId });
+      const modified: string = await VfsRegistry.getOrCreate(tabId).readFile(activeDiffFile);
 
       let original = "";
       try {
@@ -52,7 +53,7 @@ export const useDiffContent = (
 
       try {
         console.log(`SidePane [fetchDiffContent] loading paths`, { activeDiffFile });
-        const modified: string = await invoke("read_file_vfs", { path: activeDiffFile, tabId });
+        const modified: string = await VfsRegistry.getOrCreate(tabId).readFile(activeDiffFile);
 
         let original = "";
         try {

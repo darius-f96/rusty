@@ -8,7 +8,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useWorkspaceStore } from "../../store";
-import { invoke } from "@tauri-apps/api/core";
+import { VfsRegistry } from "../../services/vfs";
 import { notify } from "../../notificationStore";
 
 export const useEdgeWebSocket = (
@@ -105,7 +105,7 @@ export const useEdgeWebSocket = (
         const msg = JSON.parse(event.data);
 
         if (msg.type === "read_file") {
-          invoke("read_file_vfs", { path: msg.path, tabId })
+          VfsRegistry.getOrCreate(tabId).readFile(msg.path)
             .then((content: any) => {
               if (socket.readyState === WebSocket.OPEN) {
                 socket.send(
@@ -132,7 +132,7 @@ export const useEdgeWebSocket = (
         }
 
         if (msg.type === "write_file") {
-          invoke("write_file_vfs", { path: msg.path, content: msg.content, tabId })
+          VfsRegistry.getOrCreate(tabId).writeFile(msg.path, msg.content)
             .then(() => {
               if (socket.readyState === WebSocket.OPEN) {
                 socket.send(
