@@ -36,6 +36,7 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
 
   const [activeTab, setActiveTab] = useState<"diff" | "chat" | "console" | "vfs">("diff");
   const [activeDiffFile, setActiveDiffFile] = useState<string>("");
+  const [isMaximized, setIsMaximized] = useState(false);
 
   const nodeType = selectedNode?.type || "default";
   const storageKey = `side_pane_width_${nodeType}`;
@@ -118,20 +119,26 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
   return (
     <div 
       ref={containerRef}
-      style={{ width: `${width}px` }} 
-      className="border-l border-[var(--border-color)] bg-[var(--bg-app)]/95 flex flex-col h-full text-[var(--text-normal)] font-sans shadow-2xl relative"
+      style={{ width: isMaximized ? "100%" : `${width}px` }} 
+      className={`border-l border-[var(--border-color)] bg-[var(--bg-app)]/95 flex flex-col h-full text-[var(--text-normal)] font-sans shadow-2xl z-[40] max-w-full ${
+        isMaximized ? "absolute inset-0" : "absolute right-0 top-0 bottom-0"
+      }`}
     >
       {/* Resizer Handle */}
-      <div
-        onMouseDown={startResizing}
-        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-violet-500/50 active:bg-violet-500 transition-colors z-50"
-        style={{ transform: "translateX(-50%)" }}
-      />
+      {!isMaximized && (
+        <div
+          onMouseDown={startResizing}
+          className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-violet-500/50 active:bg-violet-500 transition-colors z-50"
+          style={{ transform: "translateX(-50%)" }}
+        />
+      )}
 
       {/* Pane Header */}
       <SidePaneHeader
         selectedNode={selectedNode}
         onClose={onClose}
+        isMaximized={isMaximized}
+        onToggleMaximize={() => setIsMaximized(!isMaximized)}
       />
 
       {/* Tabs Row */}

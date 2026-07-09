@@ -77,6 +77,57 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
 
+  const saveChatHistory = (messages: { role: string; content: string }[]) => {
+    const canvasContext = useWorkspaceStore.getState().canvasContexts[tabId];
+    if (canvasContext) {
+      const globalChat = canvasContext.globalChatHistory || {};
+      const formatMessages = messages.map((m, idx) => ({
+        id: `recon-${idx}`,
+        role: m.role as "user" | "assistant" | "system",
+        content: m.content,
+        timestamp: new Date().toISOString()
+      }));
+      useWorkspaceStore.getState().updateCanvasContext(tabId, {
+        globalChatHistory: {
+          ...globalChat,
+          "__reconciliation__": formatMessages
+        }
+      });
+      import("../tabs/canvas/services/canvasFileService").then(({ canvasFileService }) => {
+        canvasFileService.autoSaveCanvas(tabId);
+      }).catch(err => console.error("Failed to auto-save canvas:", err));
+    }
+  };
+
+  const appendChatMessage = (message: { role: string; content: string }) => {
+    setChatMessages((prev) => {
+      const updated = [...prev, message];
+      saveChatHistory(updated);
+      return updated;
+    });
+  };
+
+  const handleStopReconciliation = () => {
+    if (socketRef.current) {
+      socketRef.current.close(1000, "User requested stop");
+      socketRef.current = null;
+    }
+    setIsReconciling(false);
+    appendChatMessage({ role: "system", content: "Reconciliation stopped by user." });
+  };
+
+  useEffect(() => {
+    const globalChat = useWorkspaceStore.getState().canvasContexts[tabId]?.globalChatHistory || {};
+    const storedMessages = globalChat["__reconciliation__"] || [];
+    setChatMessages(storedMessages.map(m => ({ role: m.role, content: m.content })));
+
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.close(1000, "Pane unmounted");
+      }
+    };
+  }, [tabId]);
+
   const startReconciliation = (userMsgText?: string) => {
     if (isReconciling) return;
     setIsReconciling(true);
@@ -85,9 +136,11 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
     if (userMsgText) {
       nextMessages.push({ role: "user", content: userMsgText });
       setChatMessages(nextMessages);
+      saveChatHistory(nextMessages);
     } else {
       nextMessages = [{ role: "system", content: "Checking duplicate file changes across tasks..." }];
       setChatMessages(nextMessages);
+      saveChatHistory(nextMessages);
       setActiveTab("chat");
     }
 
@@ -97,7 +150,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
       socketRef.current = socket;
     } catch (err: any) {
       console.error("Failed to construct WebSocket:", err);
-      setChatMessages((prev) => [...prev, { role: "system", content: `Connection failed: ${err.message || String(err)}` }]);
+      appendChatMessage({ role: "system", content: `Connection failed: ${err.message || String(err)}` });
       setIsReconciling(false);
       return;
     }
@@ -142,8 +195,19 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
 
         if (msg.type === "write_file") {
           console.log(`[ReconciliateGraph] Sidecar writing file: ${msg.path}`);
-          VfsRegistry.getOrCreate(tabId).writeFile(msg.path, msg.content)
+          const firstNode = taskNodes[0];
+          const nodeId = firstNode?.id;
+
+          VfsRegistry.getOrCreate(tabId).writeFile(msg.path, msg.content, nodeId)
             .then(() => {
+              if (nodeId) {
+                const currentModified = (firstNode.data?.modifiedFiles as string[]) || [];
+                if (!currentModified.includes(msg.path)) {
+                  useWorkspaceStore.getState().updateTaskNode(nodeId, {
+                    modifiedFiles: [...currentModified, msg.path]
+                  });
+                }
+              }
               if (socket.readyState === WebSocket.OPEN) {
                 socket.send(JSON.stringify({ type: "write_file_response", requestId: msg.requestId }));
               }
@@ -157,26 +221,15 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
         }
 
         if (msg.type === "reconciliation_graph_complete") {
-          setChatMessages((prev) => [
-            ...prev,
-            { role: "assistant", content: msg.response || "Reconciliation complete." }
-          ]);
+          appendChatMessage({ role: "assistant", content: msg.response || "Reconciliation complete." });
           setIsReconciling(false);
           notify("Reconciliation Complete", "Code alignment completed successfully.", "success");
           loadDuplicates();
-          import("../tabs/canvas/services/canvasFileService").then(({ canvasFileService }) => {
-            canvasFileService.autoSaveCanvas(tabId);
-          }).catch((err) => {
-            console.error("Failed to auto-save canvas:", err);
-          });
           socket.close();
         }
 
         if (msg.type === "reconciliation_graph_error") {
-          setChatMessages((prev) => [
-            ...prev,
-            { role: "assistant", content: `Error: ${msg.error}` }
-          ]);
+          appendChatMessage({ role: "assistant", content: `Error: ${msg.error}` });
           setIsReconciling(false);
           notify("Reconciliation Failed", `Error aligning: ${msg.error}`, "error");
           socket.close();
@@ -188,7 +241,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
 
     socket.onerror = (error) => {
       console.error("[ReconciliationGraph] WebSocket error:", error);
-      setChatMessages((prev) => [...prev, { role: "system", content: "Error: WebSocket connection failed." }]);
+      appendChatMessage({ role: "system", content: "Error: WebSocket connection failed." });
       setIsReconciling(false);
     };
 
@@ -221,7 +274,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
     <div
       ref={containerRef}
       style={{ width: isMaximized ? "100%" : `${width}px` }}
-      className={`border-l border-[var(--border-color)] bg-[var(--bg-app)]/95 flex flex-col h-full text-[var(--text-normal)] font-sans shadow-2xl z-[40] ${
+      className={`border-l border-[var(--border-color)] bg-[var(--bg-app)]/95 flex flex-col h-full text-[var(--text-normal)] font-sans shadow-2xl z-[40] max-w-full ${
         isMaximized ? "absolute inset-0" : "absolute right-0 top-0 bottom-0"
       }`}
     >
@@ -253,7 +306,12 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
             {isMaximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
           </button>
           <button
-            onClick={onClose}
+            onClick={() => {
+              if (socketRef.current) {
+                socketRef.current.close(1000, "Window closed");
+              }
+              onClose();
+            }}
             className="text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors p-1 rounded-lg hover:bg-[var(--bg-sidebar)] cursor-pointer"
           >
             <X size={16} />
@@ -450,23 +508,24 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
 
       {/* Footer Actions */}
       <div className="p-3 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/20 flex items-center justify-end flex-shrink-0">
-        <button
-          onClick={() => startReconciliation()}
-          disabled={isReconciling || duplicateFilesEntries.length === 0}
-          className="bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer"
-        >
-          {isReconciling ? (
-            <>
-              <Loader2 size={13} className="animate-spin" />
-              <span>Reconciling...</span>
-            </>
-          ) : (
-            <>
-              <Play size={13} />
-              <span>Run Reconciliate</span>
-            </>
-          )}
-        </button>
+        {isReconciling ? (
+          <button
+            onClick={() => handleStopReconciliation()}
+            className="bg-rose-600 hover:bg-rose-500 text-white text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer animate-pulse"
+          >
+            <Loader2 size={13} className="animate-spin" />
+            <span>Stop Execution</span>
+          </button>
+        ) : (
+          <button
+            onClick={() => startReconciliation()}
+            disabled={duplicateFilesEntries.length === 0}
+            className="bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer"
+          >
+            <Play size={13} />
+            <span>Run Reconciliate</span>
+          </button>
+        )}
       </div>
     </div>
   );

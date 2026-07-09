@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { DiffEditor } from "@monaco-editor/react";
 import { ChevronDown, ChevronRight, Save, RotateCcw, Loader2, FileCode } from "lucide-react";
 import { VfsRegistry } from "../../../services/vfs";
@@ -41,6 +41,148 @@ const getEditorLanguage = (filePath: string): string => {
     default:
       return "plaintext";
   }
+};
+
+interface FileDiffCardProps {
+  file: string;
+  state: FileDiffState;
+  renderSideBySide: boolean;
+  onContentChange: (filePath: string, newContent: string) => void;
+  onSaveFile: (filePath: string) => Promise<void>;
+  onResetFile: (filePath: string, editor: any) => void;
+  toggleCollapse: (filePath: string) => void;
+}
+
+const FileDiffCard: React.FC<FileDiffCardProps> = ({
+  file,
+  state,
+  renderSideBySide,
+  onContentChange,
+  onSaveFile,
+  onResetFile,
+  toggleCollapse,
+}) => {
+  const [hasRendered, setHasRendered] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const diffEditorRef = useRef<any>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setHasRendered(true);
+        }
+      },
+      {
+        rootMargin: "400px 0px 400px 0px", // Preload when within 400px
+      }
+    );
+
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+
+    return () => {
+      if (containerRef.current) {
+        observer.unobserve(containerRef.current);
+      }
+    };
+  }, []);
+
+  const lineCount = Math.max(state.original.split("\n").length, state.edited.split("\n").length);
+  const editorHeight = lineCount * 18 + 20;
+
+  return (
+    <div
+      ref={containerRef}
+      className="border border-[var(--border-color)] rounded-xl overflow-hidden shadow-md flex flex-col bg-black/10 transition-all hover:border-[var(--border-active)]/55"
+    >
+      {/* Git PR File Header */}
+      <div
+        onClick={() => toggleCollapse(file)}
+        className="px-4 py-3 bg-[var(--bg-sidebar)] border-b border-[var(--border-color)] flex items-center justify-between select-none cursor-pointer hover:bg-[var(--bg-sidebar)]/80 transition-colors"
+      >
+        <div className="flex items-center space-x-2 font-mono text-xs text-[var(--text-light)]">
+          {state.isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+          <span className="font-semibold">{state.name}</span>
+          {state.dir && <span className="text-[10px] text-[var(--text-muted)] truncate max-w-[200px]">({state.dir})</span>}
+        </div>
+
+        <div className="flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
+          {state.isDirty && (
+            <span className="text-[9px] font-mono text-amber-400 bg-amber-400/10 border border-amber-400/20 px-1.5 py-0.5 rounded uppercase">
+              Unsaved
+            </span>
+          )}
+          {/* Save/Reset controls */}
+          {state.isDirty && (
+            <>
+              <button
+                onClick={() => onResetFile(file, diffEditorRef.current)}
+                disabled={state.isSaving}
+                className="p-1 hover:bg-[var(--bg-app)] hover:text-[var(--text-light)] text-[var(--text-muted)] rounded transition-colors"
+                title="Reset file changes"
+              >
+                <RotateCcw size={13} />
+              </button>
+              <button
+                onClick={() => onSaveFile(file)}
+                disabled={state.isSaving}
+                className="p-1 hover:bg-emerald-600 bg-emerald-600/80 text-white rounded transition-colors flex items-center space-x-1"
+                title="Save file changes to VFS"
+              >
+                {state.isSaving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Monaco Diff Editor Section */}
+      {!state.isCollapsed && (
+        <div
+          style={{ height: `${editorHeight}px` }}
+          className="w-full border-t border-[var(--border-color)] overflow-hidden relative bg-[var(--bg-app)]/30"
+        >
+          {hasRendered ? (
+            <DiffEditor
+              height="100%"
+              language={getEditorLanguage(file)}
+              theme="axiom-custom-theme"
+              original={state.original}
+              modified={state.edited}
+              onMount={(editor) => {
+                diffEditorRef.current = editor;
+                const modifiedEditor = editor.getModifiedEditor();
+                modifiedEditor.updateOptions({ readOnly: false });
+                modifiedEditor.onDidChangeModelContent(() => {
+                  onContentChange(file, modifiedEditor.getValue());
+                });
+              }}
+              options={{
+                readOnly: false,
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                lineNumbers: "on",
+                renderSideBySide: renderSideBySide,
+                fontSize: 11,
+                scrollbar: {
+                  vertical: "hidden",
+                  handleMouseWheel: false,
+                },
+                automaticLayout: true,
+              }}
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center bg-[var(--bg-app)] text-[var(--text-muted)] text-[11px] font-mono">
+              <Loader2 className="animate-spin text-violet-500 mr-2" size={14} />
+              <span>Preloading editor for {state.name}...</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 };
 
 export const PRDiffView: React.FC<PRDiffViewProps> = ({ tabId, modifiedFiles }) => {
@@ -209,84 +351,17 @@ export const PRDiffView: React.FC<PRDiffViewProps> = ({ tabId, modifiedFiles }) 
         {modifiedFiles.map((file) => {
           const state = filesState[file];
           if (!state) return null;
-
-          let diffEditorInstance: any = null;
-
           return (
-            <div
+            <FileDiffCard
               key={file}
-              className="border border-[var(--border-color)] rounded-xl overflow-hidden shadow-md flex flex-col bg-black/10 transition-all hover:border-[var(--border-active)]/55"
-            >
-              {/* Git PR File Header */}
-              <div
-                onClick={() => toggleCollapse(file)}
-                className="px-4 py-3 bg-[var(--bg-sidebar)] border-b border-[var(--border-color)] flex items-center justify-between select-none cursor-pointer hover:bg-[var(--bg-sidebar)]/80 transition-colors"
-              >
-                <div className="flex items-center space-x-2 font-mono text-xs text-[var(--text-light)]">
-                  {state.isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-                  <span className="font-semibold">{state.name}</span>
-                  {state.dir && <span className="text-[10px] text-[var(--text-muted)] truncate max-w-[200px]">({state.dir})</span>}
-                </div>
-
-                <div className="flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
-                  {state.isDirty && (
-                    <span className="text-[9px] font-mono text-amber-400 bg-amber-400/10 border border-amber-400/20 px-1.5 py-0.5 rounded uppercase">
-                      Unsaved
-                    </span>
-                  )}
-                  {/* Save/Reset controls */}
-                  {state.isDirty && (
-                    <>
-                      <button
-                        onClick={() => handleResetFile(file, diffEditorInstance)}
-                        disabled={state.isSaving}
-                        className="p-1 hover:bg-[var(--bg-app)] hover:text-[var(--text-light)] text-[var(--text-muted)] rounded transition-colors"
-                        title="Reset file changes"
-                      >
-                        <RotateCcw size={13} />
-                      </button>
-                      <button
-                        onClick={() => handleSaveFile(file)}
-                        disabled={state.isSaving}
-                        className="p-1 hover:bg-emerald-600 bg-emerald-600/80 text-white rounded transition-colors flex items-center space-x-1"
-                        title="Save file changes to VFS"
-                      >
-                        {state.isSaving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Monaco Diff Editor Section */}
-              {!state.isCollapsed && (
-                <div className="h-[320px] w-full border-t border-[var(--border-color)]">
-                  <DiffEditor
-                    height="100%"
-                    language={getEditorLanguage(file)}
-                    theme="axiom-custom-theme"
-                    original={state.original}
-                    modified={state.edited}
-                    onMount={(editor) => {
-                      diffEditorInstance = editor;
-                      const modifiedEditor = editor.getModifiedEditor();
-                      modifiedEditor.updateOptions({ readOnly: false });
-                      modifiedEditor.onDidChangeModelContent(() => {
-                        handleContentChange(file, modifiedEditor.getValue());
-                      });
-                    }}
-                    options={{
-                      readOnly: false,
-                      minimap: { enabled: false },
-                      scrollBeyondLastLine: false,
-                      lineNumbers: "on",
-                      renderSideBySide: renderSideBySide,
-                      fontSize: 11,
-                    }}
-                  />
-                </div>
-              )}
-            </div>
+              file={file}
+              state={state}
+              renderSideBySide={renderSideBySide}
+              onContentChange={handleContentChange}
+              onSaveFile={handleSaveFile}
+              onResetFile={handleResetFile}
+              toggleCollapse={toggleCollapse}
+            />
           );
         })}
       </div>

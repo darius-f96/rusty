@@ -31,7 +31,12 @@ export const useResizable = (initialWidth = 500, storageKey?: string) => {
     if (!isResizing.current) return;
     const deltaX = startXRef.current - mouseMoveEvent.clientX;
     const newWidth = startWidthRef.current + deltaX;
-    if (newWidth > 200 && newWidth < 1200) {
+    
+    // Cap width to parent container width to prevent extending under/beyond left sidebar
+    const parentWidth = containerRef.current?.parentElement?.clientWidth || 1200;
+    const maxAllowedWidth = Math.min(1200, parentWidth);
+
+    if (newWidth > 200 && newWidth < maxAllowedWidth) {
       widthRef.current = newWidth;
       if (animationFrameIdRef.current) {
         cancelAnimationFrame(animationFrameIdRef.current);

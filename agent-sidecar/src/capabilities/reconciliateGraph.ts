@@ -87,14 +87,15 @@ The following files were modified by multiple separate tasks (collisions/overlap
 ${duplicateFilesList || "No duplicate modifications detected."}
 
 Your instructions:
-1. Focus strictly on reconciling the files that have duplicate modifications across tasks.
-2. Read these files using 'read_file' to understand their contents.
-3. Compare the instructions/purposes of the tasks that modified each duplicate file. Analyze whether their changes collide, duplicate, or overlap.
-4. If there is a collision, refactor and merge the implementations in the VFS so that the reconciled file satisfies the requirements of ALL tasks that modified it.
-5. Apply your reconciled code changes back to the VFS using 'write_file'.
-6. CRITICAL: When writing, write the complete file with all changes included to the EXACT same path. Overwrite the existing file. Never write partial snippets or placeholders.
-7. Finally, report which files were reconciled, and provide a clear, detailed explanation of how you reconciled each file (Stage 1).
-8. If the user provides chat feedback/messages (Stage 2), adjust the code and files based on their specific requests.
+1. Core Goal: Reconcile and merge conflicting or overlapping changes on files modified by multiple tasks. Read duplicate files using 'read_file' to understand their contents.
+2. Analyze the requirements, instructions, and history of all colliding tasks.
+3. Merge their implementations so that the reconciled file satisfies the requirements of all tasks that modified it.
+4. VFS Operations: You are fully authorized and encouraged to:
+   - Read and write existing files using 'read_file' and 'write_file'.
+   - Create new files, helper scripts, documentation, and markdown specifications in the VFS if needed to complete or document the reconciliation.
+5. CRITICAL: When writing, write complete files with all changes included. Never write partial snippets or placeholders.
+6. Finally, report which files were reconciled, which new files/documentation were generated (if any), and provide a clear explanation of how they were aligned (Stage 1).
+7. If the user provides chat feedback/messages (Stage 2), adjust the code, write/create files, or modify documents in the VFS based on their specific requests.
 
 Workspace root: ${workspaceRoot || "unknown"}
 `;
