@@ -557,7 +557,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
   };
 
   return (
-    <div className="w-full h-full flex bg-[var(--bg-app)] text-[var(--text-normal)] font-sans relative">
+    <div className="w-full h-full flex bg-[var(--bg-app)] text-[var(--text-normal)] font-mono relative terminal-theme-tab">
       {/* Chat History Sidebar */}
       {showHistory && (
         <div className="w-64 flex-shrink-0 border-r border-[var(--border-color)] bg-[var(--bg-sidebar)]/40 flex flex-col h-full overflow-hidden">
@@ -631,7 +631,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
                         </button>
                       </div>
                     </div>
-                    <p className={`text-[11px] font-sans leading-snug line-clamp-2 ${isActive ? "text-[var(--text-light)]" : "text-[var(--text-normal)]"}`}>
+                    <p className={`text-[11px] font-mono leading-snug line-clamp-2 ${isActive ? "text-[var(--text-light)]" : "text-[var(--text-normal)]"}`}>
                       {chat.preview}
                     </p>
                   </div>
@@ -708,7 +708,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
         )}
 
         {/* Chat List and input block */}
-        <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden max-w-3xl mx-auto w-full">
+        <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden max-w-6xl mx-auto w-full">
           <Chat
             messages={agentChats}
             isStreaming={isStreaming}

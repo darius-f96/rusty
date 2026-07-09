@@ -7,8 +7,15 @@ export async function reconciliateGraph(ws: WebSocket, data: any): Promise<void>
   const { tabId, model, nodes, workspaceRoot, customProvider, duplicateFiles, chatHistory, userMessage } = data;
   console.log(`WebSocket [Server] reconciliate_graph starting for tab: ${tabId}, userMessage: ${userMessage || "none"}`);
 
+  const reconciliationStreamId = `__reconciliation__:${tabId}`;
+  const sendLog = (message: string) => {
+    console.log(`[ReconciliateGraph] ${message}`);
+    safeSend(ws, { type: "log", nodeId: reconciliationStreamId, message });
+  };
+
   try {
     if (customProvider) {
+      sendLog(`Registering custom LLM provider: ${customProvider.name} (${customProvider.id})`);
       try {
         const { registerProvider } = require("@earendil-works/pi-agent-core");
         registerProvider(customProvider.id, {
@@ -18,8 +25,10 @@ export async function reconciliateGraph(ws: WebSocket, data: any): Promise<void>
           api: customProvider.apiType || "openai-completions",
           models: customProvider.models
         });
+        sendLog("Custom provider registered successfully.");
       } catch (err: any) {
         console.warn("Provider registration warning:", err.message);
+        sendLog(`Provider registration warning: ${err.message}`);
       }
     }
 
@@ -28,6 +37,7 @@ export async function reconciliateGraph(ws: WebSocket, data: any): Promise<void>
       description: "Read a file from the workspace VFS.",
       execute: async ({ path: filePath }: { path: string }) => {
         const resolvedPath = path.isAbsolute(filePath) ? filePath : path.join(workspaceRoot, filePath);
+        sendLog(`AI reading VFS file: ${filePath}`);
         return new Promise((resolve, reject) => {
           const requestId = getNextId();
           registerPendingRequest(requestId, ws, (res) => {
@@ -52,6 +62,7 @@ export async function reconciliateGraph(ws: WebSocket, data: any): Promise<void>
       description: "Write file content to the virtual workspace VFS.",
       execute: async ({ path: filePath, content }: { path: string; content: string }) => {
         const resolvedPath = path.isAbsolute(filePath) ? filePath : path.join(workspaceRoot, filePath);
+        sendLog(`AI modifying VFS file: ${filePath}`);
         return new Promise((resolve, reject) => {
           const requestId = getNextId();
           registerPendingRequest(requestId, ws, (res) => {
@@ -104,6 +115,7 @@ Workspace root: ${workspaceRoot || "unknown"}
 
     let response;
     try {
+      sendLog("Initializing Pi agent session runtime...");
       const { createAgentSessionRuntime } = require("@earendil-works/pi-agent-core");
       const runtime = await createAgentSessionRuntime({
         tools: [readVfsTool, writeVfsTool, createListFilesTool(workspaceRoot), createSearchCodebaseTool(workspaceRoot)],
@@ -111,9 +123,11 @@ Workspace root: ${workspaceRoot || "unknown"}
         systemPrompt,
         messages: chatHistory || []
       });
+      sendLog("Running multi-round graph reconciliation session...");
       const result = await runtime.run();
       response = result?.response || result?.output || "Reconciliation complete.";
     } catch (sdkError: any) {
+      sendLog(`Pi agent runtime initialization skipped/failed: ${sdkError.message}. Falling back to standard LLM multi-round tool execution...`);
       console.warn("Reconciliation SDK fallback:", sdkError.message);
       
       const { callLlmWithToolsMultiRoundStreaming } = await import("../services/llm");
@@ -143,10 +157,11 @@ Workspace root: ${workspaceRoot || "unknown"}
 
       if (!apiKey && provider === "anthropic") {
         console.warn("WebSocket [Server] Missing API key for graph reconciliation fallback. Using mock response.");
+        sendLog("Simulating automatic code reconciliation...");
         await new Promise(r => setTimeout(r, 800));
         response = `I've analyzed the duplicate modifications. The changes in the VFS files appear to overlap, but I've merged them to align correctly.\n\nAll overlapping changes are now reconciled. Let me know if you would like me to adjust any specific parts!`;
       } else {
-        const graphSendLog = (msg: string) => console.log(`[ReconciliateGraph] ${msg}`);
+        const graphSendLog = (msg: string) => sendLog(msg);
         response = await callLlmWithToolsMultiRoundStreaming(
           { baseUrl, apiKey, model: modelName },
           systemPrompt,

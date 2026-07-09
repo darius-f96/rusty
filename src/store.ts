@@ -276,6 +276,8 @@ export interface WorkspaceState {
   loadSecureConfig: () => Promise<void>;
 }
 
+const RECONCILIATION_STREAM_PREFIX = "__reconciliation__:";
+
 // Helper to find the active canvas tab ID from the editor groups
 const getActiveCanvasTabId = (state: WorkspaceState): string => {
   const activeGroup = state.editorGroups.find((g) => g.id === state.activeGroupId);
@@ -313,6 +315,13 @@ const getOrCreateContext = (state: WorkspaceState, tabId: string): CanvasContext
 
 // Helper to find tabId containing a node
 const findTabIdByNodeId = (state: WorkspaceState, nodeId: string): string => {
+  if (nodeId.startsWith(RECONCILIATION_STREAM_PREFIX)) {
+    const tabId = nodeId.slice(RECONCILIATION_STREAM_PREFIX.length);
+    if (state.canvasContexts?.[tabId]) {
+      return tabId;
+    }
+  }
+
   if (state.canvasContexts) {
     for (const tabId in state.canvasContexts) {
       const ctx = state.canvasContexts[tabId];
@@ -572,7 +581,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     return {};
   })(),
   editorGroups: [
-    { id: "group_0", openTabs: [{ id: "canvas", type: "canvas" as const, title: "Axiom", key: "canvas" }], activeTabId: "canvas" }
+    { id: "group_0", openTabs: [{ id: "workspace_select", type: "workspace" as const, title: "Workspaces", key: "workspace" }], activeTabId: "workspace_select" }
   ],
   activeGroupId: "group_0",
   groupSizes: [1.0],

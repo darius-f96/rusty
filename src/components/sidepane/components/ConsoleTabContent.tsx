@@ -3,13 +3,24 @@ import { useWorkspaceStore } from "../../../store";
 
 interface ConsoleTabContentProps {
   selectedNodeId: string;
+  tabId?: string;
 }
 
 const EMPTY_ARRAY: any[] = [];
 
-export const ConsoleTabContent: React.FC<ConsoleTabContentProps> = ({ selectedNodeId }) => {
-  const nodeLogs = useWorkspaceStore((state) => state.nodeLogs[selectedNodeId] || EMPTY_ARRAY);
-  const nodeStatus = useWorkspaceStore((state) => state.nodeStatus[selectedNodeId] || "idle");
+export const ConsoleTabContent: React.FC<ConsoleTabContentProps> = ({ selectedNodeId, tabId }) => {
+  const nodeLogs = useWorkspaceStore((state) => {
+    if (tabId) {
+      return state.canvasContexts[tabId]?.nodeLogs[selectedNodeId] || EMPTY_ARRAY;
+    }
+    return state.nodeLogs[selectedNodeId] || EMPTY_ARRAY;
+  });
+  const nodeStatus = useWorkspaceStore((state) => {
+    if (tabId) {
+      return state.canvasContexts[tabId]?.nodeStatus[selectedNodeId] || "idle";
+    }
+    return state.nodeStatus[selectedNodeId] || "idle";
+  });
 
   const consoleScrollRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);

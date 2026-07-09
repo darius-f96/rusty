@@ -130,3 +130,35 @@
   border-radius: 12px;
 }
 
+/* Scoped styles for terminal-like tabs (AgentTab and AxiomTab/CanvasTab) */
+.terminal-theme-tab,
+.terminal-theme-tab * {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+}
+
+/* Scope code highlighting inside terminal-theme-tab to pastel green and restrict to inline code only */
+.terminal-theme-tab code:not(pre code) {
+  color: #a3be8c !important; /* Soft pastel sage green */
+  background: rgba(163, 190, 140, 0.1) !important;
+  border: 1px solid rgba(163, 190, 140, 0.2) !important;
+}
+
+/* Scoped overrides for purple/violet elements inside terminal-theme-tab to use pastel lavender/purple */
+.terminal-theme-tab .text-violet-400 {
+  color: #c6a0f6 !important; /* Soft pastel purple */
+}
+.terminal-theme-tab .text-violet-300 {
+  color: #d8b4fe !important; /* Soft pastel lavender */
+}
+.terminal-theme-tab .border-l-violet-500\/80 {
+  border-left-color: rgba(198, 160, 246, 0.8) !important;
+}
+.terminal-theme-tab .bg-violet-500\/10 {
+  background-color: rgba(198, 160, 246, 0.1) !important;
+}
+.terminal-theme-tab .border-violet-500\/25 {
+  border-color: rgba(198, 160, 246, 0.25) !important;
+}
+
+
+

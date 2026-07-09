@@ -165,7 +165,7 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
         )}
 
         {activeTab === "console" && selectedNodeId && selectedNode.type !== "contextNode" && (
-          <ConsoleTabContent selectedNodeId={selectedNodeId} />
+          <ConsoleTabContent selectedNodeId={selectedNodeId} tabId={tabId} />
         )}
 
         {activeTab === "chat" && (

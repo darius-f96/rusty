@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
 import { DiffEditor } from "@monaco-editor/react";
-import { ChevronDown, ChevronRight, Save, RotateCcw, Loader2, FileCode } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronLeft, Save, RotateCcw, Loader2, FileCode } from "lucide-react";
 import { VfsRegistry } from "../../../services/vfs";
 import { invoke } from "@tauri-apps/api/core";
 import { DiffViewToggle } from "../../ui/DiffViewToggle";
 import { notify } from "../../../notificationStore";
+import { CustomSelect } from "../../CustomSelect";
 
 interface PRDiffViewProps {
   tabId: string;
@@ -189,11 +190,13 @@ export const PRDiffView: React.FC<PRDiffViewProps> = ({ tabId, modifiedFiles }) 
   const [filesState, setFilesState] = useState<Record<string, FileDiffState>>({});
   const [loading, setLoading] = useState(false);
   const [renderSideBySide, setRenderSideBySide] = useState(true);
+  const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
 
   // Load all file diffs
   const loadAllDiffs = async () => {
     if (modifiedFiles.length === 0) {
       setFilesState({});
+      setActiveFilePath(null);
       return;
     }
     setLoading(true);
@@ -227,6 +230,9 @@ export const PRDiffView: React.FC<PRDiffViewProps> = ({ tabId, modifiedFiles }) 
       }
     }
     setFilesState(newState);
+    if (modifiedFiles.length > 0) {
+      setActiveFilePath((prev) => (prev && modifiedFiles.includes(prev) ? prev : modifiedFiles[0]));
+    }
     setLoading(false);
   };
 
@@ -316,6 +322,20 @@ export const PRDiffView: React.FC<PRDiffViewProps> = ({ tabId, modifiedFiles }) 
     }));
   };
 
+  const currentIndex = activeFilePath ? modifiedFiles.indexOf(activeFilePath) : -1;
+
+  const handlePrev = () => {
+    if (currentIndex > 0) {
+      setActiveFilePath(modifiedFiles[currentIndex - 1]);
+    }
+  };
+
+  const handleNext = () => {
+    if (currentIndex < modifiedFiles.length - 1) {
+      setActiveFilePath(modifiedFiles[currentIndex + 1]);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[var(--bg-app)] text-[var(--text-muted)] text-xs font-mono">
@@ -336,34 +356,71 @@ export const PRDiffView: React.FC<PRDiffViewProps> = ({ tabId, modifiedFiles }) 
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-[var(--bg-app)]">
-      {/* Top Diff Controls Toolbar */}
-      <div className="px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/80 flex items-center justify-end text-xs font-mono flex-shrink-0">
-        <DiffViewToggle
-          viewMode={renderSideBySide ? "side-by-side" : "inline"}
-          isAutoMode={false}
-          onToggle={() => setRenderSideBySide(!renderSideBySide)}
-          onEnableAuto={() => {}}
-        />
+      {/* File Selector and Navigation Toolbar */}
+      <div className="flex flex-col border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/30 flex-shrink-0">
+        <div className="px-4 py-2 bg-[var(--bg-sidebar)]/80 flex items-center justify-between text-xs font-mono select-none">
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={handlePrev}
+              disabled={currentIndex <= 0}
+              className="p-1.5 rounded hover:bg-[var(--accent-bg)] text-[var(--text-muted)] hover:text-[var(--text-light)] disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[var(--text-muted)] transition-colors cursor-pointer disabled:cursor-not-allowed border border-[var(--border-color)]"
+              title="Previous file"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <button
+              onClick={handleNext}
+              disabled={currentIndex >= modifiedFiles.length - 1}
+              className="p-1.5 rounded hover:bg-[var(--accent-bg)] text-[var(--text-muted)] hover:text-[var(--text-light)] disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[var(--text-muted)] transition-colors cursor-pointer disabled:cursor-not-allowed border border-[var(--border-color)]"
+              title="Next file"
+            >
+              <ChevronRight size={14} />
+            </button>
+            
+            <CustomSelect
+              value={activeFilePath || ""}
+              onChange={(val) => setActiveFilePath(val || null)}
+              options={modifiedFiles.map(file => {
+                const parts = file.split("/");
+                const name = parts[parts.length - 1];
+                const state = filesState[file];
+                const label = state?.isDirty ? `* ${name}` : name;
+                return { id: file, name: label };
+              })}
+              placeholder="Select file"
+              className="w-64 text-xs font-mono"
+              direction="down"
+            />
+
+            <span className="text-[10px] text-[var(--text-muted)] font-mono pl-1">
+              {currentIndex + 1} of {modifiedFiles.length}
+            </span>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <DiffViewToggle
+              viewMode={renderSideBySide ? "side-by-side" : "inline"}
+              isAutoMode={false}
+              onToggle={() => setRenderSideBySide(!renderSideBySide)}
+              onEnableAuto={() => {}}
+            />
+          </div>
+        </div>
       </div>
 
-      {/* Stack of PR Diffs */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin">
-        {modifiedFiles.map((file) => {
-          const state = filesState[file];
-          if (!state) return null;
-          return (
-            <FileDiffCard
-              key={file}
-              file={file}
-              state={state}
-              renderSideBySide={renderSideBySide}
-              onContentChange={handleContentChange}
-              onSaveFile={handleSaveFile}
-              onResetFile={handleResetFile}
-              toggleCollapse={toggleCollapse}
-            />
-          );
-        })}
+      {/* Active File Diff Card */}
+      <div className="flex-1 overflow-y-auto p-4 scrollbar-thin">
+        {activeFilePath && filesState[activeFilePath] && (
+          <FileDiffCard
+            file={activeFilePath}
+            state={{ ...filesState[activeFilePath], isCollapsed: false }}
+            renderSideBySide={renderSideBySide}
+            onContentChange={handleContentChange}
+            onSaveFile={handleSaveFile}
+            onResetFile={handleResetFile}
+            toggleCollapse={toggleCollapse}
+          />
+        )}
       </div>
     </div>
   );

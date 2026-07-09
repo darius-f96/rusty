@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { GitMerge, Play, Loader2, FileCode, MessageSquare, X, Send, AlertTriangle, Maximize2, Minimize2 } from "lucide-react";
+import { GitMerge, Play, Loader2, FileCode, MessageSquare, X, Send, AlertTriangle, Maximize2, Minimize2, Terminal } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
 import { VfsRegistry } from "../../services/vfs";
 import { notify } from "../../notificationStore";
@@ -8,13 +8,17 @@ import { useResizable } from "./useResizable";
 import { CustomSelect } from "../CustomSelect";
 import { queryDuplicateTrackedFiles } from "../../services/vfs/orchestrators/queryOrchestrator";
 import { processResponse } from "../../services/responseProcessingService";
+import { ConsoleTabContent } from "./components/ConsoleTabContent";
 
 interface ReconciliationGraphPaneProps {
   onClose: () => void;
   tabId: string;
+  isOpen?: boolean;
 }
 
-export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = ({ onClose, tabId }) => {
+const getReconciliationStreamId = (tabId: string) => `__reconciliation__:${tabId}`;
+
+export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = ({ onClose, tabId, isOpen = true }) => {
   const rootPath = useWorkspaceStore((state) => state.rootPath);
   const activeModel = useWorkspaceStore((state) => state.activeModel);
   const customProviders = useWorkspaceStore((state) => state.customProviders);
@@ -25,7 +29,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
 
   // States
   const [selectedModel, setSelectedModel] = useState(activeModel || "anthropic/claude-3-5-sonnet");
-  const [activeTab, setActiveTab] = useState<"overview" | "chat" | "files">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "chat" | "console" | "files">("overview");
   const [isReconciling, setIsReconciling] = useState(false);
   const [chatMessages, setChatMessages] = useState<{ role: string; content: string }[]>([]);
   const [chatInput, setChatInput] = useState("");
@@ -34,6 +38,12 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<WebSocket | null>(null);
+  const reconciliationStreamId = getReconciliationStreamId(tabId);
+  const addConsoleLog = (message: string) => useWorkspaceStore.getState().addLog(reconciliationStreamId, message);
+  const clearConsoleLog = () => useWorkspaceStore.getState().clearLogs(reconciliationStreamId);
+  const setConsoleStatus = (status: "idle" | "running" | "success" | "error") => {
+    useWorkspaceStore.getState().setNodeStatus(reconciliationStreamId, status);
+  };
 
   // Resolve canvas context task nodes
   const canvasNodes = useWorkspaceStore((state) => state.canvasContexts[tabId]?.nodes || []);
@@ -108,6 +118,8 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
   };
 
   const handleStopReconciliation = () => {
+    addConsoleLog("Stop requested by user.");
+    setConsoleStatus("idle");
     if (socketRef.current) {
       socketRef.current.close(1000, "User requested stop");
       socketRef.current = null;
@@ -131,6 +143,11 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
   const startReconciliation = (userMsgText?: string) => {
     if (isReconciling) return;
     setIsReconciling(true);
+    if (!userMsgText) {
+      clearConsoleLog();
+    }
+    setConsoleStatus("running");
+    addConsoleLog(userMsgText ? "Sending reconciliation follow-up message..." : "Starting graph reconciliation...");
 
     let nextMessages = [...chatMessages];
     if (userMsgText) {
@@ -141,7 +158,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
       nextMessages = [{ role: "system", content: "Checking duplicate file changes across tasks..." }];
       setChatMessages(nextMessages);
       saveChatHistory(nextMessages);
-      setActiveTab("chat");
+      setActiveTab("console");
     }
 
     let socket: WebSocket;
@@ -150,6 +167,8 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
       socketRef.current = socket;
     } catch (err: any) {
       console.error("Failed to construct WebSocket:", err);
+      addConsoleLog(`Connection failed: ${err.message || String(err)}`);
+      setConsoleStatus("error");
       appendChatMessage({ role: "system", content: `Connection failed: ${err.message || String(err)}` });
       setIsReconciling(false);
       return;
@@ -157,6 +176,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
 
     socket.onopen = () => {
       const provider = customProviders.find((p) => p.id === activeCustomProviderId);
+      addConsoleLog(`Connected to sidecar. Dispatching ${formattedNodes.length} task nodes with ${Object.keys(duplicateFiles).length} overlapping file groups.`);
 
       socket.send(
         JSON.stringify({
@@ -176,6 +196,11 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
     socket.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
+
+        if (msg.type === "log") {
+          addConsoleLog(msg.message);
+          return;
+        }
 
         if (msg.type === "read_file") {
           console.log(`[ReconciliateGraph] Sidecar reading file: ${msg.path}`);
@@ -221,6 +246,8 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
         }
 
         if (msg.type === "reconciliation_graph_complete") {
+          addConsoleLog("Reconciliation completed successfully.");
+          setConsoleStatus("success");
           appendChatMessage({ role: "assistant", content: msg.response || "Reconciliation complete." });
           setIsReconciling(false);
           notify("Reconciliation Complete", "Code alignment completed successfully.", "success");
@@ -229,6 +256,8 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
         }
 
         if (msg.type === "reconciliation_graph_error") {
+          addConsoleLog(`Reconciliation failed: ${msg.error}`);
+          setConsoleStatus("error");
           appendChatMessage({ role: "assistant", content: `Error: ${msg.error}` });
           setIsReconciling(false);
           notify("Reconciliation Failed", `Error aligning: ${msg.error}`, "error");
@@ -236,16 +265,24 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
         }
       } catch (err: any) {
         console.error("[ReconciliationGraph] parse error:", err);
+        addConsoleLog(`Message parse error: ${err.message || String(err)}`);
       }
     };
 
     socket.onerror = (error) => {
       console.error("[ReconciliationGraph] WebSocket error:", error);
+      addConsoleLog("WebSocket connection failed.");
+      setConsoleStatus("error");
       appendChatMessage({ role: "system", content: "Error: WebSocket connection failed." });
       setIsReconciling(false);
     };
 
     socket.onclose = () => {
+      const currentStatus = useWorkspaceStore.getState().canvasContexts[tabId]?.nodeStatus[reconciliationStreamId];
+      if (currentStatus === "running") {
+        addConsoleLog("Connection closed before reconciliation completed.");
+        setConsoleStatus("error");
+      }
       setIsReconciling(false);
     };
   };
@@ -269,6 +306,10 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
   }, [availableModels]);
 
   const duplicateFilesEntries = Object.entries(duplicateFiles);
+
+  if (!isOpen) {
+    return null;
+  }
 
   return (
     <div
@@ -297,7 +338,21 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
             Resolving overlapping file modifications
           </span>
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2 text-xs">
+            <span className="text-[10px] uppercase font-bold text-[var(--text-muted)] tracking-wider">
+              Model:
+            </span>
+            <CustomSelect
+              value={selectedModel}
+              onChange={(val) => setSelectedModel(val)}
+              options={modelOptions}
+              placeholder="Select Model"
+              className="w-40 text-xs font-mono"
+              direction="down"
+            />
+          </div>
+          <div className="h-5 w-[1px] bg-[var(--border-color)] flex-shrink-0" />
           <button
             onClick={() => setIsMaximized(!isMaximized)}
             className="text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors p-1 rounded-lg hover:bg-[var(--bg-sidebar)] cursor-pointer"
@@ -306,32 +361,13 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
             {isMaximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
           </button>
           <button
-            onClick={() => {
-              if (socketRef.current) {
-                socketRef.current.close(1000, "Window closed");
-              }
-              onClose();
-            }}
+            onClick={onClose}
             className="text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors p-1 rounded-lg hover:bg-[var(--bg-sidebar)] cursor-pointer"
+            title="Hide reconciliation pane"
           >
             <X size={16} />
           </button>
         </div>
-      </div>
-
-      {/* Model Selection Row */}
-      <div className="px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/30 flex items-center justify-between gap-2 flex-shrink-0 text-xs">
-        <span className="text-[10px] uppercase font-bold text-[var(--text-muted)] tracking-wider">
-          Reconciliation Model:
-        </span>
-        <CustomSelect
-          value={selectedModel}
-          onChange={(val) => setSelectedModel(val)}
-          options={modelOptions}
-          placeholder="Select Model"
-          className="w-48 text-xs font-mono"
-          direction="down"
-        />
       </div>
 
       {/* Tabs Menu */}
@@ -353,6 +389,18 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
         >
           <MessageSquare size={13} />
           <span>Adjustment Chat</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("console")}
+          className={`flex items-center space-x-1.5 px-3 py-2 text-xs font-mono font-semibold transition-all border-b-2 hover:text-[var(--text-light)] cursor-pointer relative ${
+            activeTab === "console" ? "border-violet-500 text-violet-400" : "border-transparent text-[var(--text-muted)]"
+          }`}
+        >
+          <Terminal size={13} />
+          <span>Console Stream</span>
+          {isReconciling && (
+            <span className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-violet-400 animate-ping" />
+          )}
         </button>
         <button
           onClick={() => setActiveTab("files")}
@@ -496,6 +544,10 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
               </form>
             </div>
           </div>
+        )}
+
+        {activeTab === "console" && (
+          <ConsoleTabContent selectedNodeId={reconciliationStreamId} tabId={tabId} />
         )}
 
         {activeTab === "files" && (

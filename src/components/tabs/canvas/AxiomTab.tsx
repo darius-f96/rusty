@@ -115,10 +115,12 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
 
   // Reconcile changes: check where issues are with same file changes and fix them
   const handleReconcileCode = useCallback(() => {
+    setHasOpenedReconciliationGraphPane(true);
     setShowReconciliationGraphPane(true);
   }, []);
 
   const [showReconciliationGraphPane, setShowReconciliationGraphPane] = useState(false);
+  const [hasOpenedReconciliationGraphPane, setHasOpenedReconciliationGraphPane] = useState(false);
   const [rfInstance, setRfInstance] = useState<any>(null);
   const connectionStartRef = useRef<any>(null);
   const initRef = useRef(false);
@@ -529,7 +531,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
 
   return (
     <CanvasTabContext.Provider value={{ tabId: tab.id }}>
-      <div className="w-full h-full flex flex-row relative">
+      <div className="w-full h-full flex flex-row relative terminal-theme-tab">
         <div
           className="flex-1 min-h-0 relative bg-[var(--bg-canvas)]"
           id={`rf-canvas-${tab.id}`}
@@ -845,10 +847,11 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
 
 
         {/* Reconciliation Graph Pane */}
-        {showReconciliationGraphPane && (
+        {hasOpenedReconciliationGraphPane && (
           <ReconciliationGraphPane
             onClose={() => setShowReconciliationGraphPane(false)}
             tabId={tab.id}
+            isOpen={showReconciliationGraphPane}
           />
         )}
 
