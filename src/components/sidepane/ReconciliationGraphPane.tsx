@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { GitMerge, Play, Loader2, FileCode, MessageSquare, X, Send, AlertTriangle } from "lucide-react";
+import { GitMerge, Play, Loader2, FileCode, MessageSquare, X, Send, AlertTriangle, Maximize2, Minimize2 } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
-import { invoke } from "@tauri-apps/api/core";
 import { VfsRegistry } from "../../services/vfs";
 import { notify } from "../../notificationStore";
-import { EdgeDiffTabContent } from "../edgeinspector/components/EdgeDiffTabContent";
+import { PRDiffView } from "./components/PRDiffView";
 import { useResizable } from "./useResizable";
 import { CustomSelect } from "../CustomSelect";
 import { queryDuplicateTrackedFiles } from "../../services/vfs/orchestrators/queryOrchestrator";
@@ -30,13 +29,8 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
   const [isReconciling, setIsReconciling] = useState(false);
   const [chatMessages, setChatMessages] = useState<{ role: string; content: string }[]>([]);
   const [chatInput, setChatInput] = useState("");
+  const [isMaximized, setIsMaximized] = useState(false);
   const [duplicateFiles, setDuplicateFiles] = useState<Record<string, string[]>>({});
-
-  // Diff states
-  const [diffFile, setDiffFile] = useState<string>("");
-  const [originalCode, setOriginalCode] = useState("// Click a file to load diff");
-  const [modifiedCode, setModifiedCode] = useState("// Click a file to load diff");
-  const [isDiffLoading, setIsDiffLoading] = useState(false);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<WebSocket | null>(null);
@@ -82,42 +76,6 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
-
-  // Auto-select first diff file if none selected
-  useEffect(() => {
-    if (allModifiedFiles.length > 0 && !diffFile) {
-      setDiffFile(allModifiedFiles[0]);
-    }
-  }, [allModifiedFiles, diffFile]);
-
-  // Load VFS and Disk file diff contents
-  const loadDiffContent = async (filePath: string) => {
-    if (!filePath) return;
-    setIsDiffLoading(true);
-    try {
-      const modified: string = await VfsRegistry.getOrCreate(tabId).readFile(filePath);
-      let original = "";
-      try {
-        original = await invoke("read_file_disk", { path: filePath });
-      } catch {
-        original = "[New file generated during execution - not present on disk]";
-      }
-      setOriginalCode(original);
-      setModifiedCode(modified);
-    } catch (err: any) {
-      console.error("[ReconciliationGraphPane] Diff failed:", err);
-      setOriginalCode(`// Error: ${err.message || String(err)}`);
-      setModifiedCode(`// Error: ${err.message || String(err)}`);
-    } finally {
-      setIsDiffLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (diffFile) {
-      loadDiffContent(diffFile);
-    }
-  }, [diffFile]);
 
   const startReconciliation = (userMsgText?: string) => {
     if (isReconciling) return;
@@ -189,10 +147,6 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
               if (socket.readyState === WebSocket.OPEN) {
                 socket.send(JSON.stringify({ type: "write_file_response", requestId: msg.requestId }));
               }
-              // Refresh diff viewer
-              if (diffFile === msg.path) {
-                loadDiffContent(msg.path);
-              }
             })
             .catch((err) => {
               if (socket.readyState === WebSocket.OPEN) {
@@ -210,7 +164,11 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
           setIsReconciling(false);
           notify("Reconciliation Complete", "Code alignment completed successfully.", "success");
           loadDuplicates();
-          if (diffFile) loadDiffContent(diffFile);
+          import("../tabs/canvas/services/canvasFileService").then(({ canvasFileService }) => {
+            canvasFileService.autoSaveCanvas(tabId);
+          }).catch((err) => {
+            console.error("Failed to auto-save canvas:", err);
+          });
           socket.close();
         }
 
@@ -262,15 +220,19 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
   return (
     <div
       ref={containerRef}
-      style={{ width: `${width}px` }}
-      className="border-l border-[var(--border-color)] bg-[var(--bg-app)]/95 flex flex-col h-full text-[var(--text-normal)] font-sans shadow-2xl relative z-[40]"
+      style={{ width: isMaximized ? "100%" : `${width}px` }}
+      className={`border-l border-[var(--border-color)] bg-[var(--bg-app)]/95 flex flex-col h-full text-[var(--text-normal)] font-sans shadow-2xl z-[40] ${
+        isMaximized ? "absolute inset-0" : "absolute right-0 top-0 bottom-0"
+      }`}
     >
       {/* Resizer Handle */}
-      <div
-        onMouseDown={startResizing}
-        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-violet-500/50 active:bg-violet-500 transition-colors z-50"
-        style={{ transform: "translateX(-50%)" }}
-      />
+      {!isMaximized && (
+        <div
+          onMouseDown={startResizing}
+          className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-violet-500/50 active:bg-violet-500 transition-colors z-50"
+          style={{ transform: "translateX(-50%)" }}
+        />
+      )}
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-color)] bg-gradient-to-r from-violet-500/10 to-transparent flex-shrink-0">
         <div className="flex flex-col">
@@ -282,12 +244,21 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
             Resolving overlapping file modifications
           </span>
         </div>
-        <button
-          onClick={onClose}
-          className="text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors p-1 rounded-lg hover:bg-[var(--bg-sidebar)] cursor-pointer"
-        >
-          <X size={16} />
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => setIsMaximized(!isMaximized)}
+            className="text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors p-1 rounded-lg hover:bg-[var(--bg-sidebar)] cursor-pointer"
+            title={isMaximized ? "Restore size" : "Maximize to fullscreen"}
+          >
+            {isMaximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+          </button>
+          <button
+            onClick={onClose}
+            className="text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors p-1 rounded-lg hover:bg-[var(--bg-sidebar)] cursor-pointer"
+          >
+            <X size={16} />
+          </button>
+        </div>
       </div>
 
       {/* Model Selection Row */}
@@ -470,66 +441,10 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
         )}
 
         {activeTab === "files" && (
-          <div className="flex-1 flex flex-col overflow-hidden">
-            {allModifiedFiles.length === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-[var(--text-muted)]">
-                <FileCode size={28} className="text-[var(--text-muted)]/30 mb-2" />
-                <span className="text-xs">No modified VFS files detected. Run tasks first.</span>
-              </div>
-            ) : (
-              <div className="flex-1 flex overflow-hidden">
-                {/* File Sidebar */}
-                <div className="w-1/3 border-r border-[var(--border-color)] overflow-y-auto bg-[var(--bg-sidebar)]/10">
-                  {allModifiedFiles.map((file) => {
-                    const parts = file.split("/");
-                    const name = parts[parts.length - 1];
-                    const dir = parts.slice(0, -1).join("/");
-                    return (
-                      <button
-                        key={file}
-                        onClick={() => setDiffFile(file)}
-                        className={`w-full text-left p-2.5 border-b border-[var(--border-color)] flex flex-col space-y-0.5 transition-all cursor-pointer ${
-                          diffFile === file ? "bg-violet-500/10 border-l-2 border-l-violet-500" : "hover:bg-[var(--bg-sidebar)]/35"
-                        }`}
-                      >
-                        <span className="font-semibold text-xs text-[var(--text-normal)] truncate">{name}</span>
-                        {dir && <span className="text-[9px] text-[var(--text-muted)] truncate">{dir}</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Diff Viewer Area */}
-                <div className="w-2/3 flex flex-col overflow-hidden relative">
-                  {isDiffLoading ? (
-                    <div className="flex-1 flex flex-col items-center justify-center bg-black/10">
-                      <Loader2 className="animate-spin text-violet-500 mb-2" size={24} />
-                      <span className="text-xs text-[var(--text-muted)]">Loading file diff...</span>
-                    </div>
-                  ) : (
-                    <div className="flex-1 flex flex-col overflow-hidden">
-                      <div className="px-3 py-1.5 border-b border-[var(--border-color)] bg-black/10 flex items-center justify-between flex-shrink-0">
-                        <span className="text-[10px] font-mono text-[var(--text-muted)] truncate max-w-[200px]">
-                          Viewing: {diffFile.split("/").pop()}
-                        </span>
-                      </div>
-                      <div className="flex-1 overflow-hidden relative">
-                        <EdgeDiffTabContent
-                          sourceModifiedFiles={allModifiedFiles}
-                          diffFile={diffFile}
-                          setDiffFile={setDiffFile}
-                          loadDiffContent={loadDiffContent}
-                          originalCode={originalCode}
-                          modifiedCode={modifiedCode}
-                          tabId={tabId}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
+          <PRDiffView
+            tabId={tabId}
+            modifiedFiles={allModifiedFiles}
+          />
         )}
       </div>
 
