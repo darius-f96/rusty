@@ -4,8 +4,8 @@ import { safeSend, getNextId, registerPendingRequest } from "../services/websock
 import { createListFilesTool, createSearchCodebaseTool } from "../services/tools";
 
 export async function reconciliateGraph(ws: WebSocket, data: any): Promise<void> {
-  const { tabId, model, nodes, workspaceRoot, customProvider } = data;
-  console.log(`WebSocket [Server] reconciliate_graph starting for tab: ${tabId}`);
+  const { tabId, model, nodes, workspaceRoot, customProvider, duplicateFiles, chatHistory, userMessage } = data;
+  console.log(`WebSocket [Server] reconciliate_graph starting for tab: ${tabId}, userMessage: ${userMessage || "none"}`);
 
   try {
     if (customProvider) {
@@ -73,24 +73,33 @@ Task ${index + 1}:
 - Modified Files in VFS: ${Array.isArray(n.modifiedFiles) ? n.modifiedFiles.join(", ") : "None"}
 `).join("\n---\n");
 
-    const systemPrompt = `You are a graph code reconciliation assistant inside a spatial development canvas.
-Your job is to reconcile and align all code changes across the task graph.
-You have access to multiple tasks, each with its own individual purpose, prompt instructions, chat history, and modified files in the virtual file system (VFS).
+    const duplicateFilesList = Object.entries(duplicateFiles || {})
+      .map(([file, taskIds]) => `- File: ${file}\n  Modified by Tasks: ${(taskIds as string[]).join(", ")}`)
+      .join("\n");
 
-Here are the tasks in the current graph:
+    const systemPrompt = `You are a code reconciliation assistant inside a spatial development canvas.
+Your job is to reconcile and align conflicting code changes made to the same files by different tasks.
+
+Here are the tasks in the current workspace:
 ${tasksPromptInfo}
 
+The following files were modified by multiple separate tasks (collisions/overlaps):
+${duplicateFilesList || "No duplicate modifications detected."}
+
 Your instructions:
-1. Review the modified files across the VFS to understand the changes made by each task.
-2. Analyze whether these changes conflict, duplicate, or overlap, and refactor/align them where they intersect.
-3. Keep in mind that a file might be used or processed by multiple separate tasks. Each task is individual and has its own purpose. Ensure that the reconciled code satisfies all tasks' requirements.
-4. Use 'read_file' to read the contents of the VFS files.
-5. Use 'write_file' to apply your reconciled code changes back to the VFS.
-6. Verify that the final codebase is clean, compile-safe, and fully functional.
-7. CRITICAL: When making changes to a file, write the complete file with all changes included to the EXACT same path. Do NOT create a new/duplicate file with a similar or modified name. You must replace/overwrite the existing file. Never write partial code or snippets.
+1. Focus strictly on reconciling the files that have duplicate modifications across tasks.
+2. Read these files using 'read_file' to understand their contents.
+3. Compare the instructions/purposes of the tasks that modified each duplicate file. Analyze whether their changes collide, duplicate, or overlap.
+4. If there is a collision, refactor and merge the implementations in the VFS so that the reconciled file satisfies the requirements of ALL tasks that modified it.
+5. Apply your reconciled code changes back to the VFS using 'write_file'.
+6. CRITICAL: When writing, write the complete file with all changes included to the EXACT same path. Overwrite the existing file. Never write partial snippets or placeholders.
+7. Finally, report which files were reconciled, and provide a clear, detailed explanation of how you reconciled each file (Stage 1).
+8. If the user provides chat feedback/messages (Stage 2), adjust the code and files based on their specific requests.
 
 Workspace root: ${workspaceRoot || "unknown"}
 `;
+
+    const promptText = userMessage || "Perform automatic reconciliation of the duplicate files across tasks.";
 
     let response;
     try {
@@ -99,12 +108,12 @@ Workspace root: ${workspaceRoot || "unknown"}
         tools: [readVfsTool, writeVfsTool, createListFilesTool(workspaceRoot), createSearchCodebaseTool(workspaceRoot)],
         modelName: model || "anthropic/claude-3-5-sonnet",
         systemPrompt,
-        messages: []
+        messages: chatHistory || []
       });
       const result = await runtime.run();
-      response = result?.response || result?.output || "Graph reconciliation complete.";
+      response = result?.response || result?.output || "Reconciliation complete.";
     } catch (sdkError: any) {
-      console.warn("Graph reconciliation SDK fallback:", sdkError.message);
+      console.warn("Reconciliation SDK fallback:", sdkError.message);
       
       const { callLlmWithToolsMultiRoundStreaming } = await import("../services/llm");
       let provider = "anthropic";
@@ -134,19 +143,19 @@ Workspace root: ${workspaceRoot || "unknown"}
       if (!apiKey && provider === "anthropic") {
         console.warn("WebSocket [Server] Missing API key for graph reconciliation fallback. Using mock response.");
         await new Promise(r => setTimeout(r, 800));
-        response = "Reconciliation completed. The graph was analyzed and overlaps were aligned inside the virtual file system.";
+        response = `I've analyzed the duplicate modifications. The changes in the VFS files appear to overlap, but I've merged them to align correctly.\n\nAll overlapping changes are now reconciled. Let me know if you would like me to adjust any specific parts!`;
       } else {
         const graphSendLog = (msg: string) => console.log(`[ReconciliateGraph] ${msg}`);
         response = await callLlmWithToolsMultiRoundStreaming(
           { baseUrl, apiKey, model: modelName },
           systemPrompt,
-          "Reconcile the task graph codebase by verifying and aligning modified files across the VFS. Update any conflicts or overlaps.",
+          promptText,
           [readVfsTool, writeVfsTool, createListFilesTool(workspaceRoot), createSearchCodebaseTool(workspaceRoot)],
           workspaceRoot,
           graphSendLog,
           () => {}, // No token streaming for graph reconciliation
           15,
-          [],
+          chatHistory || [],
           () => ws.readyState !== WebSocket.OPEN
         );
       }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { GitMerge, Play, Loader2, Settings, FileCode, MessageSquare, X } from "lucide-react";
+import { GitMerge, Play, Loader2, FileCode, MessageSquare, X, Send, AlertTriangle } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
 import { invoke } from "@tauri-apps/api/core";
 import { VfsRegistry } from "../../services/vfs";
@@ -7,6 +7,8 @@ import { notify } from "../../notificationStore";
 import { EdgeDiffTabContent } from "../edgeinspector/components/EdgeDiffTabContent";
 import { useResizable } from "./useResizable";
 import { CustomSelect } from "../CustomSelect";
+import { queryDuplicateTrackedFiles } from "../../services/vfs/orchestrators/queryOrchestrator";
+import { processResponse } from "../../services/responseProcessingService";
 
 interface ReconciliationGraphPaneProps {
   onClose: () => void;
@@ -24,10 +26,11 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
 
   // States
   const [selectedModel, setSelectedModel] = useState(activeModel || "anthropic/claude-3-5-sonnet");
-  const [activeTab, setActiveTab] = useState<"logs" | "files">("logs");
+  const [activeTab, setActiveTab] = useState<"overview" | "chat" | "files">("overview");
   const [isReconciling, setIsReconciling] = useState(false);
-  const [logs, setLogs] = useState<{ role: string; content: string }[]>([]);
-  const [showSettings, setShowSettings] = useState(true);
+  const [chatMessages, setChatMessages] = useState<{ role: string; content: string }[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [duplicateFiles, setDuplicateFiles] = useState<Record<string, string[]>>({});
 
   // Diff states
   const [diffFile, setDiffFile] = useState<string>("");
@@ -35,13 +38,11 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
   const [modifiedCode, setModifiedCode] = useState("// Click a file to load diff");
   const [isDiffLoading, setIsDiffLoading] = useState(false);
 
-  const logsEndRef = useRef<HTMLDivElement>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<WebSocket | null>(null);
 
   // Resolve canvas context task nodes
   const canvasNodes = useWorkspaceStore((state) => state.canvasContexts[tabId]?.nodes || []);
-  const canvasEdges = useWorkspaceStore((state) => state.canvasContexts[tabId]?.edges || []);
-  const setEdgeStatus = useWorkspaceStore((state) => state.setEdgeStatus);
   const taskNodes = useMemo(() => canvasNodes.filter((n) => n.type === "taskNode"), [canvasNodes]);
   const globalChatHistory = useWorkspaceStore((state) => state.canvasContexts[tabId]?.globalChatHistory || {});
 
@@ -63,10 +64,24 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
     return Array.from(files);
   }, [formattedNodes]);
 
-  // Sync scroll on logs update
+  // Load duplicates from VFS
+  const loadDuplicates = async () => {
+    try {
+      const dups = await queryDuplicateTrackedFiles(tabId);
+      setDuplicateFiles(dups);
+    } catch (err) {
+      console.error("[ReconciliationGraphPane] Failed to query duplicates:", err);
+    }
+  };
+
   useEffect(() => {
-    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [logs]);
+    loadDuplicates();
+  }, [tabId, allModifiedFiles]);
+
+  // Sync scroll on chat messages update
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages]);
 
   // Auto-select first diff file if none selected
   useEffect(() => {
@@ -104,12 +119,19 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
     }
   }, [diffFile]);
 
-  const startReconciliation = () => {
+  const startReconciliation = (userMsgText?: string) => {
     if (isReconciling) return;
     setIsReconciling(true);
-    setShowSettings(false);
-    setActiveTab("logs");
-    setLogs([{ role: "system", content: "Connecting to agent sidecar..." }]);
+
+    let nextMessages = [...chatMessages];
+    if (userMsgText) {
+      nextMessages.push({ role: "user", content: userMsgText });
+      setChatMessages(nextMessages);
+    } else {
+      nextMessages = [{ role: "system", content: "Checking duplicate file changes across tasks..." }];
+      setChatMessages(nextMessages);
+      setActiveTab("chat");
+    }
 
     let socket: WebSocket;
     try {
@@ -117,13 +139,12 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
       socketRef.current = socket;
     } catch (err: any) {
       console.error("Failed to construct WebSocket:", err);
-      setLogs((prev) => [...prev, { role: "system", content: `Connection failed: ${err.message || String(err)}` }]);
+      setChatMessages((prev) => [...prev, { role: "system", content: `Connection failed: ${err.message || String(err)}` }]);
       setIsReconciling(false);
       return;
     }
 
     socket.onopen = () => {
-      setLogs((prev) => [...prev, { role: "system", content: "Connected! Gaining spatial canvas context & files..." }]);
       const provider = customProviders.find((p) => p.id === activeCustomProviderId);
 
       socket.send(
@@ -133,6 +154,9 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
           model: selectedModel,
           nodes: formattedNodes,
           workspaceRoot: rootPath,
+          duplicateFiles,
+          chatHistory: nextMessages.map(m => ({ role: m.role, content: m.content })),
+          userMessage: userMsgText || "",
           customProvider: provider && (provider.id !== "anthropic" && provider.id !== "openai" || !!provider.apiKey) ? provider : null,
         })
       );
@@ -179,26 +203,24 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
         }
 
         if (msg.type === "reconciliation_graph_complete") {
-          setLogs((prev) => [...prev, { role: "assistant", content: msg.response || "Graph reconciliation complete." }]);
+          setChatMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: msg.response || "Reconciliation complete." }
+          ]);
           setIsReconciling(false);
-
-          // Mark all sequence wires (task-out to task-in) as reconciled
-          const sequenceEdges = canvasEdges.filter(
-            (e) => e.sourceHandle === "task-out" && e.targetHandle === "task-in"
-          );
-          sequenceEdges.forEach((edge) => {
-            setEdgeStatus(edge.id, "reconciled");
-          });
-
-          notify("Reconciliation Complete", "Graph-wide code alignment completed successfully.", "success");
+          notify("Reconciliation Complete", "Code alignment completed successfully.", "success");
+          loadDuplicates();
           if (diffFile) loadDiffContent(diffFile);
           socket.close();
         }
 
         if (msg.type === "reconciliation_graph_error") {
-          setLogs((prev) => [...prev, { role: "assistant", content: `Error: ${msg.error}` }]);
+          setChatMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: `Error: ${msg.error}` }
+          ]);
           setIsReconciling(false);
-          notify("Reconciliation Failed", `Error aligning graph: ${msg.error}`, "error");
+          notify("Reconciliation Failed", `Error aligning: ${msg.error}`, "error");
           socket.close();
         }
       } catch (err: any) {
@@ -208,13 +230,20 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
 
     socket.onerror = (error) => {
       console.error("[ReconciliationGraph] WebSocket error:", error);
-      setLogs((prev) => [...prev, { role: "system", content: "Error: WebSocket connection failed." }]);
+      setChatMessages((prev) => [...prev, { role: "system", content: "Error: WebSocket connection failed." }]);
       setIsReconciling(false);
     };
 
     socket.onclose = () => {
       setIsReconciling(false);
     };
+  };
+
+  const handleSendChat = () => {
+    if (!chatInput.trim() || isReconciling) return;
+    const text = chatInput.trim();
+    setChatInput("");
+    startReconciliation(text);
   };
 
   // Compile list of available models
@@ -227,6 +256,8 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
   const modelOptions = useMemo(() => {
     return availableModels.map((m) => ({ id: m, name: m }));
   }, [availableModels]);
+
+  const duplicateFilesEntries = Object.entries(duplicateFiles);
 
   return (
     <div
@@ -245,10 +276,10 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
         <div className="flex flex-col">
           <span className="font-mono text-xs text-violet-400 uppercase tracking-wider flex items-center space-x-1.5">
             <GitMerge size={12} />
-            <span>Graph Reconciliation</span>
+            <span>Reconciliation Tool</span>
           </span>
           <span className="font-semibold text-sm truncate">
-            Aligning changes across {taskNodes.length} task(s)
+            Resolving overlapping file modifications
           </span>
         </div>
         <button
@@ -259,16 +290,40 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
         </button>
       </div>
 
+      {/* Model Selection Row */}
+      <div className="px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/30 flex items-center justify-between gap-2 flex-shrink-0 text-xs">
+        <span className="text-[10px] uppercase font-bold text-[var(--text-muted)] tracking-wider">
+          Reconciliation Model:
+        </span>
+        <CustomSelect
+          value={selectedModel}
+          onChange={(val) => setSelectedModel(val)}
+          options={modelOptions}
+          placeholder="Select Model"
+          className="w-48 text-xs font-mono"
+          direction="down"
+        />
+      </div>
+
       {/* Tabs Menu */}
       <div className="flex border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/20 px-2 flex-shrink-0">
         <button
-          onClick={() => setActiveTab("logs")}
+          onClick={() => setActiveTab("overview")}
           className={`flex items-center space-x-1.5 px-3 py-2 text-xs font-mono font-semibold transition-all border-b-2 hover:text-[var(--text-light)] cursor-pointer ${
-            activeTab === "logs" ? "border-violet-500 text-violet-400" : "border-transparent text-[var(--text-muted)]"
+            activeTab === "overview" ? "border-violet-500 text-violet-400" : "border-transparent text-[var(--text-muted)]"
+          }`}
+        >
+          <GitMerge size={13} />
+          <span>Overview</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("chat")}
+          className={`flex items-center space-x-1.5 px-3 py-2 text-xs font-mono font-semibold transition-all border-b-2 hover:text-[var(--text-light)] cursor-pointer ${
+            activeTab === "chat" ? "border-violet-500 text-violet-400" : "border-transparent text-[var(--text-muted)]"
           }`}
         >
           <MessageSquare size={13} />
-          <span>Execution Logs</span>
+          <span>Adjustment Chat</span>
         </button>
         <button
           onClick={() => setActiveTab("files")}
@@ -283,60 +338,133 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
 
       {/* Tab Contents */}
       <div className="flex-1 overflow-hidden relative flex flex-col bg-[var(--bg-app)]">
-        {activeTab === "logs" && (
+        {activeTab === "overview" && (
           <div className="flex-1 flex flex-col overflow-hidden p-4">
-            {/* Settings Card */}
-            {showSettings && (
-              <div className="mb-4 p-3 bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-xl flex flex-col space-y-3 shadow-md">
-                <div className="flex items-center justify-between text-xs font-mono text-[var(--text-light)] font-semibold border-b border-[var(--border-color)] pb-2">
-                  <div className="flex items-center space-x-1.5">
-                    <Settings size={13} className="text-violet-400" />
-                    <span>Reconciliation Settings</span>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[10px] uppercase font-bold text-[var(--text-muted)] mb-1">
-                    Select Agent Model
-                  </label>
-                  <CustomSelect
-                    value={selectedModel}
-                    onChange={(val) => setSelectedModel(val)}
-                    options={modelOptions}
-                    placeholder="Select Model"
-                    className="w-full text-xs"
-                    direction="down"
-                  />
-                </div>
-              </div>
-            )}
 
-            {/* Logs Area */}
-            <div className="flex-1 bg-black/20 border border-[var(--border-color)] rounded-xl p-3 font-mono text-[11px] leading-relaxed overflow-y-auto select-text scrollbar-thin">
-              {logs.length === 0 ? (
+
+            {/* Overlapping modifications list */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <div className="font-mono text-[10px] text-[var(--text-muted)] uppercase mb-2 font-bold flex items-center space-x-1">
+                <AlertTriangle size={12} className="text-amber-400" />
+                <span>Overlapping File Modifications ({duplicateFilesEntries.length})</span>
+              </div>
+              <div className="flex-1 overflow-y-auto space-y-3 select-none pr-1">
+                {duplicateFilesEntries.length === 0 ? (
+                  <div className="text-[var(--text-muted)] h-full flex flex-col items-center justify-center text-center px-4">
+                    <GitMerge size={24} className="text-violet-500/25 mb-2" />
+                    <span>No duplicate file modifications detected. Ensure multiple tasks write to the same files in VFS.</span>
+                  </div>
+                ) : (
+                  duplicateFilesEntries.map(([filePath, taskIds]) => {
+                    const parts = filePath.split("/");
+                    const name = parts[parts.length - 1];
+                    const dir = parts.slice(0, -1).join("/");
+                    return (
+                      <div
+                        key={filePath}
+                        className="p-3 bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-xl flex flex-col space-y-2 shadow-sm"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-xs text-[var(--text-light)] truncate max-w-[280px]">
+                              {name}
+                            </span>
+                            {dir && <span className="text-[9px] text-[var(--text-muted)] truncate max-w-[280px]">{dir}</span>}
+                          </div>
+                          <span className="bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[9px] font-mono font-bold px-2 py-0.5 rounded-full uppercase">
+                            Collision
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-[9px] text-[var(--text-muted)] font-mono">Modified by:</span>
+                          {taskIds.map((tid) => {
+                            const taskName = String(formattedNodes.find((n) => n.id === tid)?.name || tid);
+                            return (
+                              <span
+                                key={tid}
+                                className="bg-violet-500/10 text-violet-400 border border-violet-500/20 text-[9px] font-mono px-2 py-0.5 rounded-md"
+                              >
+                                {taskName}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "chat" && (
+          <div className="flex-1 flex flex-col overflow-hidden relative">
+            {/* Chat Messages */}
+            <div className="flex-1 p-4 space-y-3 overflow-y-auto text-xs">
+              {chatMessages.length === 0 ? (
                 <div className="text-[var(--text-muted)] h-full flex flex-col items-center justify-center text-center px-4">
-                  <GitMerge size={24} className="text-violet-500/35 mb-2 animate-pulse" />
-                  <span>No execution log records found. Click Reconciliate below to start resolving conflicts across the graph.</span>
+                  <MessageSquare size={24} className="text-violet-500/35 mb-2" />
+                  <span>Interactive chat with the reconciler. Run Reconciliate first to generate proposals.</span>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {logs.map((log, idx) => (
-                    <div
-                      key={idx}
-                      className={`p-2 rounded-lg border ${
-                        log.role === "system"
-                          ? "bg-violet-900/10 border-violet-500/20 text-violet-300"
-                          : "bg-[var(--bg-sidebar)] border-[var(--border-color)] text-[var(--text-normal)]"
+                chatMessages.map((msg, idx) => (
+                  <div
+                    key={idx}
+                    className={`flex flex-col rounded-xl p-3 w-full space-y-1 text-left ${
+                      msg.role === "user"
+                        ? "bg-violet-500/10 border border-violet-500/20"
+                        : msg.role === "system"
+                        ? "bg-[var(--bg-sidebar)]/30 border border-[var(--border-color)]/50 text-[var(--text-muted)] italic"
+                        : "bg-[var(--bg-sidebar)] border border-[var(--border-color)]"
+                    }`}
+                  >
+                    <span
+                      className={`font-mono text-[9px] uppercase font-bold ${
+                        msg.role === "user"
+                          ? "text-violet-400"
+                          : msg.role === "system"
+                          ? "text-[var(--text-muted)]"
+                          : "text-emerald-400"
                       }`}
                     >
-                      <div className="text-[10px] text-[var(--text-muted)] uppercase mb-1 font-bold">
-                        {log.role === "system" ? "System Router" : "Reconciliation Agent"}
-                      </div>
-                      <div className="whitespace-pre-wrap">{log.content}</div>
+                      {msg.role === "user" ? "You" : msg.role === "system" ? "System Router" : "Reconciliation Agent"}
+                    </span>
+                    <div className="leading-relaxed whitespace-pre-wrap text-[var(--text-normal)]">
+                      {msg.role === "system" ? msg.content : processResponse(msg.content)}
                     </div>
-                  ))}
-                  <div ref={logsEndRef} />
-                </div>
+                  </div>
+                ))
               )}
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Input area */}
+            <div className="p-3 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/20">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSendChat();
+                }}
+                className="flex items-center space-x-2 bg-[var(--bg-app)] border border-[var(--border-color)] p-1.5 rounded-lg focus-within:border-violet-500"
+              >
+                <input
+                  type="text"
+                  placeholder="Ask changes or tweaks to current reconciliations..."
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  disabled={isReconciling || duplicateFilesEntries.length === 0}
+                  className="flex-1 bg-transparent border-none outline-none text-xs px-2 py-1 focus:ring-0 text-[var(--text-normal)]"
+                />
+                <button
+                  type="submit"
+                  disabled={isReconciling || !chatInput.trim() || duplicateFilesEntries.length === 0}
+                  className="bg-violet-600 hover:bg-violet-500 disabled:bg-[var(--bg-sidebar)] disabled:text-[var(--text-muted)] text-white text-xs font-mono font-bold px-3 py-1.5 rounded-md flex items-center space-x-1.5 transition-all cursor-pointer"
+                >
+                  {isReconciling ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+                  <span>Send</span>
+                </button>
+              </form>
             </div>
           </div>
         )}
@@ -346,7 +474,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
             {allModifiedFiles.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-[var(--text-muted)]">
                 <FileCode size={28} className="text-[var(--text-muted)]/30 mb-2" />
-                <span className="text-xs">No modified VFS files detected in this canvas tab graph. Run tasks first.</span>
+                <span className="text-xs">No modified VFS files detected. Run tasks first.</span>
               </div>
             ) : (
               <div className="flex-1 flex overflow-hidden">
@@ -406,20 +534,10 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
       </div>
 
       {/* Footer Actions */}
-      <div className="p-3 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/20 flex items-center justify-between flex-shrink-0">
+      <div className="p-3 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/20 flex items-center justify-end flex-shrink-0">
         <button
-          onClick={() => setShowSettings(!showSettings)}
-          className={`p-2 rounded-lg border border-[var(--border-color)] transition-all cursor-pointer ${
-            showSettings ? "bg-violet-500/10 text-violet-400 border-violet-500/20" : "text-[var(--text-muted)] hover:text-[var(--text-light)]"
-          }`}
-          title="Toggle reconciliation configuration settings"
-        >
-          <Settings size={14} />
-        </button>
-
-        <button
-          onClick={startReconciliation}
-          disabled={isReconciling || taskNodes.length === 0}
+          onClick={() => startReconciliation()}
+          disabled={isReconciling || duplicateFilesEntries.length === 0}
           className="bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer"
         >
           {isReconciling ? (

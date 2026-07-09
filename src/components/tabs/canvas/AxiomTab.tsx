@@ -25,7 +25,6 @@ import { ContextNode } from "../../nodes/ContextNode";
 import { TaskNode } from "../../nodes/TaskNode";
 import { GlobalChatNode } from "../../nodes/GlobalChatNode";
 import { McpNode } from "../../nodes/McpNode";
-import { ReconciliationEdge } from "../../ReconciliationEdge";
 import { StickyNode } from "../../nodes/sticky";
 import { BoundaryNode } from "../../nodes/boundary";
 import { invoke } from "@tauri-apps/api/core";
@@ -43,9 +42,7 @@ const nodeTypes = {
   boundaryNode: BoundaryNode,
 };
 
-const edgeTypes = {
-  reconciliationEdge: ReconciliationEdge,
-};
+const edgeTypes = {};
 
 interface AxiomTabProps {
   tab: { id: string; title: string };
@@ -75,7 +72,6 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
 
   const nodes = context.nodes || [];
   const edges = context.edges || [];
-  const edgeReconciliationStatus = context.edgeReconciliationStatus || {};
   const isPipelineApplied = !!context.isPipelineApplied;
 
   const flowNodes = useMemo(() => {
@@ -112,39 +108,15 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
   const addStickyNode = useWorkspaceStore((state) => state.addStickyNode);
   const addBoundaryNode = useWorkspaceStore((state) => state.addBoundaryNode);
   const setSelectedEdgeId = useWorkspaceStore((state) => state.setSelectedEdgeId);
-  const setEdgeStatus = useWorkspaceStore((state) => state.setEdgeStatus);
 
   // Modal State for saving pipelines
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [saveTitle, setSaveTitle] = useState(tab.title);
 
-  // Convert task-to-task edges to use custom reconciliation edge type
-  const styledEdges = useMemo(() => {
-    return edges.map((edge) => {
-      if (edge.sourceHandle === "task-out" && edge.targetHandle === "task-in") {
-        return { ...edge, type: "reconciliationEdge" };
-      }
-      return edge;
-    });
-  }, [edges]);
-
-  // Reconciliate Graph: mark all sequence wires as unreconciled to trigger checks
-  const handleReconciliateGraph = useCallback(() => {
-    const sequenceEdges = edges.filter(
-      (e) => e.sourceHandle === "task-out" && e.targetHandle === "task-in"
-    );
-    if (sequenceEdges.length === 0) {
-      notify("Reconcile", "No task-to-task connections to reconciliate.", "info");
-      return;
-    }
-    sequenceEdges.forEach((edge) => {
-      const currentStatus = edgeReconciliationStatus[edge.id];
-      if (currentStatus !== "reconciled") {
-        setEdgeStatus(edge.id, "unreconciled");
-      }
-    });
+  // Reconcile changes: check where issues are with same file changes and fix them
+  const handleReconcileCode = useCallback(() => {
     setShowReconciliationGraphPane(true);
-  }, [edges, edgeReconciliationStatus, setEdgeStatus]);
+  }, []);
 
   const [showReconciliationGraphPane, setShowReconciliationGraphPane] = useState(false);
   const [rfInstance, setRfInstance] = useState<any>(null);
@@ -672,13 +644,13 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
                 <div className="absolute right-0 mt-1 w-48 bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-lg shadow-xl py-1 z-20 font-mono text-xs border border-[var(--border-color)]">
                   <button
                     onClick={() => {
-                      handleReconciliateGraph();
+                      handleReconcileCode();
                       setActionMenuOpen(false);
                     }}
                     className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
                   >
                     <GitMerge size={13} className="text-violet-400" />
-                    <span>Reconciliate Graph</span>
+                    <span>Reconcile Changes</span>
                   </button>
                   <button
                     onClick={() => {
@@ -814,7 +786,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
             <ReactFlow
               style={{ width: "100%", height: "100%" }}
               nodes={flowNodes}
-              edges={styledEdges}
+              edges={edges}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}

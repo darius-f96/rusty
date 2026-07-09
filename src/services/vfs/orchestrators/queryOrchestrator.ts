@@ -70,3 +70,38 @@ export async function queryFiles(
   const vfs = VfsRegistry.getOrCreate(tabId);
   return vfs.queryFiles(query);
 }
+
+/**
+ * Fetch all tracked file paths in VFS and return those that are modified by more than one task node.
+ * 
+ * @param tabId - The canvas tab
+ * @returns Record of duplicate file paths mapped to array of task node IDs that modified them
+ */
+export async function queryDuplicateTrackedFiles(
+  tabId: string
+): Promise<Record<string, string[]>> {
+  const vfs = VfsRegistry.getOrCreate(tabId);
+  const nodeFiles = await vfs.getAllNodeFiles();
+
+  const fileToNodesMap: Record<string, string[]> = {};
+  for (const entry of nodeFiles) {
+    for (const filePath of entry.files) {
+      if (!fileToNodesMap[filePath]) {
+        fileToNodesMap[filePath] = [];
+      }
+      if (!fileToNodesMap[filePath].includes(entry.node_id)) {
+        fileToNodesMap[filePath].push(entry.node_id);
+      }
+    }
+  }
+
+  const duplicates: Record<string, string[]> = {};
+  for (const [filePath, nodes] of Object.entries(fileToNodesMap)) {
+    if (nodes.length > 1) {
+      duplicates[filePath] = nodes;
+    }
+  }
+
+  return duplicates;
+}
+
