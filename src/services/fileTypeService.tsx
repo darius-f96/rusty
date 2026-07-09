@@ -1,4 +1,5 @@
 import React from "react";
+import { getMonacoLanguageId } from "./lspLanguage";
 
 // --- 1. Custom SVG Branding Logos for Technologies ---
 
@@ -183,94 +184,86 @@ export interface FileTypeDetails {
 }
 
 /**
- * Returns custom SVG icon component, CSS helper class, and Monaco language code based on filename extension
+ * Returns custom SVG icon component, CSS helper class, and Monaco language code based on filename extension.
+ *
+ * The `language` field is sourced from `lspLanguage.getMonacoLanguageId` so that
+ * the Monaco model language id and the LSP server key can never drift apart
+ * (see src/services/lspLanguage.ts). Icon selection stays here.
  */
 export const getFileTypeDetails = (fileName: string): FileTypeDetails => {
+  return { icon: iconForFile(fileName), color: "", language: getMonacoLanguageId(fileName) };
+};
+
+/** Resolve the technology logo for a file name (used by FileIcon + getFileTypeDetails). */
+function iconForFile(fileName: string): React.FC<{ size: number; className?: string }> {
   const lowerName = fileName.toLowerCase();
 
   // 1. Exact full file name checks (highest priority)
-  if (lowerName === "dockerfile") {
-    return { icon: DockerLogo, color: "", language: "dockerfile" };
-  }
-  if (lowerName === "package.json") {
-    return { icon: JsonLogo, color: "", language: "json" };
-  }
-  if (lowerName === "tsconfig.json" || lowerName === "jsconfig.json") {
-    return { icon: JsonLogo, color: "", language: "json" };
-  }
-  if (lowerName === ".gitignore" || lowerName === ".gitconfig" || lowerName === ".gitattributes") {
-    return { icon: GitLogo, color: "", language: "ignore" };
-  }
-  if (lowerName === "docker-compose.yml" || lowerName === "docker-compose.yaml") {
-    return { icon: DockerLogo, color: "", language: "yaml" };
-  }
-  if (lowerName === "gemfile" || lowerName === "gemfile.lock") {
-    return { icon: RubyLogo, color: "", language: "ruby" };
-  }
-  if (lowerName === "makefile") {
-    return { icon: ConfigLogo, color: "", language: "makefile" };
-  }
+  if (lowerName === "dockerfile") return DockerLogo;
+  if (lowerName === "package.json") return JsonLogo;
+  if (lowerName === "tsconfig.json" || lowerName === "jsconfig.json") return JsonLogo;
+  if (lowerName === ".gitignore" || lowerName === ".gitconfig" || lowerName === ".gitattributes") return GitLogo;
+  if (lowerName === "docker-compose.yml" || lowerName === "docker-compose.yaml") return DockerLogo;
+  if (lowerName === "gemfile" || lowerName === "gemfile.lock") return RubyLogo;
+  if (lowerName === "makefile") return ConfigLogo;
 
   // 2. Prefix checks
-  if (lowerName.startsWith(".env")) {
-    return { icon: EnvLogo, color: "", language: "properties" };
-  }
+  if (lowerName.startsWith(".env")) return EnvLogo;
 
   // 3. Extension checks
   const ext = fileName.split(".").pop()?.toLowerCase();
   switch (ext) {
     // React / Web Tech
     case "tsx":
-      return { icon: ReactLogo, color: "", language: "typescript" };
     case "jsx":
-      return { icon: ReactLogo, color: "", language: "javascript" };
+      return ReactLogo;
     case "ts":
     case "mts":
     case "cts":
-      return { icon: TypeScriptLogo, color: "", language: "typescript" };
+      return TypeScriptLogo;
     case "js":
     case "mjs":
     case "cjs":
-      return { icon: JavaScriptLogo, color: "", language: "javascript" };
+      return JavaScriptLogo;
     case "html":
     case "htm":
     case "xhtml":
-      return { icon: HtmlLogo, color: "", language: "html" };
+      return HtmlLogo;
     case "css":
     case "scss":
     case "sass":
     case "less":
-      return { icon: CssLogo, color: "", language: "css" };
+      return CssLogo;
     case "json":
-      return { icon: JsonLogo, color: "", language: "json" };
+      return JsonLogo;
     case "md":
     case "markdown":
-      return { icon: MarkdownLogo, color: "", language: "markdown" };
+      return MarkdownLogo;
 
     // Languages
     case "py":
     case "pyw":
-      return { icon: PythonLogo, color: "", language: "python" };
+      return PythonLogo;
     case "java":
     case "class":
     case "jar":
-      return { icon: JavaLogo, color: "", language: "java" };
+      return JavaLogo;
     case "rs":
-      return { icon: RustLogo, color: "", language: "rust" };
+      return RustLogo;
     case "go":
-      return { icon: GoLogo, color: "", language: "go" };
+      return GoLogo;
     case "rb":
-      return { icon: RubyLogo, color: "", language: "ruby" };
+      return RubyLogo;
     case "php":
-      return { icon: PhpLogo, color: "", language: "php" };
+      return PhpLogo;
     case "cpp":
     case "cc":
     case "cxx":
     case "hpp":
     case "h":
-      return { icon: CppLogo, color: "", language: "cpp" };
+      return CppLogo;
     case "c":
-      return { icon: CLogo, color: "", language: "c" };
+      return CLogo;
 
     // Database / SQL
     case "sql":
@@ -278,7 +271,7 @@ export const getFileTypeDetails = (fileName: string): FileTypeDetails => {
     case "sqlite":
     case "sqlite3":
     case "db":
-      return { icon: SqlLogo, color: "", language: "sql" };
+      return SqlLogo;
 
     // Shell Scripts
     case "sh":
@@ -288,27 +281,27 @@ export const getFileTypeDetails = (fileName: string): FileTypeDetails => {
     case "bat":
     case "cmd":
     case "ps1":
-      return { icon: ShellLogo, color: "", language: "shell" };
+      return ShellLogo;
 
     // Configurations & Markup
     case "toml":
-      return { icon: ConfigLogo, color: "", language: "toml" };
+      return ConfigLogo;
     case "yaml":
     case "yml":
-      return { icon: ConfigLogo, color: "", language: "yaml" };
+      return ConfigLogo;
     case "xml":
-      return { icon: ConfigLogo, color: "", language: "xml" };
+      return ConfigLogo;
     case "ini":
     case "conf":
     case "config":
     case "lock":
     case "properties":
-      return { icon: ConfigLogo, color: "", language: "ini" };
+      return ConfigLogo;
 
     default:
-      return { icon: DefaultLogo, color: "", language: "plaintext" };
+      return DefaultLogo;
   }
-};
+}
 
 interface FileIconProps {
   fileName: string;

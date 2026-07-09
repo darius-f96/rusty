@@ -6,13 +6,8 @@ import { VfsRegistry } from "../../services/vfs";
 import { getFileTypeDetails } from "../../services/fileTypeService";
 import { themes, defineMonacoTheme } from "../../theme";
 import { GitBranch, History, TreePine } from "lucide-react";
-import { LspService } from "../../services/lspService";
-import {
-  registerModelPath,
-  unregisterModelPath,
-  resolveModelPath,
-  resolveInmemoryByContent,
-} from "../../services/modelPathRegistry";
+import { LspStatus } from "../../services/lspService";
+import { MonacoLspBinding } from "../../services/monacoLspBinding";
 
 // Register custom Monaco theme once
 loader.init().then((monaco) => {
@@ -32,8 +27,10 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
   const [showBlame, setShowBlame] = useState(false);
   const [blameData, setBlameData] = useState<Record<number, any>>({});
   const [maxBlameLength, setMaxBlameLength] = useState(5);
+  const [lspStatus, setLspStatus] = useState<LspStatus>({ state: "disconnected" });
   const saveTimeoutRef = useRef<any>(null);
   const editorRef = useRef<any>(null);
+  const lspBindingRef = useRef<MonacoLspBinding | null>(null);
 
   const editorGroups = useWorkspaceStore((state) => state.editorGroups);
   const rootPath = useWorkspaceStore((state) => state.rootPath);
@@ -98,9 +95,11 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
-      if (editorRef.current) {
-        LspService.disposeEditor(editorRef.current);
-      }
+      // Detach the LSP binding first: it ref-counts the server-side document,
+      // unregisters the model path, and clears diagnostics markers when this
+      // was the last editor group showing the file.
+      lspBindingRef.current?.detach();
+      lspBindingRef.current = null;
       // We render <Editor keepCurrentModel /> below, so @monaco-editor/react
       // never disposes the shared Monaco model on unmount. (Its keepCurrentModel
       // flag is captured at mount time inside a [] effect, which predates any
@@ -113,7 +112,6 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
         const uri = monaco.Uri.parse(`file://${tab.key}`);
         const model = monaco.editor.getModel(uri);
         if (model) {
-          unregisterModelPath(model.uri.toString());
           const stillOpenElsewhere = useWorkspaceStore
             .getState()
             .editorGroups.some((g) => g.openTabs.some((t) => t.key === tab.key));
@@ -180,69 +178,14 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
   const handleEditorMount = (editor: any) => {
     editorRef.current = editor;
 
-    const monaco = (window as any).monaco;
-
-    // Register the model's URI in the path registry so openCodeEditor can
-    // resolve definition jumps back to this file.
-    const model = editor.getModel();
-    if (model && monaco) {
-      registerModelPath(model.uri.toString(), tab.key);
-    }
-
-    // Register LSP service
-    LspService.registerEditor(editor, tab.key);
-
-    // Override code navigation service to intercept Go to Definition (CMD+click / F12)
-    // and open the target file in a new tab in Axiom instead of Monaco's built-in viewer.
-    const editorService = editor._codeEditorService;
-    if (editorService) {
-      editorService.openCodeEditor = async (input: any) => {
-        if (!input || !input.resource) return null;
-
-        const targetUri = input.resource;
-        const monaco = (window as any).monaco;
-        let filePath: string | null = null;
-
-        // 1. Check the path registry first (covers both file:// and inmemory://
-        //    URIs for models we created).
-        const uriStr = targetUri.toString?.() || targetUri.external;
-        filePath = resolveModelPath(uriStr);
-
-        // 2. For file:// URIs, extract the filesystem path directly.
-        if (!filePath && targetUri.scheme === "file") {
-          filePath = targetUri.fsPath || targetUri.path;
-        }
-
-        // 3. For inmemory:// URIs, try content matching — Monaco's TypeScript
-        //    worker creates internal inmemory:// models whose content matches
-        //    a real file we have open as a file:// model.
-        if (!filePath && targetUri.scheme === "inmemory" && monaco) {
-          filePath = resolveInmemoryByContent(monaco, targetUri);
-        }
-
-        // Strip leading slash on Windows paths (e.g. /C:/Users/... -> C:/Users/...)
-        if (filePath && filePath.startsWith("/") && /^\/[a-zA-Z]:/.test(filePath)) {
-          filePath = filePath.substring(1);
-        }
-
-        if (!filePath) {
-          console.warn("[FileTab] Cannot resolve definition target to a file path:", uriStr);
-          return null;
-        }
-
-        const lineNum = input.options && input.options.selection ? input.options.selection.startLineNumber : 1;
-        const openTab = useWorkspaceStore.getState().openTab;
-        const title = filePath.split("/").pop() || filePath;
-        openTab({
-          id: `file-${filePath}`,
-          type: "file",
-          title,
-          key: filePath,
-          line: lineNum,
-        });
-        return editor;
-      };
-    }
+    // Attach LSP intelligence: registers Monaco providers for the file's
+    // language, syncs the document with the language server, maps diagnostics
+    // to markers, and installs the global openCodeEditor override that turns
+    // cmd+click / F12 definition jumps into Axiom tab opens. All of this used
+    // to be inline here and in lspService.registerEditor.
+    lspBindingRef.current = MonacoLspBinding.attach(editor, tab.key, {
+      onStatus: setLspStatus,
+    });
 
     // Toggle blame display when user clicks on line numbers gutter
     editor.onMouseDown((e: any) => {
@@ -275,6 +218,36 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
     <div className="w-full h-full relative bg-[var(--bg-app)]">
       {/* Floating Action Controls */}
       <div className="absolute top-2.5 right-6 z-10 flex items-center space-x-2">
+        {/* LSP Status Chip — shows language-server state so the user can see why
+            the first cmd+click on a freshly-opened Java project is slow (jdtls
+            indexes for several seconds before answering definition requests). */}
+        {(() => {
+          const s = lspStatus;
+          let dot = "bg-[var(--text-muted)]";
+          let label = "LSP";
+          let title = "No language server for this file type";
+          let pulse = false;
+          if (s.state === "connecting" || s.state === "initializing") {
+            dot = "bg-amber-400"; label = "LSP: starting"; title = "Starting language server"; pulse = true;
+          } else if (s.state === "indexing") {
+            dot = "bg-sky-400"; label = s.percent != null ? `LSP: indexing ${s.percent}%` : "LSP: indexing";
+            title = s.message || "Indexing workspace"; pulse = true;
+          } else if (s.state === "ready") {
+            dot = "bg-emerald-500"; label = "LSP: ready"; title = "Language server ready";
+          } else if (s.state === "error") {
+            dot = "bg-rose-500"; label = "LSP: error"; title = s.message || "Language server error";
+          }
+          return (
+            <div
+              title={title}
+              className="flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-[10px] font-mono font-bold border bg-[var(--bg-sidebar)] border-[var(--border-color)] text-[var(--text-muted)] shadow-md"
+            >
+              <span className={`w-2 h-2 rounded-full ${dot} ${pulse ? "animate-pulse" : ""}`} />
+              <span>{label}</span>
+            </div>
+          );
+        })()}
+
         {/* Floating Git History Button */}
         <button
           onClick={handleOpenFileHistory}

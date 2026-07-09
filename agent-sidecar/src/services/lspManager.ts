@@ -62,6 +62,13 @@ interface ActiveServer {
 export class LspManager {
   private static instance: LspManager;
   private activeServers = new Map<string, ActiveServer>(); // Keyed by language:workspacePath
+  // Messages received before the server's stdin is ready are buffered here
+  // and flushed once the ActiveServer is registered. Without this, the very
+  // first `initialize` request (sent immediately after WebSocket open) is
+  // silently dropped because activeServers.get(key) is still undefined —
+  // the server only gets registered when it emits stdout, which it won't do
+  // until it receives `initialize`. Chicken-and-egg.
+  private pendingMessages = new Map<string, string[]>();
 
   private constructor() {}
 
@@ -118,6 +125,16 @@ export class LspManager {
           const active = this.activeServers.get(key) || server;
           if (active && active.process.stdin && !active.process.stdin.destroyed) {
             active.process.stdin.write(encoded);
+          } else {
+            // Server not ready yet (still spawning / installing). Buffer the
+            // message so it can be flushed to stdin once the process is alive.
+            // Without this, the initial `initialize` request is lost.
+            const queue = this.pendingMessages.get(key);
+            if (queue) {
+              queue.push(encoded);
+            } else {
+              this.pendingMessages.set(key, [encoded]);
+            }
           }
         }
       } catch (e) {
@@ -140,8 +157,12 @@ export class LspManager {
               active.process.kill();
             }
             this.activeServers.delete(key);
+            this.pendingMessages.delete(key);
           }, 30000);
         }
+      } else {
+        // Server never came up — clear any buffered messages too.
+        this.pendingMessages.delete(key);
       }
     });
   }
@@ -187,25 +208,8 @@ export class LspManager {
 
         const isEnoent = (err && (err.code === "ENOENT" || /ENOENT/i.test(err.message || "")));
         if (isEnoent && !isRetry) {
-          console.warn(`LspManager: ${serverPath} not found for ${language}. Attempting auto-install...`);
-          try {
-            const detected = await LspInstaller.detect(language, serverPath);
-            let resolvedPath = detected.serverPath;
-            if (!resolvedPath) {
-              ws.send(JSON.stringify({ type: "lsp_install_start", language, message: `Auto-installing ${language} language server...` }));
-              const result = await LspInstaller.install(language, (event) => {
-                ws.send(JSON.stringify({ type: "lsp_install_progress", language: event.language, stage: event.stage, message: event.message }));
-              });
-              resolvedPath = result.serverPath;
-              ws.send(JSON.stringify({ type: "lsp_install_result", language: result.language, serverPath: result.serverPath, version: result.version }));
-            }
-            // Retry spawn with resolved path.
-            await this.spawnServer(ws, language, workspacePath, resolvedPath, args, key, true);
-            resolve();
-          } catch (installErr: any) {
-            ws.send(JSON.stringify({ type: "lsp_install_result", language, error: installErr?.message || String(installErr) }));
-            reject(installErr);
-          }
+          this.detectInstallAndRetry(ws, language, workspacePath, serverPath, args, key)
+            .then(resolve, reject);
         } else {
           reject(err);
         }
@@ -234,6 +238,19 @@ export class LspManager {
             clients: new Set([ws]),
           };
           this.activeServers.set(key, newServer);
+          // Flush any messages that arrived while the server was still booting
+          // (e.g. the `initialize` request that was sent right after WebSocket
+          // open). Without this flush, those messages sit in the buffer forever
+          // and the client's initialize request times out.
+          const pending = this.pendingMessages.get(key);
+          if (pending) {
+            this.pendingMessages.delete(key);
+            for (const encoded of pending) {
+              if (childProcess.stdin && !childProcess.stdin.destroyed) {
+                childProcess.stdin.write(encoded);
+              }
+            }
+          }
           resolve();
         }
         parser.append(chunk);
@@ -268,11 +285,19 @@ export class LspManager {
             }
           }
         } else if (!settled) {
-          // Process exited before any stdout — likely a startup crash.
+          // Process exited before any stdout — likely a startup crash or the
+          // binary wasn't found. When shell:true is used, a missing binary
+          // manifests as exit code 127 ("command not found") instead of a
+          // Node ENOENT error, so the 'error' handler above never fires.
           settled = true;
-          if (!isRetry) {
-            // Treat like ENOENT: maybe the binary exists but needs install/config.
-            // Only auto-install if the configured path is empty or a bare name.
+          if (!isRetry && code === 127) {
+            // Treat exit 127 as "binary not found" — attempt detect/install
+            // before retrying, exactly like the ENOENT path.
+            this.detectInstallAndRetry(ws, language, workspacePath, serverPath, args, key)
+              .then(resolve, reject);
+          } else if (!isRetry) {
+            // Other exit codes: retry once with the same config in case it
+            // was a transient startup issue.
             this.spawnServer(ws, language, workspacePath, serverPath, args, key, true)
               .then(resolve, reject);
           } else {
@@ -281,6 +306,40 @@ export class LspManager {
         }
       });
     });
+  }
+
+  /**
+   * Shared auto-install logic: detect the server on PATH / in cache, and if
+   * not found, download + install it. Then retry the spawn with the resolved
+   * path. Called from both the spawn 'error' handler (ENOENT) and the 'close'
+   * handler (exit code 127 under shell:true — both mean "binary not found").
+   */
+  private async detectInstallAndRetry(
+    ws: WebSocket,
+    language: string,
+    workspacePath: string,
+    serverPath: string,
+    args: string[],
+    key: string
+  ): Promise<void> {
+    console.warn(`LspManager: ${serverPath} not found for ${language}. Attempting auto-install...`);
+    try {
+      const detected = await LspInstaller.detect(language, serverPath);
+      let resolvedPath = detected.serverPath;
+      if (!resolvedPath) {
+        ws.send(JSON.stringify({ type: "lsp_install_start", language, message: `Auto-installing ${language} language server...` }));
+        const result = await LspInstaller.install(language, (event) => {
+          ws.send(JSON.stringify({ type: "lsp_install_progress", language: event.language, stage: event.stage, message: event.message }));
+        });
+        resolvedPath = result.serverPath;
+        ws.send(JSON.stringify({ type: "lsp_install_result", language: result.language, serverPath: result.serverPath, version: result.version }));
+      }
+      // Retry spawn with resolved path.
+      await this.spawnServer(ws, language, workspacePath, resolvedPath, args, key, true);
+    } catch (installErr: any) {
+      ws.send(JSON.stringify({ type: "lsp_install_result", language, error: installErr?.message || String(installErr) }));
+      throw installErr;
+    }
   }
 
   /**
