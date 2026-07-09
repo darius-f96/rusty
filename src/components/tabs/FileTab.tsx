@@ -5,11 +5,17 @@ import { invoke } from "@tauri-apps/api/core";
 import { VfsRegistry } from "../../services/vfs";
 import { getFileTypeDetails } from "../../services/fileTypeService";
 import { themes, defineMonacoTheme } from "../../theme";
-import { GitBranch, History, TreePine } from "lucide-react";
+import { FileSearch, GitBranch, History, Loader2, TreePine, X } from "lucide-react";
 import { LspStatus } from "../../services/lspService";
 import { MonacoLspBinding } from "../../services/monacoLspBinding";
+import { searchService, SearchMatch } from "../../services/searchService";
 
 const LSP_EDITOR_ENABLED = false;
+const DEFINITION_MENU_WIDTH = 360;
+const DEFINITION_MENU_MAX_HEIGHT = 320;
+const DEFINITION_MENU_MARGIN = 12;
+
+type DefinitionCandidate = SearchMatch & { score: number; relativePath: string };
 
 // Register custom Monaco theme once
 loader.init().then((monaco) => {
@@ -30,9 +36,19 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
   const [blameData, setBlameData] = useState<Record<number, any>>({});
   const [maxBlameLength, setMaxBlameLength] = useState(5);
   const [lspStatus, setLspStatus] = useState<LspStatus>({ state: "disconnected" });
+  const [definitionMenu, setDefinitionMenu] = useState<{
+    symbol: string;
+    x: number;
+    y: number;
+    loading: boolean;
+    results: DefinitionCandidate[];
+    message?: string;
+  } | null>(null);
   const saveTimeoutRef = useRef<any>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<any>(null);
   const lspBindingRef = useRef<MonacoLspBinding | null>(null);
+  const definitionRequestRef = useRef(0);
 
   const editorGroups = useWorkspaceStore((state) => state.editorGroups);
   const rootPath = useWorkspaceStore((state) => state.rootPath);
@@ -177,6 +193,156 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
     }
   }, [tab.line]);
 
+  useEffect(() => {
+    if (!definitionMenu) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDefinitionMenu(null);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [definitionMenu]);
+
+  const getRelativePath = (filePath: string) => {
+    if (!rootPath) return filePath;
+    return filePath.startsWith(rootPath) ? filePath.slice(rootPath.length).replace(/^\/+/, "") : filePath;
+  };
+
+  const scoreDefinitionMatch = (match: SearchMatch, symbol: string, currentLine: number): number => {
+    if (!match.is_content_match || !match.content) return -1;
+    const escaped = symbol.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const line = match.content.trim();
+    const word = new RegExp(`\\b${escaped}\\b`);
+    if (!word.test(line)) return -1;
+
+    let score = 10;
+    if (match.path === tab.key) score += 4;
+    if (match.line === currentLine && match.path === tab.key) score -= 8;
+    if (new RegExp(`\\b(class|interface|enum|record|struct|trait|type)\\s+${escaped}\\b`).test(line)) score += 100;
+    if (new RegExp(`\\b(function|def|fn|func)\\s+${escaped}\\s*\\(`).test(line)) score += 95;
+    if (new RegExp(`\\b(public|private|protected|static|final|abstract|override|virtual|async|export|pub)\\b.*\\b${escaped}\\s*\\(`).test(line)) score += 90;
+    if (new RegExp(`^\\s*[\\w$<>\\[\\],.?]+(?:\\s+[\\w$<>\\[\\],.?]+)*\\s+${escaped}\\s*\\(`).test(line)) score += 80;
+    if (new RegExp(`^\\s*(const|let|var)\\s+${escaped}\\b`).test(line)) score += 75;
+    if (new RegExp(`^\\s*${escaped}\\s*[:=]`).test(line)) score += 65;
+    if (new RegExp(`\\.${escaped}\\s*\\(`).test(line)) score -= 45;
+    if (/^\s*(return|if|while|for|switch|catch)\b/.test(line)) score -= 35;
+    return score;
+  };
+
+  const findDefinitionCandidates = async (symbol: string, currentLine: number): Promise<DefinitionCandidate[]> => {
+    if (!rootPath) return [];
+    const matches = await searchService.searchProject({
+      rootDir: rootPath,
+      query: symbol,
+      matchCase: true,
+      wholeWord: true,
+      isRegex: false,
+    });
+
+    const ranked = matches
+      .map((match) => ({
+        ...match,
+        score: scoreDefinitionMatch(match, symbol, currentLine),
+        relativePath: getRelativePath(match.path),
+      }))
+      .filter((match) => match.score > 0)
+      .sort((a, b) => b.score - a.score || a.relativePath.localeCompare(b.relativePath) || a.line - b.line);
+
+    return ranked.slice(0, 12);
+  };
+
+  const openDefinitionCandidate = (candidate: DefinitionCandidate) => {
+    openTab({
+      id: `file-${candidate.path}`,
+      type: "file",
+      title: candidate.name,
+      key: candidate.path,
+      line: candidate.line > 0 ? candidate.line : undefined,
+    });
+    setDefinitionMenu(null);
+  };
+
+  const getDefinitionMenuPosition = (editor: any, position: any, fallbackEvent: MouseEvent) => {
+    const containerRect = containerRef.current?.getBoundingClientRect();
+    const editorNode = editor.getDomNode?.();
+    const editorRect = editorNode?.getBoundingClientRect?.();
+    const visiblePosition = editor.getScrolledVisiblePosition?.(position);
+
+    let anchorX = fallbackEvent.clientX;
+    let anchorY = fallbackEvent.clientY;
+    if (editorRect && visiblePosition) {
+      anchorX = editorRect.left + visiblePosition.left;
+      anchorY = editorRect.top + visiblePosition.top + visiblePosition.height;
+    }
+
+    const originLeft = containerRect?.left ?? 0;
+    const originTop = containerRect?.top ?? 0;
+    const containerWidth = containerRect?.width ?? window.innerWidth;
+    const containerHeight = containerRect?.height ?? window.innerHeight;
+
+    let x = anchorX - originLeft + 8;
+    let y = anchorY - originTop + 6;
+
+    if (x + DEFINITION_MENU_WIDTH > containerWidth - DEFINITION_MENU_MARGIN) {
+      x = anchorX - originLeft - DEFINITION_MENU_WIDTH - 8;
+    }
+    if (y + DEFINITION_MENU_MAX_HEIGHT > containerHeight - DEFINITION_MENU_MARGIN) {
+      y = anchorY - originTop - DEFINITION_MENU_MAX_HEIGHT - 8;
+    }
+
+    const maxX = Math.max(DEFINITION_MENU_MARGIN, containerWidth - DEFINITION_MENU_WIDTH - DEFINITION_MENU_MARGIN);
+    const maxY = Math.max(DEFINITION_MENU_MARGIN, containerHeight - DEFINITION_MENU_MAX_HEIGHT - DEFINITION_MENU_MARGIN);
+    return {
+      x: Math.min(Math.max(DEFINITION_MENU_MARGIN, x), maxX),
+      y: Math.min(Math.max(DEFINITION_MENU_MARGIN, y), maxY),
+    };
+  };
+
+  const handleDefinitionLookup = async (editor: any, event: any) => {
+    const browserEvent = event?.event?.browserEvent;
+    if (!browserEvent || (!browserEvent.metaKey && !browserEvent.ctrlKey)) return false;
+    if (!event.target?.position) return false;
+
+    const model = editor.getModel();
+    const position = event.target.position;
+    const word = model?.getWordAtPosition(position);
+    const symbol = word?.word;
+    if (!symbol || !/^[A-Za-z_$][\w$]*$/.test(symbol)) return false;
+
+    browserEvent.preventDefault?.();
+    browserEvent.stopPropagation?.();
+
+    const requestId = ++definitionRequestRef.current;
+    const menuPosition = getDefinitionMenuPosition(editor, position, browserEvent);
+    setDefinitionMenu({
+      symbol,
+      x: menuPosition.x,
+      y: menuPosition.y,
+      loading: true,
+      results: [],
+    });
+
+    try {
+      const results = await findDefinitionCandidates(symbol, position.lineNumber);
+      if (definitionRequestRef.current !== requestId) return true;
+      setDefinitionMenu((current) => current && current.symbol === symbol
+        ? {
+            ...current,
+            loading: false,
+            results,
+            message: results.length === 0 ? "No likely definitions found" : undefined,
+          }
+        : current
+      );
+    } catch (err: any) {
+      if (definitionRequestRef.current !== requestId) return true;
+      setDefinitionMenu((current) => current && current.symbol === symbol
+        ? { ...current, loading: false, results: [], message: err?.message || "Search failed" }
+        : current
+      );
+    }
+    return true;
+  };
+
   const handleEditorMount = (editor: any) => {
     editorRef.current = editor;
 
@@ -192,7 +358,10 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
     }
 
     // Toggle blame display when user clicks on line numbers gutter
-    editor.onMouseDown((e: any) => {
+    editor.onMouseDown(async (e: any) => {
+      if (await handleDefinitionLookup(editor, e)) return;
+      const browserEvent = e?.event?.browserEvent;
+      if (!browserEvent?.metaKey && !browserEvent?.ctrlKey) setDefinitionMenu(null);
       if (e.target && (e.target.type === 2 || e.target.type === 3 || e.target.type === 4)) {
         setShowBlame((prev) => !prev);
       }
@@ -219,7 +388,7 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
   }
 
   return (
-    <div className="w-full h-full relative bg-[var(--bg-app)]">
+    <div ref={containerRef} className="w-full h-full relative bg-[var(--bg-app)]">
       {/* Floating Action Controls */}
       <div className="absolute top-2.5 right-6 z-10 flex items-center space-x-2">
         {/* LSP Status Chip — shows language-server state so the user can see why
@@ -286,6 +455,60 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
           <span>Reveal</span>
         </button>
       </div>
+
+      {definitionMenu && (
+        <div
+          className="absolute z-[9998] max-w-[calc(100%-24px)] rounded-lg border border-[var(--border-color)] bg-[var(--bg-sidebar)] shadow-2xl overflow-hidden font-mono"
+          style={{ left: definitionMenu.x, top: definitionMenu.y, width: DEFINITION_MENU_WIDTH }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <div className="px-3 py-2 border-b border-[var(--border-color)] bg-black/20 flex items-center justify-between">
+            <div className="flex items-center space-x-2 min-w-0">
+              <FileSearch size={13} className="text-[var(--accent-color)] flex-shrink-0" />
+              <span className="text-[10px] text-[var(--text-muted)] uppercase font-bold flex-shrink-0">Definitions</span>
+              <span className="text-xs text-[var(--text-light)] truncate">{definitionMenu.symbol}</span>
+            </div>
+            <button
+              onClick={() => setDefinitionMenu(null)}
+              className="p-0.5 rounded text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--bg-app)]"
+              title="Close"
+            >
+              <X size={13} />
+            </button>
+          </div>
+
+          <div className="max-h-[260px] overflow-y-auto">
+            {definitionMenu.loading && (
+              <div className="px-3 py-5 flex items-center justify-center space-x-2 text-[11px] text-[var(--text-muted)]">
+                <Loader2 size={14} className="animate-spin text-[var(--accent-color)]" />
+                <span>Searching workspace...</span>
+              </div>
+            )}
+
+            {!definitionMenu.loading && definitionMenu.message && (
+              <div className="px-3 py-5 text-center text-[11px] text-[var(--text-muted)]">
+                {definitionMenu.message}
+              </div>
+            )}
+
+            {!definitionMenu.loading && definitionMenu.results.map((candidate) => (
+              <button
+                key={`${candidate.path}:${candidate.line}:${candidate.content}`}
+                onClick={() => openDefinitionCandidate(candidate)}
+                className="w-full text-left px-3 py-2 border-b border-[var(--border-color)]/30 last:border-b-0 hover:bg-[var(--accent-bg)]/20 transition-colors"
+                title={`${candidate.relativePath}:${candidate.line}`}
+              >
+                <div className="flex items-center justify-between space-x-2">
+                  <span className="text-[11px] text-[var(--text-light)] truncate">{candidate.name}</span>
+                  <span className="text-[9px] text-[var(--text-muted)] flex-shrink-0">Line {candidate.line}</span>
+                </div>
+                <div className="text-[10px] text-[var(--text-muted)] truncate mt-0.5">{candidate.relativePath}</div>
+                <div className="text-[10px] text-[var(--text-normal)] truncate mt-1">{candidate.content}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <Editor
         height="100%"
