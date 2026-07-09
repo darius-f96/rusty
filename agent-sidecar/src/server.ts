@@ -204,7 +204,18 @@ wss.on("connection", (ws: WebSocket, req: http.IncomingMessage) => {
     const workspacePath = parsedUrl.searchParams.get("workspacePath") || "";
     const serverPath = parsedUrl.searchParams.get("serverPath") || "";
     const argsStr = parsedUrl.searchParams.get("args") || "";
-    const args = argsStr ? argsStr.split(" ") : [];
+    let args: string[] = [];
+    if (argsStr) {
+      try {
+        const parsedArgs = JSON.parse(argsStr);
+        args = Array.isArray(parsedArgs) ? parsedArgs.map(String) : [];
+      } catch {
+        // Backward compatibility for older frontend builds that sent args as
+        // a single space-delimited string. New builds send JSON so paths and
+        // JVM arguments containing spaces survive the WebSocket URL intact.
+        args = argsStr.split(" ").filter(Boolean);
+      }
+    }
 
     if (!language || !workspacePath || !serverPath) {
       console.error("WebSocket [LSP] Missing connection parameters:", { language, workspacePath, serverPath });

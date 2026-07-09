@@ -72,6 +72,20 @@ const TIMEOUTS: Record<string, number> = {
   "textDocument/semanticTokens/full": 10_000,
 };
 const DEFAULT_TIMEOUT = 10_000;
+export const LSP_RUNTIME_ENABLED = false;
+
+function pathToFileUri(filePath: string): string {
+  let normalized = filePath.replace(/\\/g, "/");
+  if (!normalized.startsWith("/")) normalized = `/${normalized}`;
+  const encoded = normalized
+    .split("/")
+    .map((segment, index) => {
+      if (index === 1 && /^[a-zA-Z]:$/.test(segment)) return segment;
+      return encodeURIComponent(segment);
+    })
+    .join("/");
+  return `file://${encoded}`;
+}
 
 class LspConnection {
   private socket: WebSocket | null = null;
@@ -133,7 +147,7 @@ class LspConnection {
       this.readyResolve = resolve;
       this.readyReject = reject;
 
-      const argsStr = this.args.join(" ");
+      const argsStr = JSON.stringify(this.args);
       const wsUrl = `ws://localhost:4000/lsp?language=${this.lspKey}&workspacePath=${encodeURIComponent(
         this.workspacePath
       )}&serverPath=${encodeURIComponent(this.serverPath)}&args=${encodeURIComponent(argsStr)}`;
@@ -226,8 +240,9 @@ class LspConnection {
 
   /** Send `initialize` + `initialized` and capture server capabilities. */
   private async runInitialize(): Promise<void> {
-    const rootUri = `file://${this.workspacePath}`;
+    const rootUri = pathToFileUri(this.workspacePath);
     const rootName = this.workspacePath.split("/").pop() || this.workspacePath;
+    const initializationOptions = this.getInitializationOptions(rootUri);
 
     const result = await this.sendRequest("initialize", {
       processId: null,
@@ -304,7 +319,7 @@ class LspConnection {
           },
         },
       },
-      initializationOptions: {},
+      initializationOptions,
     });
 
     this.serverCapabilities = result?.capabilities ?? {};
@@ -366,11 +381,12 @@ class LspConnection {
 
     switch (method) {
       case "workspace/configuration": {
-        // Return one entry per requested item. We don't push per-section config
-        // (java.* settings are supplied via initializationOptions elsewhere);
-        // null per item is a valid "no value" answer that keeps the server alive.
+        // Return one entry per requested item. Some servers, notably jdtls,
+        // re-read settings after initialization and can accidentally replace
+        // their initialized preferences with null-ish values if the client
+        // answers null here.
         const items: any[] = Array.isArray(params?.items) ? params.items : [];
-        result = items.map(() => null);
+        result = items.map((item) => this.getWorkspaceConfiguration(item?.section));
         break;
       }
       case "window/workDoneProgress/create": {
@@ -607,6 +623,61 @@ class LspConnection {
     return v === true || (typeof v === "object" && v !== null);
   }
 
+  private getInitializationOptions(rootUri: string): any {
+    if (this.lspKey !== "java") return {};
+
+    const settings = this.getJavaSettings();
+    return {
+      // JDT LS reads this from initializationOptions, not just from the LSP
+      // InitializeParams.workspaceFolders field. Supplying both prevents its
+      // rootPaths preference from being left null before didOpen.
+      workspaceFolders: [rootUri],
+      settings,
+    };
+  }
+
+  private getWorkspaceConfiguration(section?: string): any {
+    if (this.lspKey === "java") {
+      const settings = this.getJavaSettings();
+      if (!section) return settings;
+      if (section === "java") return settings.java;
+      if (section.startsWith("java.")) {
+        return section
+          .split(".")
+          .slice(1)
+          .reduce((value: any, key: string) => value?.[key], settings.java);
+      }
+    }
+    return {};
+  }
+
+  private getJavaSettings(): any {
+    return {
+      java: {
+        import: {
+          gradle: { enabled: true, wrapper: { enabled: true } },
+          maven: { enabled: true },
+        },
+        configuration: {
+          updateBuildConfiguration: "interactive",
+        },
+        completion: {
+          enabled: true,
+        },
+        referencesCodeLens: {
+          enabled: false,
+        },
+        implementationCodeLens: "none",
+        signatureHelp: {
+          enabled: true,
+        },
+        contentProvider: {
+          preferred: "fernflower",
+        },
+      },
+    };
+  }
+
   public dispose() {
     if (this.socket) {
       this.socket.close();
@@ -641,6 +712,7 @@ export class LspService {
 
   /** Get-or-create + connect a server for the given file's language. */
   public static async ensureConnection(filePath: string): Promise<LspConnection | null> {
+    if (!LSP_RUNTIME_ENABLED) return null;
     const store = useWorkspaceStore.getState();
     const lspSettings = store.lspSettings;
     const workspacePath = store.rootPath;
@@ -659,6 +731,7 @@ export class LspService {
   public static async ensureConnectionForModel(
     monacoId: string
   ): Promise<LspConnection | null> {
+    if (!LSP_RUNTIME_ENABLED) return null;
     const lspKey = getLspKeyFromMonacoId(monacoId);
     if (!lspKey) return null;
     const store = useWorkspaceStore.getState();

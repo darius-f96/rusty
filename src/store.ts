@@ -476,7 +476,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   activeCustomProviderId: "opencode",
   activeModel: "",
   lspSettings: {
-    enabled: true,
+    enabled: false,
     servers: {
       typescript: { serverPath: "typescript-language-server", args: ["--stdio"] },
       python: { serverPath: "pyright-langserver", args: ["--stdio"] },
@@ -2013,7 +2013,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       activeThemeId: state.activeThemeId,
       lastWorkspacePath: state.rootPath,
       mcpServers: state.mcpServers,
-      lspSettings: state.lspSettings,
+      lspSettings: { ...state.lspSettings, enabled: false },
     });
   },
 
@@ -2056,7 +2056,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       if (config.activeCustomProviderId !== undefined) updates.activeCustomProviderId = config.activeCustomProviderId;
       if (config.activeModel) updates.activeModel = config.activeModel;
       if (config.mcpServers) updates.mcpServers = config.mcpServers;
-      if (config.lspSettings) updates.lspSettings = config.lspSettings;
+      if (config.lspSettings) updates.lspSettings = { ...config.lspSettings, enabled: false };
 
       if (config.activeThemeId) {
         updates.activeThemeId = config.activeThemeId;

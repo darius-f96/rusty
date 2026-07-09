@@ -9,6 +9,8 @@ import { GitBranch, History, TreePine } from "lucide-react";
 import { LspStatus } from "../../services/lspService";
 import { MonacoLspBinding } from "../../services/monacoLspBinding";
 
+const LSP_EDITOR_ENABLED = false;
+
 // Register custom Monaco theme once
 loader.init().then((monaco) => {
   const activeThemeId = useWorkspaceStore.getState().activeThemeId;
@@ -178,14 +180,16 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
   const handleEditorMount = (editor: any) => {
     editorRef.current = editor;
 
-    // Attach LSP intelligence: registers Monaco providers for the file's
-    // language, syncs the document with the language server, maps diagnostics
-    // to markers, and installs the global openCodeEditor override that turns
-    // cmd+click / F12 definition jumps into Axiom tab opens. All of this used
-    // to be inline here and in lspService.registerEditor.
-    lspBindingRef.current = MonacoLspBinding.attach(editor, tab.key, {
-      onStatus: setLspStatus,
-    });
+    if (LSP_EDITOR_ENABLED) {
+      // Attach LSP intelligence: registers Monaco providers for the file's
+      // language, syncs the document with the language server, maps diagnostics
+      // to markers, and installs the global openCodeEditor override that turns
+      // cmd+click / F12 definition jumps into Axiom tab opens. All of this used
+      // to be inline here and in lspService.registerEditor.
+      lspBindingRef.current = MonacoLspBinding.attach(editor, tab.key, {
+        onStatus: setLspStatus,
+      });
+    }
 
     // Toggle blame display when user clicks on line numbers gutter
     editor.onMouseDown((e: any) => {
@@ -221,7 +225,7 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
         {/* LSP Status Chip — shows language-server state so the user can see why
             the first cmd+click on a freshly-opened Java project is slow (jdtls
             indexes for several seconds before answering definition requests). */}
-        {(() => {
+        {LSP_EDITOR_ENABLED && (() => {
           const s = lspStatus;
           let dot = "bg-[var(--text-muted)]";
           let label = "LSP";

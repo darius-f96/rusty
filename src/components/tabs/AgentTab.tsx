@@ -268,7 +268,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
             : null,
         skill: skillData,
         mcpServers,
-        lspSettings: useWorkspaceStore.getState().lspSettings,
+        lspSettings: { ...useWorkspaceStore.getState().lspSettings, enabled: false },
       }));
     };
 

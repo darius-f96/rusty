@@ -13,6 +13,8 @@ type InstallState = {
   message?: string;
 };
 
+const SHOW_LSP_SETTINGS = false;
+
 export const SettingsTab: React.FC = () => {
   const activeThemeId = useWorkspaceStore((state) => state.activeThemeId);
   const setActiveThemeId = useWorkspaceStore((state) => state.setActiveThemeId);
@@ -25,6 +27,7 @@ export const SettingsTab: React.FC = () => {
   const [installStates, setInstallStates] = useState<Record<string, InstallState>>({});
 
   useEffect(() => {
+    if (!SHOW_LSP_SETTINGS) return;
     let cancelled = false;
     setDetecting(true);
     detectAllLspServers()
@@ -168,125 +171,128 @@ export const SettingsTab: React.FC = () => {
           </div>
         </div>
 
-        {/* LSP Server Configuration Card */}
-        <div className="space-y-1 pt-4">
-          <h2 className="text-xl font-bold text-[var(--text-light)]">LSP Language Intelligence</h2>
-          <p className="text-xs text-[var(--text-muted)] font-mono">Manage compiler checking, autocomplete, and symbol lookup paths</p>
-        </div>
-
-        <div className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-xl p-5 space-y-5">
-          {/* Enable Toggle */}
-          <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-4">
-            <div className="space-y-0.5">
-              <span className="text-xs font-bold text-[var(--text-light)] font-mono">ENABLE LANGUAGE SERVERS</span>
-              <p className="text-[10px] text-[var(--text-muted)]">Run background language servers to analyze workspace code</p>
+        {SHOW_LSP_SETTINGS && (
+          <>
+            {/* LSP Server Configuration Card */}
+            <div className="space-y-1 pt-4">
+              <h2 className="text-xl font-bold text-[var(--text-light)]">LSP Language Intelligence</h2>
+              <p className="text-xs text-[var(--text-muted)] font-mono">Manage compiler checking, autocomplete, and symbol lookup paths</p>
             </div>
-            <label className="relative inline-flex items-center cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={lspSettings.enabled}
-                onChange={(e) => updateLspSettings({ enabled: e.target.checked })}
-                className="sr-only peer"
-              />
-              <div className="w-9 h-5 bg-[var(--bg-app)] border border-[var(--border-color)] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-[var(--text-muted)] after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--accent-color)] peer-checked:after:bg-white peer-checked:after:border-transparent"></div>
-            </label>
-          </div>
 
-          {/* Server Configurations list */}
-          {lspSettings.enabled && (
-            <div className="space-y-4">
-              {languages.map((lang) => {
-                const server = lspSettings.servers?.[lang.key] || { serverPath: "", args: [] };
-                const detect = detectResults[lang.key];
-                const detected = detect?.detected;
-                const installState = installStates[lang.key];
-                const isInstalling = installState?.status === "installing";
-                return (
-                  <div key={lang.key} className="space-y-2 border-b border-[var(--border-color)]/40 pb-4 last:border-0 last:pb-0">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <span
-                          className={`w-2 h-2 rounded-full ${
-                            detecting
-                              ? "bg-[var(--text-muted)] animate-pulse"
+            <div className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-xl p-5 space-y-5">
+              {/* Enable Toggle */}
+              <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-4">
+                <div className="space-y-0.5">
+                  <span className="text-xs font-bold text-[var(--text-light)] font-mono">ENABLE LANGUAGE SERVERS</span>
+                  <p className="text-[10px] text-[var(--text-muted)]">Run background language servers to analyze workspace code</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={lspSettings.enabled}
+                    onChange={(e) => updateLspSettings({ enabled: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-[var(--bg-app)] border border-[var(--border-color)] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-[var(--text-muted)] after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--accent-color)] peer-checked:after:bg-white peer-checked:after:border-transparent"></div>
+                </label>
+              </div>
+
+              {/* Server Configurations list */}
+              {lspSettings.enabled && (
+                <div className="space-y-4">
+                  {languages.map((lang) => {
+                    const server = lspSettings.servers?.[lang.key] || { serverPath: "", args: [] };
+                    const detect = detectResults[lang.key];
+                    const detected = detect?.detected;
+                    const installState = installStates[lang.key];
+                    const isInstalling = installState?.status === "installing";
+                    return (
+                      <div key={lang.key} className="space-y-2 border-b border-[var(--border-color)]/40 pb-4 last:border-0 last:pb-0">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <span
+                              className={`w-2 h-2 rounded-full ${
+                                detecting
+                                  ? "bg-[var(--text-muted)] animate-pulse"
+                                  : detected
+                                    ? "bg-emerald-500"
+                                    : "bg-rose-500"
+                              }`}
+                              title={
+                                detecting
+                                  ? "Detecting..."
+                                  : detected
+                                    ? `Detected: ${detect?.serverPath || "on PATH"}`
+                                    : "Not detected — click Install to download"
+                              }
+                            />
+                            <span className="text-xs font-bold text-[var(--text-light)] font-mono uppercase tracking-wider">
+                              {lang.label}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => handleInstall(lang.key)}
+                            disabled={isInstalling}
+                            className={`text-[9px] font-mono font-bold px-2 py-1 rounded border transition-all ${
+                              isInstalling
+                                ? "bg-[var(--bg-app)] border-[var(--border-color)] text-[var(--text-muted)] cursor-wait"
+                                : installState?.status === "installed"
+                                  ? "bg-emerald-900/40 border-emerald-700/50 text-emerald-300 hover:bg-emerald-900/60"
+                                  : installState?.status === "error"
+                                    ? "bg-rose-900/40 border-rose-700/50 text-rose-300 hover:bg-rose-900/60"
+                                    : "bg-[var(--bg-app)] border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-light)] hover:border-[var(--border-active)] cursor-pointer"
+                            }`}
+                            title={installState?.message || (detected ? "Reinstall" : "Download & install")}
+                          >
+                            {isInstalling
+                              ? "Installing..."
                               : detected
-                                ? "bg-emerald-500"
-                                : "bg-rose-500"
-                          }`}
-                          title={
-                            detecting
-                              ? "Detecting..."
-                              : detected
-                                ? `Detected: ${detect?.serverPath || "on PATH"}`
-                                : "Not detected — click Install to download"
-                          }
-                        />
-                        <span className="text-xs font-bold text-[var(--text-light)] font-mono uppercase tracking-wider">
-                          {lang.label}
-                        </span>
+                                ? "Reinstall"
+                                : "Install"}
+                          </button>
+                        </div>
+                        {installState?.message && (
+                          <div className={`text-[10px] font-mono ${
+                            installState.status === "error"
+                              ? "text-rose-400"
+                              : installState.status === "installed"
+                                ? "text-emerald-400"
+                                : "text-[var(--text-muted)]"
+                          }`}>
+                            {installState.message}
+                          </div>
+                        )}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <label className="block text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-wider font-mono">Server Binary / Command</label>
+                            <input
+                              type="text"
+                              value={server.serverPath}
+                              onChange={(e) => handleServerPathChange(lang.key, e.target.value)}
+                              className="w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded-lg px-2.5 py-1.5 font-mono text-[11px] text-[var(--text-light)] focus:outline-none focus:border-[var(--accent-color)]"
+                              placeholder={`${lang.key}-language-server`}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="block text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-wider font-mono">Arguments (Space-separated)</label>
+                            <input
+                              type="text"
+                              value={(server.args || []).join(" ")}
+                              onChange={(e) => handleServerArgsChange(lang.key, e.target.value)}
+                              className="w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded-lg px-2.5 py-1.5 font-mono text-[11px] text-[var(--text-light)] focus:outline-none focus:border-[var(--accent-color)]"
+                              placeholder="--stdio"
+                            />
+                          </div>
+                        </div>
                       </div>
-                      <button
-                        onClick={() => handleInstall(lang.key)}
-                        disabled={isInstalling}
-                        className={`text-[9px] font-mono font-bold px-2 py-1 rounded border transition-all ${
-                          isInstalling
-                            ? "bg-[var(--bg-app)] border-[var(--border-color)] text-[var(--text-muted)] cursor-wait"
-                            : installState?.status === "installed"
-                              ? "bg-emerald-900/40 border-emerald-700/50 text-emerald-300 hover:bg-emerald-900/60"
-                              : installState?.status === "error"
-                                ? "bg-rose-900/40 border-rose-700/50 text-rose-300 hover:bg-rose-900/60"
-                                : "bg-[var(--bg-app)] border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-light)] hover:border-[var(--border-active)] cursor-pointer"
-                        }`}
-                        title={installState?.message || (detected ? "Reinstall" : "Download & install")}
-                      >
-                        {isInstalling
-                          ? "Installing..."
-                          : detected
-                            ? "Reinstall"
-                            : "Install"}
-                      </button>
-                    </div>
-                    {installState?.message && (
-                      <div className={`text-[10px] font-mono ${
-                        installState.status === "error"
-                          ? "text-rose-400"
-                          : installState.status === "installed"
-                            ? "text-emerald-400"
-                            : "text-[var(--text-muted)]"
-                      }`}>
-                        {installState.message}
-                      </div>
-                    )}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <label className="block text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-wider font-mono">Server Binary / Command</label>
-                        <input
-                          type="text"
-                          value={server.serverPath}
-                          onChange={(e) => handleServerPathChange(lang.key, e.target.value)}
-                          className="w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded-lg px-2.5 py-1.5 font-mono text-[11px] text-[var(--text-light)] focus:outline-none focus:border-[var(--accent-color)]"
-                          placeholder={`${lang.key}-language-server`}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="block text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-wider font-mono">Arguments (Space-separated)</label>
-                        <input
-                          type="text"
-                          value={(server.args || []).join(" ")}
-                          onChange={(e) => handleServerArgsChange(lang.key, e.target.value)}
-                          className="w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded-lg px-2.5 py-1.5 font-mono text-[11px] text-[var(--text-light)] focus:outline-none focus:border-[var(--accent-color)]"
-                          placeholder="--stdio"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
     </div>
   );
 };
-

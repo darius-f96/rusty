@@ -2,6 +2,10 @@ import { ChildProcess } from "child_process";
 import { spawn } from "child_process";
 import { WebSocket } from "ws";
 import { LspInstaller } from "./lspInstaller";
+import crypto from "crypto";
+import fs from "fs";
+import os from "os";
+import path from "path";
 
 /**
  * Parses incoming stream chunks from language server stdout/stderr 
@@ -10,7 +14,10 @@ import { LspInstaller } from "./lspInstaller";
 export class LspStreamParser {
   private buffer = Buffer.alloc(0);
 
-  constructor(private onMessage: (msg: any) => void) {}
+  constructor(
+    private onMessage: (msg: any) => void,
+    private onProtocolNoise?: (noise: string) => void
+  ) {}
 
   append(chunk: Buffer) {
     this.buffer = Buffer.concat([this.buffer, chunk]);
@@ -20,12 +27,32 @@ export class LspStreamParser {
   private parse() {
     while (true) {
       const str = this.buffer.toString("utf8");
-      const headerMatch = str.match(/^Content-Length:\s*(\d+)\r\n/i);
+      const headerStart = str.search(/Content-Length:\s*\d+\r\n/i);
+      if (headerStart === -1) {
+        // Some servers and launchers print banners/warnings to stdout before
+        // switching to LSP framing. Keep a small tail in case a header is split
+        // across chunks, but discard complete non-protocol noise so parsing can
+        // recover for any language server.
+        if (this.buffer.length > 32) {
+          const noise = this.buffer.subarray(0, this.buffer.length - 32).toString("utf8");
+          this.onProtocolNoise?.(noise);
+          this.buffer = this.buffer.subarray(this.buffer.length - 32);
+        }
+        break;
+      }
+      if (headerStart > 0) {
+        const noise = this.buffer.subarray(0, headerStart).toString("utf8");
+        this.onProtocolNoise?.(noise);
+        this.buffer = this.buffer.subarray(headerStart);
+      }
+
+      const framed = this.buffer.toString("utf8");
+      const headerMatch = framed.match(/^Content-Length:\s*(\d+)\r\n/i);
       if (!headerMatch) {
         break;
       }
 
-      const separatorIdx = str.indexOf("\r\n\r\n");
+      const separatorIdx = framed.indexOf("\r\n\r\n");
       if (separatorIdx === -1) {
         break;
       }
@@ -87,6 +114,125 @@ export class LspManager {
     return `Content-Length: ${Buffer.byteLength(content, "utf8")}\r\n\r\n${content}`;
   }
 
+  private static pathToFileUri(filePath: string): string {
+    let normalized = filePath.replace(/\\/g, "/");
+    if (!normalized.startsWith("/")) normalized = `/${normalized}`;
+    const encoded = normalized
+      .split("/")
+      .map((segment, index) => {
+        if (index === 1 && /^[a-zA-Z]:$/.test(segment)) return segment;
+        return encodeURIComponent(segment);
+      })
+      .join("/");
+    return `file://${encoded}`;
+  }
+
+  private static javaSettings(): any {
+    return {
+      java: {
+        import: {
+          gradle: { enabled: true, wrapper: { enabled: true } },
+          maven: { enabled: true },
+        },
+        configuration: {
+          updateBuildConfiguration: "interactive",
+        },
+        completion: {
+          enabled: true,
+        },
+        referencesCodeLens: {
+          enabled: false,
+        },
+        implementationCodeLens: "none",
+        signatureHelp: {
+          enabled: true,
+        },
+        contentProvider: {
+          preferred: "fernflower",
+        },
+      },
+    };
+  }
+
+  private static javaWorkspaceConfiguration(section?: string): any {
+    const settings = LspManager.javaSettings();
+    if (!section) return settings;
+    if (section === "java") return settings.java;
+    if (section.startsWith("java.")) {
+      return section
+        .split(".")
+        .slice(1)
+        .reduce((value: any, key: string) => value?.[key], settings.java);
+    }
+    return {};
+  }
+
+  private static normalizeClientMessage(language: string, workspacePath: string, payload: any): any {
+    if (language !== "java" || payload?.method !== "initialize") return payload;
+
+    const rootUri = LspManager.pathToFileUri(workspacePath);
+    const rootName = path.basename(workspacePath) || workspacePath;
+    const params = payload.params ?? {};
+    const initOptions = params.initializationOptions && typeof params.initializationOptions === "object"
+      ? params.initializationOptions
+      : {};
+
+    return {
+      ...payload,
+      params: {
+        ...params,
+        rootPath: params.rootPath ?? workspacePath,
+        rootUri: params.rootUri ?? rootUri,
+        workspaceFolders: Array.isArray(params.workspaceFolders) && params.workspaceFolders.length > 0
+          ? params.workspaceFolders
+          : [{ uri: rootUri, name: rootName }],
+        initializationOptions: {
+          ...initOptions,
+          workspaceFolders: Array.isArray(initOptions.workspaceFolders) && initOptions.workspaceFolders.length > 0
+            ? initOptions.workspaceFolders
+            : [rootUri],
+          settings: {
+            ...LspManager.javaSettings(),
+            ...(initOptions.settings && typeof initOptions.settings === "object" ? initOptions.settings : {}),
+          },
+        },
+      },
+    };
+  }
+
+  private static javaWorkspaceDataDir(workspacePath: string): string {
+    const hash = crypto.createHash("sha1").update(workspacePath).digest("hex").slice(0, 12);
+    const base = path.basename(workspacePath).replace(/[^a-zA-Z0-9._-]/g, "_") || "workspace";
+    return path.join(os.homedir(), ".axiom", "lsp", "java-workspaces", `${base}-${hash}`);
+  }
+
+  private static javaConfigurationDir(workspacePath: string): string {
+    const hash = crypto.createHash("sha1").update(workspacePath).digest("hex").slice(0, 12);
+    const base = path.basename(workspacePath).replace(/[^a-zA-Z0-9._-]/g, "_") || "workspace";
+    return path.join(os.homedir(), ".axiom", "lsp", "java-configurations", `${base}-${hash}`);
+  }
+
+  private static prepareServerArgs(language: string, workspacePath: string, args: string[]): string[] {
+    if (language !== "java") return args;
+
+    const hasDataArg = args.some((arg) => arg === "-data" || arg === "--data" || arg.startsWith("-data="));
+    const hasConfigurationAreaArg = args.some((arg) => arg.includes("-Dosgi.configuration.area="));
+
+    const dataDir = LspManager.javaWorkspaceDataDir(workspacePath);
+    const configurationDir = LspManager.javaConfigurationDir(workspacePath);
+    fs.mkdirSync(dataDir, { recursive: true });
+    fs.mkdirSync(configurationDir, { recursive: true });
+
+    const prepared = [...args];
+    if (!hasConfigurationAreaArg) {
+      prepared.push(`--jvm-arg=-Dosgi.configuration.area=${configurationDir}`);
+    }
+    if (!hasDataArg) {
+      prepared.push("-data", dataDir);
+    }
+    return prepared;
+  }
+
   /**
    * Spawns or returns an existing LSP process. Links the WebSocket client.
    */
@@ -121,7 +267,8 @@ export class LspManager {
       try {
         const data = JSON.parse(messageStr);
         if (data.type === "lsp_message" && data.payload) {
-          const encoded = LspManager.encodeMessage(data.payload);
+          const payload = LspManager.normalizeClientMessage(language, workspacePath, data.payload);
+          const encoded = LspManager.encodeMessage(payload);
           const active = this.activeServers.get(key) || server;
           if (active && active.process.stdin && !active.process.stdin.destroyed) {
             active.process.stdin.write(encoded);
@@ -193,11 +340,40 @@ export class LspManager {
         ? { ...process.env, ...envOverrides }
         : { ...process.env };
 
-      const childProcess = spawn(serverPath, args, {
+      const spawnArgs = LspManager.prepareServerArgs(language, workspacePath, args);
+      const childProcess = spawn(serverPath, spawnArgs, {
         cwd: workspacePath,
         env: spawnEnv,
-        shell: true,
+        shell: process.platform === "win32",
       });
+      let activeRegistered = false;
+
+      const registerActiveServer = () => {
+        if (activeRegistered) return;
+        activeRegistered = true;
+        const newServer: ActiveServer = {
+          process: childProcess,
+          parser,
+          language,
+          workspacePath,
+          clients: new Set([ws]),
+        };
+        this.activeServers.set(key, newServer);
+
+        // Flush messages that arrived while the process was starting. The
+        // initialize request is one of these; waiting for stdout before
+        // flushing it deadlocks normal LSP startup because servers speak only
+        // after they receive initialize.
+        const pending = this.pendingMessages.get(key);
+        if (pending) {
+          this.pendingMessages.delete(key);
+          for (const encoded of pending) {
+            if (childProcess.stdin && !childProcess.stdin.destroyed) {
+              childProcess.stdin.write(encoded);
+            }
+          }
+        }
+      };
 
       // If the binary is missing, spawn emits an 'error' event (not a throw).
       // On first failure, attempt detect/install then retry once. On retry
@@ -205,6 +381,7 @@ export class LspManager {
       childProcess.once("error", async (err: any) => {
         if (settled) return;
         settled = true;
+        this.activeServers.delete(key);
 
         const isEnoent = (err && (err.code === "ENOENT" || /ENOENT/i.test(err.message || "")));
         if (isEnoent && !isRetry) {
@@ -217,40 +394,48 @@ export class LspManager {
 
       // Once the process emits stdout data or a close code, spawn succeeded.
       // Wire up the ActiveServer once we're confident the process is alive.
-      const parser = new LspStreamParser((msg) => {
-        const msgStr = JSON.stringify({ type: "lsp_message", payload: msg });
-        for (const client of this.activeServers.get(key)!.clients) {
-          if (client.readyState === WebSocket.OPEN) {
-            client.send(msgStr);
+      const parser = new LspStreamParser(
+        (msg) => {
+          if (language === "java" && msg?.id !== undefined && msg?.method === "workspace/configuration") {
+            const items: any[] = Array.isArray(msg.params?.items) ? msg.params.items : [];
+            const response = {
+              jsonrpc: "2.0",
+              id: msg.id,
+              result: items.map((item) => LspManager.javaWorkspaceConfiguration(item?.section)),
+            };
+            if (childProcess.stdin && !childProcess.stdin.destroyed) {
+              childProcess.stdin.write(LspManager.encodeMessage(response));
+            }
+            return;
           }
+
+          const msgStr = JSON.stringify({ type: "lsp_message", payload: msg });
+          for (const client of this.activeServers.get(key)!.clients) {
+            if (client.readyState === WebSocket.OPEN) {
+              client.send(msgStr);
+            }
+          }
+        },
+        (noise) => {
+          const trimmed = noise.trim();
+          if (trimmed) console.warn(`LspManager [${language} stdout noise]:`, trimmed);
+        }
+      );
+
+      childProcess.once("spawn", () => {
+        if (!settled) {
+          settled = true;
+          registerActiveServer();
+          resolve();
         }
       });
 
       childProcess.stdout.on("data", (chunk: Buffer) => {
+        if (!activeRegistered) {
+          registerActiveServer();
+        }
         if (!settled) {
           settled = true;
-          // Register the server now that we know the process is alive.
-          const newServer: ActiveServer = {
-            process: childProcess,
-            parser,
-            language,
-            workspacePath,
-            clients: new Set([ws]),
-          };
-          this.activeServers.set(key, newServer);
-          // Flush any messages that arrived while the server was still booting
-          // (e.g. the `initialize` request that was sent right after WebSocket
-          // open). Without this flush, those messages sit in the buffer forever
-          // and the client's initialize request times out.
-          const pending = this.pendingMessages.get(key);
-          if (pending) {
-            this.pendingMessages.delete(key);
-            for (const encoded of pending) {
-              if (childProcess.stdin && !childProcess.stdin.destroyed) {
-                childProcess.stdin.write(encoded);
-              }
-            }
-          }
           resolve();
         }
         parser.append(chunk);
