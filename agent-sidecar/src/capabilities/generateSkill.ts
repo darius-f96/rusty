@@ -9,7 +9,7 @@ import { WebSocket } from "ws";
 import { safeSend } from "../services/websocket";
 import { LlmConfig } from "../services/llm";
 
-const AVAILABLE_TOOLS = ["read_file", "write_file", "list_files", "search_codebase"];
+const AVAILABLE_TOOLS = ["read_file", "write_file", "list_files", "search_codebase", "web_search"];
 
 export async function generateSkill(ws: WebSocket, data: any): Promise<void> {
   const { description, model, customProvider } = data;
@@ -72,7 +72,7 @@ Description: ${description}
 Return ONLY a valid JSON object with this structure (no markdown, no explanation):
 {
   "systemPrompt": "The system prompt for the skill - be specific about behavior, guidelines, and tone",
-  "enabledTools": ["read_file", "write_file", "list_files", "search_codebase"] - choose the tools this skill should have access to,
+  "enabledTools": ["read_file", "write_file", "list_files", "search_codebase", "web_search"] - choose the tools this skill should have access to,
   "description": "A brief 1-2 sentence description of what this skill does"
 }
 
@@ -81,6 +81,7 @@ Available tools:
 - write_file: Write or edit a file
 - list_files: List all files in the workspace
 - search_codebase: Search for text patterns across the codebase
+- web_search: Search the public web for current information and cited sources
 
 For a coding/building skill, enable all tools.
 For a read-only analysis/planning skill, only enable: read_file, list_files, search_codebase

@@ -13,6 +13,7 @@ import { createListFilesTool, createSearchCodebaseTool } from "../services/tools
 import { callLlmWithToolsMultiRoundStreaming, LlmConfig } from "../services/llm";
 import { createLspTools } from "../services/lspTools";
 import { createMcpTools, McpServerConfig } from "../services/mcpClient";
+import { createWebSearchTool } from "../services/webSearchTool";
 
 export async function agentChat(ws: WebSocket, data: any): Promise<void> {
   const { tabId, message, model, workspaceRoot, chatHistory, customProvider, skill, lspSettings, mcpServers } = data;
@@ -96,6 +97,7 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
       writeVfsTool,
       createListFilesTool(workspaceRoot),
       createSearchCodebaseTool(workspaceRoot),
+      createWebSearchTool(sendLog),
       ...lspTools
     ];
 
@@ -104,6 +106,7 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
       "write_file",
       "list_files",
       "search_codebase",
+      "web_search",
       ...(lspSettings?.enabled ? ["lsp_get_definition", "lsp_get_references", "lsp_get_diagnostics"] : [])
     ];
     const tools = allTools.filter((t: any) => enabledToolNames.includes(t.name));
@@ -130,6 +133,7 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
       write_file: "- 'write_file': Write or edit a file (input: {\"path\": \"file/path\", \"content\": \"full content\"}).",
       list_files: "- 'list_files': List all files in the workspace (no input needed).",
       search_codebase: "- 'search_codebase': Search for text patterns across the codebase (input: {\"pattern\": \"search text\"}).",
+      web_search: "- 'web_search': Search the public web for current information and cited sources (input: {\"query\": \"search query\"}).",
       lsp_get_definition: "- 'lsp_get_definition': Find definition of a symbol (input: {\"path\": \"file/path\", \"line\": lineNum, \"character\": colNum}).",
       lsp_get_references: "- 'lsp_get_references': Find all references of a symbol (input: {\"path\": \"file/path\", \"line\": lineNum, \"character\": colNum}).",
       lsp_get_diagnostics: "- 'lsp_get_diagnostics': Get compile errors/warnings for a file (input: {\"path\": \"file/path\"})."

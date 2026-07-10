@@ -10,6 +10,7 @@ const AVAILABLE_TOOLS = [
   { id: "write_file", label: "Write Files" },
   { id: "list_files", label: "List Files" },
   { id: "search_codebase", label: "Search Codebase" },
+  { id: "web_search", label: "Search Web" },
 ];
 
 export const SkillsTab: React.FC = () => {
@@ -52,7 +53,7 @@ export const SkillsTab: React.FC = () => {
       name: "New Skill",
       description: "",
       systemPrompt: "",
-      enabledTools: ["read_file", "write_file", "list_files", "search_codebase"],
+      enabledTools: ["read_file", "write_file", "list_files", "search_codebase", "web_search"],
       mcpServers: [],
       isBuiltIn: false,
       icon: "help",

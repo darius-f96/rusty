@@ -190,6 +190,7 @@ export async function executeNode(ws: WebSocket, data: any): Promise<void> {
       "write_file",
       "list_files",
       "search_codebase",
+      "web_search",
       ...(lspSettings?.enabled ? ["lsp_get_definition", "lsp_get_references", "lsp_get_diagnostics"] : [])
     ];
     // Built-in tools are filtered by the skill; MCP tools are always available.
@@ -203,6 +204,7 @@ export async function executeNode(ws: WebSocket, data: any): Promise<void> {
       write_file: "- 'write_file': Write or edit a file.",
       list_files: "- 'list_files': Discover files in the workspace.",
       search_codebase: "- 'search_codebase': Find specific code patterns.",
+      web_search: "- 'web_search': Search the public web for current information and return cited sources (input: {\"query\": \"search query\"}).",
       lsp_get_definition: "- 'lsp_get_definition': Find definition of a symbol (input: {\"path\": \"file/path\", \"line\": lineNum, \"character\": colNum}).",
       lsp_get_references: "- 'lsp_get_references': Find all references of a symbol (input: {\"path\": \"file/path\", \"line\": lineNum, \"character\": colNum}).",
       lsp_get_diagnostics: "- 'lsp_get_diagnostics': Get compile errors/warnings for a file (input: {\"path\": \"file/path\"})."
@@ -261,7 +263,7 @@ CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
       try {
         const { createAgentSession } = await import("@earendil-works/pi-coding-agent");
         const { getModel } = await import("@earendil-works/pi-ai");
-        const { writeMcpConfig, getPiMcpResourceLoader } = await import("../services/piMcp");
+        const { writeMcpConfig, getPiResourceLoader } = await import("../services/piMcp");
 
         let selectedModel;
         if (model && model.includes("/")) {
@@ -279,9 +281,9 @@ CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
           return name;
         });
 
-        // Write current MCP configuration to workspace .pi/mcp.json and retrieve a Pi ResourceLoader loading the MCP extension.
+        // Write current MCP configuration and load bundled Pi extensions, including web access.
         await writeMcpConfig(workspaceRoot, mcpContext);
-        const resourceLoader = await getPiMcpResourceLoader(workspaceRoot, mcpContext.length > 0);
+        const resourceLoader = await getPiResourceLoader(workspaceRoot);
 
         const { session } = await createAgentSession({
           cwd: workspaceRoot,

@@ -63,23 +63,29 @@ export async function writeMcpConfig(workspaceRoot: string, axiomServers: any[])
   return true;
 }
 
-export async function getPiMcpResourceLoader(workspaceRoot: string, hasMcp: boolean): Promise<any | undefined> {
-  if (!hasMcp) return undefined;
-
+/**
+ * Loads Pi packages that extend every Axiom agent session.
+ *
+ * `pi-web-access` is independent of MCP configuration, so this loader must be
+ * created even when the canvas has no MCP nodes. The MCP extension still reads
+ * the workspace `.pi/mcp.json` written above when servers are configured.
+ */
+export async function getPiResourceLoader(workspaceRoot: string): Promise<any | undefined> {
   try {
     const { DefaultResourceLoader } = await import("@earendil-works/pi-coding-agent");
-    const extPath = path.join(__dirname, "../node_modules/pi-mcp-extension");
+    const mcpExtensionPath = path.join(__dirname, "../node_modules/pi-mcp-extension");
+    const webAccessPackagePath = path.join(__dirname, "../node_modules/pi-web-access");
     const agentDir = path.join(os.homedir(), ".pi", "agent");
 
     const loader = new DefaultResourceLoader({
       cwd: workspaceRoot,
       agentDir,
-      additionalExtensionPaths: [extPath]
+      additionalExtensionPaths: [mcpExtensionPath, webAccessPackagePath]
     });
     await loader.reload();
     return loader;
   } catch (err) {
-    console.error("Failed to construct Pi MCP ResourceLoader:", err);
+    console.error("Failed to construct Pi extension ResourceLoader:", err);
     return undefined;
   }
 }
