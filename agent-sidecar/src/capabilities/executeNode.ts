@@ -12,6 +12,7 @@ import { safeSend, getNextId, registerPendingRequest } from "../services/websock
 import { createListFilesTool, createSearchCodebaseTool } from "../services/tools";
 import { createMcpTools, McpServerConfig } from "../services/mcpClient";
 import { createLspTools } from "../services/lspTools";
+import { importEsm } from "../services/esmImport";
 
 export async function executeNode(ws: WebSocket, data: any): Promise<void> {
   const { nodeId, instructions, model, workspaceRoot, inputFiles, customProvider, globalContext, contextDescriptions, chatHistory, skill, mcpContext, upstreamTaskContext, lspSettings } = data;
@@ -261,8 +262,8 @@ CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
 
     if (!useMultiRound) {
       try {
-        const { createAgentSession } = await import("@earendil-works/pi-coding-agent");
-        const { getModel } = await import("@earendil-works/pi-ai");
+        const { createAgentSession } = await importEsm("@earendil-works/pi-coding-agent");
+        const { getModel } = await importEsm("@earendil-works/pi-ai");
         const { writeMcpConfig, getPiResourceLoader } = await import("../services/piMcp");
 
         let selectedModel;

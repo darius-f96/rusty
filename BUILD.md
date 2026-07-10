@@ -123,28 +123,36 @@ The bundled Node binary lives in `src-tauri/bin/node-<target-triple>` and is exc
 
 ### Downloading Node binaries
 
-Download from <https://nodejs.org/dist/> (use the same v20.x version) and extract the `node` binary:
+Download from <https://nodejs.org/dist/> (use Node v22.x, e.g. v22.23.1) and extract the `node` binary:
 
-**macOS (already set up for Apple Silicon):**
+**macOS:**
 
 ```bash
+# Apple Silicon Mac (M1/M2/M3/M4)
+cd src-tauri/bin
+curl -LO https://nodejs.org/dist/v22.23.1/node-v22.23.1-darwin-arm64.tar.gz
+tar xzf node-v22.23.1-darwin-arm64.tar.gz
+cp node-v22.23.1-darwin-arm64/bin/node node-aarch64-apple-darwin
+chmod +x node-aarch64-apple-darwin
+rm -rf node-v22.23.1-darwin-arm64*
+
 # Intel Mac
 cd src-tauri/bin
-curl -LO https://nodejs.org/dist/v20.20.2/node-v20.20.2-darwin-x64.tar.gz
-tar xzf node-v20.20.2-darwin-x64.tar.gz
-cp node-v20.20.2-darwin-x64/bin/node node-x86_64-apple-darwin
+curl -LO https://nodejs.org/dist/v22.23.1/node-v22.23.1-darwin-x64.tar.gz
+tar xzf node-v22.23.1-darwin-x64.tar.gz
+cp node-v22.23.1-darwin-x64/bin/node node-x86_64-apple-darwin
 chmod +x node-x86_64-apple-darwin
-rm -rf node-v20.20.2-darwin-x64*
+rm -rf node-v22.23.1-darwin-x64*
 ```
 
 **Windows (run in PowerShell on a Windows machine):**
 
 ```powershell
 cd src-tauri\bin
-curl.exe -LO https://nodejs.org/dist/v20.20.2/node-v20.20.2-win-x64.zip
-tar xf node-v20.20.2-win-x64.zip
-copy node-v20.20.2-win-x64\node.exe node-x86_64-pc-windows-msvc.exe
-Remove-Item -Recurse node-v20.20.2-win-x64*
+curl.exe -LO https://nodejs.org/dist/v22.23.1/node-v22.23.1-win-x64.zip
+tar xf node-v22.23.1-win-x64.zip
+copy node-v22.23.1-win-x64\node.exe node-x86_64-pc-windows-msvc.exe
+Remove-Item -Recurse node-v22.23.1-win-x64*
 ```
 
 **Linux:**
@@ -152,18 +160,18 @@ Remove-Item -Recurse node-v20.20.2-win-x64*
 ```bash
 # x86_64
 cd src-tauri/bin
-curl -LO https://nodejs.org/dist/v20.20.2/node-v20.20.2-linux-x64.tar.xz
-tar xf node-v20.20.2-linux-x64.tar.xz
-cp node-v20.20.2-linux-x64/bin/node node-x86_64-unknown-linux-gnu
+curl -LO https://nodejs.org/dist/v22.23.1/node-v22.23.1-linux-x64.tar.xz
+tar xf node-v22.23.1-linux-x64.tar.xz
+cp node-v22.23.1-linux-x64/bin/node node-x86_64-unknown-linux-gnu
 chmod +x node-x86_64-unknown-linux-gnu
-rm -rf node-v20.20.2-linux-x64*
+rm -rf node-v22.23.1-linux-x64*
 
 # ARM64
-curl -LO https://nodejs.org/dist/v20.20.2/node-v20.20.2-linux-arm64.tar.xz
-tar xf node-v20.20.2-linux-arm64.tar.xz
-cp node-v20.20.2-linux-arm64/bin/node node-aarch64-unknown-linux-gnu
+curl -LO https://nodejs.org/dist/v22.23.1/node-v22.23.1-linux-arm64.tar.xz
+tar xf node-v22.23.1-linux-arm64.tar.xz
+cp node-v22.23.1-linux-arm64/bin/node node-aarch64-unknown-linux-gnu
 chmod +x node-aarch64-unknown-linux-gnu
-rm -rf node-v20.20.2-linux-arm64*
+rm -rf node-v22.23.1-linux-arm64*
 ```
 
 > The binary **must** be present in `src-tauri/bin/` with the exact target-triple name before running `npm run tauri build`, otherwise the build fails with "missing sidecar binary".

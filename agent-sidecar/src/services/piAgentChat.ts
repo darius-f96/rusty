@@ -1,10 +1,30 @@
 import { getPiResourceLoader } from "./piMcp";
+import { importEsm } from "./esmImport";
 
 export interface PiChatTool {
   name: string;
   description: string;
   inputSchema?: any;
   execute: (args: any) => Promise<any>;
+}
+
+export interface SubagentUpdate {
+  id: string;
+  previousId?: string;
+  agentId?: string;
+  displayName?: string;
+  description: string;
+  subagentType?: string;
+  status: "queued" | "running" | "background" | "completed" | "steered" | "aborted" | "stopped" | "error";
+  activity?: string;
+  result?: string;
+  error?: string;
+  toolUses?: number;
+  tokens?: string;
+  turnCount?: number;
+  maxTurns?: number;
+  durationMs?: number;
+  updatedAt: string;
 }
 
 interface RunPiAgentChatOptions {
@@ -24,7 +44,7 @@ interface RunPiAgentChatOptions {
   } | null;
   sendLog: (message: string) => void;
   sendToken: (token: string) => void;
-  sendTodoUpdate: (tasks: any[]) => void;
+  sendSubagentUpdate: (subagent: SubagentUpdate) => void;
 }
 
 function supportsPiRuntime(): boolean {
@@ -40,13 +60,45 @@ function textFromAssistantMessage(message: any): string {
     .join("");
 }
 
+function toolEventKey(event: any): string | undefined {
+  return event?.toolCallId || event?.toolUseId || event?.toolExecutionId || event?.executionId || event?.id || event?.toolCall?.id;
+}
+
+function textFromToolResult(result: any): string | undefined {
+  if (!result) return undefined;
+  if (typeof result === "string") return result;
+  if (typeof result.text === "string") return result.text;
+  if (typeof result.content === "string") return result.content;
+  if (Array.isArray(result.content)) {
+    return result.content
+      .filter((part: any) => part?.type === "text" && typeof part.text === "string")
+      .map((part: any) => part.text)
+      .join("\n")
+      .trim() || undefined;
+  }
+  return undefined;
+}
+
+function subagentDescription(args: any, fallback = "Subagent"): string {
+  return args?.description || args?.prompt?.split("\n")[0]?.slice(0, 120) || fallback;
+}
+
+function normalizeSubagentStatus(status: any, isError?: boolean): SubagentUpdate["status"] {
+  if (isError) return "error";
+  if (status === "queued" || status === "running" || status === "background" || status === "completed" ||
+      status === "steered" || status === "aborted" || status === "stopped" || status === "error") {
+    return status;
+  }
+  return "completed";
+}
+
 /**
  * Runs Agent Tab through Pi so extension tools such as Agent/get_subagent_result
  * are first-class model tools rather than hand-written adapters.
  */
 export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<string | undefined> {
   if (!supportsPiRuntime()) {
-    options.sendLog("Pi delegation requires Node 22.19+; using the compatibility agent runtime.");
+    options.sendLog(`Pi delegation requires Node 22.19+; current runtime is Node ${process.versions.node} at ${process.execPath}. Using the compatibility agent runtime.`);
     return undefined;
   }
 
@@ -57,8 +109,8 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
     return undefined;
   }
 
-  const { AuthStorage, ModelRegistry, createAgentSession } = await import("@earendil-works/pi-coding-agent");
-  const { getModel } = await import("@earendil-works/pi-ai");
+  const { AuthStorage, ModelRegistry, createAgentSession } = await importEsm("@earendil-works/pi-coding-agent");
+  const { getModel } = await importEsm("@earendil-works/pi-ai");
   let modelRegistry: any;
   let selectedModel: any;
   if (options.customProvider) {
@@ -128,7 +180,6 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
     "web_search",
     "fetch_content",
     "get_search_content",
-    "todo",
     "Agent",
     "get_subagent_result",
     "steer_subagent"
@@ -145,20 +196,90 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
   });
 
   let latestText = "";
+  let syntheticSubagentCounter = 0;
+  const pendingSubagentIds = new Map<string, string>();
   const unsubscribe = session.subscribe((event: any) => {
     if (event.type === "message_update" && event.assistantMessageEvent?.type === "text_delta") {
       latestText += event.assistantMessageEvent.delta;
       options.sendToken(event.assistantMessageEvent.delta);
     }
     if (event.type === "tool_execution_start") {
+      if (event.toolName === "Agent") {
+        const key = toolEventKey(event) || `agent_start_${++syntheticSubagentCounter}`;
+        const id = `pending-${key}`;
+        pendingSubagentIds.set(key, id);
+        const description = subagentDescription(event.args);
+        const subagentType = event.args?.subagent_type;
+        options.sendSubagentUpdate({
+          id,
+          displayName: subagentType || "Agent",
+          description,
+          subagentType,
+          status: event.args?.run_in_background ? "background" : "running",
+          activity: "Delegated; waiting for result.",
+          updatedAt: new Date().toISOString()
+        });
+      } else if (event.toolName === "get_subagent_result" && event.args?.agent_id) {
+        options.sendSubagentUpdate({
+          id: event.args.agent_id,
+          description: `Agent ${event.args.agent_id}`,
+          status: "running",
+          activity: event.args?.wait ? "Waiting for background result." : "Fetching background result.",
+          updatedAt: new Date().toISOString()
+        });
+      }
+
       const label = event.toolName === "Agent"
-        ? "Delegating work to a subagent."
+        ? `Delegating subagent${typeof event.args?.description === "string" ? `: ${event.args.description}` : ""}.`
         : `Running ${event.toolName}.`;
       options.sendLog(label);
     }
     if (event.type === "tool_execution_end") {
-      if (event.toolName === "todo" && Array.isArray(event.result?.details?.tasks)) {
-        options.sendTodoUpdate(event.result.details.tasks);
+      if (event.toolName === "Agent") {
+        const key = toolEventKey(event);
+        const pendingId = key ? pendingSubagentIds.get(key) : undefined;
+        if (key) pendingSubagentIds.delete(key);
+        const details = event.result?.details || {};
+        const resultText = textFromToolResult(event.result);
+        const id = details.agentId || pendingId || `agent-${++syntheticSubagentCounter}`;
+        options.sendSubagentUpdate({
+          id,
+          previousId: details.agentId && pendingId ? pendingId : undefined,
+          agentId: details.agentId,
+          displayName: details.displayName,
+          description: details.description || subagentDescription(event.args),
+          subagentType: details.subagentType || event.args?.subagent_type,
+          status: normalizeSubagentStatus(details.status, event.isError),
+          activity: details.activity,
+          result: resultText,
+          error: details.error || (event.isError ? resultText : undefined),
+          toolUses: details.toolUses,
+          tokens: details.tokens,
+          turnCount: details.turnCount,
+          maxTurns: details.maxTurns,
+          durationMs: details.durationMs,
+          updatedAt: new Date().toISOString()
+        });
+      } else if (event.toolName === "get_subagent_result" && event.args?.agent_id) {
+        const details = event.result?.details || {};
+        const resultText = textFromToolResult(event.result);
+        options.sendSubagentUpdate({
+          id: event.args.agent_id,
+          agentId: event.args.agent_id,
+          displayName: details.displayName,
+          description: details.description || `Agent ${event.args.agent_id}`,
+          subagentType: details.subagentType,
+          status: normalizeSubagentStatus(details.status, event.isError),
+          activity: details.activity,
+          result: resultText,
+          error: details.error || (event.isError ? resultText : undefined),
+          toolUses: details.toolUses,
+          tokens: details.tokens,
+          turnCount: details.turnCount,
+          maxTurns: details.maxTurns,
+          durationMs: details.durationMs,
+          updatedAt: new Date().toISOString()
+        });
       }
       options.sendLog(event.isError ? `${event.toolName} failed.` : `${event.toolName} completed.`);
     }

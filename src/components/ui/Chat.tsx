@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { formatMessageText } from "../../services/markdownService";
-import { ChevronRight, Terminal, Loader2, FileText, Folder, CheckCircle2, Circle, ListTodo } from "lucide-react";
+import { AlertCircle, Bot, CheckCircle2, ChevronRight, Circle, FileText, Folder, Loader2, Terminal } from "lucide-react";
 
 export interface Message {
   id: string;
@@ -10,23 +10,35 @@ export interface Message {
   attachments?: { path: string; name: string; isDir?: boolean }[];
 }
 
+export interface SubagentActivity {
+  id: string;
+  previousId?: string;
+  agentId?: string;
+  displayName?: string;
+  description: string;
+  subagentType?: string;
+  status: "queued" | "running" | "background" | "completed" | "steered" | "aborted" | "stopped" | "error";
+  activity?: string;
+  result?: string;
+  error?: string;
+  toolUses?: number;
+  tokens?: string;
+  turnCount?: number;
+  maxTurns?: number;
+  durationMs?: number;
+  updatedAt?: string;
+}
+
 interface ChatProps {
   messages: Message[];
   isStreaming?: boolean;
   streamingMessageId?: string | null;
   compact?: boolean;
   scrollKey?: string;
-  todoTasks?: Array<{
-    id: number;
-    subject: string;
-    description?: string;
-    activeForm?: string;
-    status: "pending" | "in_progress" | "completed" | "deleted";
-    blockedBy?: number[];
-  }>;
+  subagents?: SubagentActivity[];
 }
 
-export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, streamingMessageId = null, compact = false, scrollKey, todoTasks = [] }) => {
+export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, streamingMessageId = null, compact = false, scrollKey, subagents = [] }) => {
   const [collapsedConsoles, setCollapsedConsoles] = useState<Record<string, boolean>>({});
   const consoleContentRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -82,6 +94,25 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
     });
   };
 
+  const isSubagentActive = (status: SubagentActivity["status"]) => {
+    return status === "queued" || status === "running" || status === "background";
+  };
+
+  const subagentStatusLabel = (status: SubagentActivity["status"]) => {
+    if (status === "background") return "running";
+    if (status === "steered") return "completed";
+    return status;
+  };
+
+  const subagentStats = (subagent: SubagentActivity) => {
+    const parts: string[] = [];
+    if (subagent.turnCount) parts.push(subagent.maxTurns ? `${subagent.turnCount}/${subagent.maxTurns} turns` : `${subagent.turnCount} turns`);
+    if (subagent.toolUses) parts.push(`${subagent.toolUses} tools`);
+    if (subagent.tokens) parts.push(subagent.tokens);
+    if (subagent.durationMs) parts.push(`${Math.max(1, Math.round(subagent.durationMs / 1000))}s`);
+    return parts.join(" · ");
+  };
+
   const renderMessage = (msg: Message) => {
     if (msg.role === "console") {
       const isCollapsed = collapsedConsoles[msg.id] ?? false;
@@ -119,21 +150,49 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
                   {msg.content || "// Initializing agent workflow..."}
                 </pre>
               </div>
-              {todoTasks.filter((task) => task.status !== "deleted").length > 0 && (
+              {subagents.length > 0 && (
                 <div className="px-4 py-3 border-t border-[var(--border-color)]/30 bg-black/20">
                   <div className="flex items-center space-x-2 mb-2 text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
-                    <ListTodo size={12} className="text-[var(--accent-color)]" />
-                    <span>Task list</span>
+                    <Bot size={12} className="text-[var(--accent-color)]" />
+                    <span>Subagents</span>
+                    <span className="text-[9px] normal-case tracking-normal text-[var(--text-muted)]">
+                      {subagents.filter((subagent) => isSubagentActive(subagent.status)).length} active · {subagents.filter((subagent) => !isSubagentActive(subagent.status)).length} done
+                    </span>
                   </div>
-                  <div className="space-y-1.5">
-                    {todoTasks.filter((task) => task.status !== "deleted").map((task) => {
-                      const done = task.status === "completed";
-                      const active = task.status === "in_progress";
+                  <div className="space-y-2">
+                    {subagents.map((subagent) => {
+                      const active = isSubagentActive(subagent.status);
+                      const failed = subagent.status === "error" || subagent.status === "aborted" || subagent.status === "stopped";
+                      const stats = subagentStats(subagent);
                       return (
-                        <div key={task.id} className={`flex items-center space-x-2 text-[11px] font-mono ${done ? "text-emerald-300" : active ? "text-violet-200" : "text-[var(--text-normal)]"}`}>
-                          {done ? <CheckCircle2 size={12} /> : <Circle size={12} className={active ? "animate-pulse text-violet-400" : "text-[var(--text-muted)]"} />}
-                          <span className={done ? "line-through opacity-70" : ""}>{active ? task.activeForm || task.subject : task.subject}</span>
-                          {task.blockedBy?.length ? <span className="text-[9px] text-amber-300/80">blocked</span> : null}
+                        <div key={subagent.id} className="rounded border border-[var(--border-color)]/45 bg-black/15 px-3 py-2">
+                          <div className="flex items-start gap-2 text-[11px] font-mono">
+                            {failed ? (
+                              <AlertCircle size={13} className="mt-0.5 text-rose-400 flex-shrink-0" />
+                            ) : active ? (
+                              <Circle size={13} className="mt-0.5 animate-pulse text-violet-400 flex-shrink-0" />
+                            ) : (
+                              <CheckCircle2 size={13} className="mt-0.5 text-emerald-400 flex-shrink-0" />
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                <span className={failed ? "text-rose-300" : active ? "text-violet-200" : "text-emerald-300"}>
+                                  {subagent.displayName || subagent.subagentType || "Agent"}
+                                </span>
+                                <span className="text-[9px] uppercase tracking-wider text-[var(--text-muted)]">{subagentStatusLabel(subagent.status)}</span>
+                                {stats && <span className="text-[9px] text-[var(--text-muted)]">{stats}</span>}
+                              </div>
+                              <div className="text-[var(--text-normal)] break-words">{subagent.description}</div>
+                              {subagent.activity && active && (
+                                <div className="text-[10px] text-[var(--text-muted)] mt-1">{subagent.activity}</div>
+                              )}
+                              {(subagent.result || subagent.error) && !active && (
+                                <pre className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap rounded bg-black/25 border border-[var(--border-color)]/30 p-2 text-[10px] leading-relaxed text-zinc-400">
+                                  {subagent.error || subagent.result}
+                                </pre>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       );
                     })}

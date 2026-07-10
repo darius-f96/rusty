@@ -1,6 +1,8 @@
 import * as fs from "node:fs/promises";
+import * as fsSync from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
+import { importEsm } from "./esmImport";
 
 export async function writeMcpConfig(workspaceRoot: string, axiomServers: any[]): Promise<boolean> {
   const mcpServers: Record<string, any> = {};
@@ -63,6 +65,25 @@ export async function writeMcpConfig(workspaceRoot: string, axiomServers: any[])
   return true;
 }
 
+function resolveInstalledPackageDir(packageName: string): string {
+  const nodeModuleRoots = [
+    path.resolve(__dirname, "../node_modules"),
+    path.resolve(__dirname, "../../node_modules"),
+    path.resolve(__dirname, "../../../agent-sidecar/node_modules"),
+    path.resolve(process.cwd(), "node_modules"),
+    path.resolve(process.cwd(), "agent-sidecar/node_modules")
+  ];
+
+  for (const root of nodeModuleRoots) {
+    const packageDir = path.join(root, packageName);
+    if (fsSync.existsSync(path.join(packageDir, "package.json"))) {
+      return packageDir;
+    }
+  }
+
+  return path.join(__dirname, "../node_modules", packageName);
+}
+
 /**
  * Loads Pi packages that extend every Axiom agent session.
  *
@@ -75,17 +96,16 @@ export async function getPiResourceLoader(
   appendSystemPrompt: string[] = []
 ): Promise<any | undefined> {
   try {
-    const { DefaultResourceLoader } = await import("@earendil-works/pi-coding-agent");
-    const mcpExtensionPath = path.join(__dirname, "../node_modules/pi-mcp-extension");
-    const webAccessPackagePath = path.join(__dirname, "../node_modules/pi-web-access");
-    const subagentsPackagePath = path.join(__dirname, "../node_modules/@tintinweb/pi-subagents");
-    const todoPackagePath = path.join(__dirname, "../node_modules/@juicesharp/rpiv-todo");
+    const { DefaultResourceLoader } = await importEsm("@earendil-works/pi-coding-agent");
+    const mcpExtensionPath = resolveInstalledPackageDir("pi-mcp-extension");
+    const webAccessPackagePath = resolveInstalledPackageDir("pi-web-access");
+    const subagentsPackagePath = resolveInstalledPackageDir("@tintinweb/pi-subagents");
     const agentDir = path.join(os.homedir(), ".pi", "agent");
 
     const loader = new DefaultResourceLoader({
       cwd: workspaceRoot,
       agentDir,
-      additionalExtensionPaths: [mcpExtensionPath, webAccessPackagePath, subagentsPackagePath, todoPackagePath],
+      additionalExtensionPaths: [mcpExtensionPath, webAccessPackagePath, subagentsPackagePath],
       appendSystemPrompt
     });
     await loader.reload();

@@ -4,9 +4,10 @@
   "description": "Headless Node.js agent runner using Pi SDK for Axiom",
   "main": "dist/server.js",
   "scripts": {
-    "dev": "ts-node src/server.ts",
-    "build": "tsup src/server.ts --format cjs,esm --dts",
-    "start": "node dist/server.js",
+    "dev": "../src-tauri/bin/node-aarch64-apple-darwin ./node_modules/ts-node/dist/bin.js src/server.ts",
+    "build": "../src-tauri/bin/node-aarch64-apple-darwin ./node_modules/tsup/dist/cli-default.js src/server.ts --format cjs,esm --dts",
+    "start": "../src-tauri/bin/node-aarch64-apple-darwin dist/server.js",
+    "node:version": "../src-tauri/bin/node-aarch64-apple-darwin --version",
     "postinstall": "rm -rf node_modules/@earendil-works/pi-coding-agent/node_modules/undici"
   },
   "dependencies": {
@@ -14,7 +15,6 @@
     "@earendil-works/pi-ai": "^0.79.10",
     "@earendil-works/pi-coding-agent": "^0.79.10",
     "@earendil-works/pi-tui": "0.79.10",
-    "@juicesharp/rpiv-todo": "^1.20.0",
     "@tintinweb/pi-subagents": "^0.13.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",

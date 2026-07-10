@@ -295,10 +295,15 @@ wss.on("connection", (ws: WebSocket, req: http.IncomingMessage) => {
 
 // Expose health status endpoint
 app.get("/health", (req, res) => {
-  res.json({ status: "ok", mode: "sidecar" });
+  res.json({
+    status: "ok",
+    mode: "sidecar",
+    nodeVersion: process.versions.node,
+    execPath: process.execPath
+  });
 });
 
 const PORT = process.env.PORT || 4000;
 server.listen(PORT, () => {
-  console.log(`Pi sidecar server listening on port ${PORT}`);
+  console.log(`Pi sidecar server listening on port ${PORT} with Node ${process.versions.node} (${process.execPath})`);
 });

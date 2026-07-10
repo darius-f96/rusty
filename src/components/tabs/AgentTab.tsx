@@ -3,7 +3,7 @@ import { History, Trash2, Plus, RefreshCw, PanelLeftClose, PanelLeft, Shield, Ch
 import { useWorkspaceStore, AgentMessage } from "../../store";
 import { CustomSelect } from "../CustomSelect";
 import { invoke } from "@tauri-apps/api/core";
-import { Chat } from "../ui/Chat";
+import { Chat, SubagentActivity } from "../ui/Chat";
 import { ChatInput } from "../ui/ChatInput";
 import { notify } from "../../notificationStore";
 
@@ -18,16 +18,6 @@ interface SavedChat {
   savedAt: string;
   preview: string;
   messageCount: number;
-}
-
-interface AgentTodo {
-  id: number;
-  subject: string;
-  description?: string;
-  activeForm?: string;
-  status: "pending" | "in_progress" | "completed" | "deleted";
-  blockedBy?: number[];
-  owner?: string;
 }
 
 export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) => {
@@ -53,7 +43,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
   const [isStreaming, setIsStreaming] = useState(false);
   const [pendingPermission, setPendingPermission] = useState<any>(null);
   const [modifiedFiles, setModifiedFiles] = useState<string[]>([]);
-  const [todos, setTodos] = useState<AgentTodo[]>([]);
+  const [subagents, setSubagents] = useState<SubagentActivity[]>([]);
 
   // Chat history panel state
   const [showHistory, setShowHistory] = useState(true);
@@ -147,6 +137,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
       setActiveChatPath(chat.path);
       savedChatPathRef.current = chat.path;
       setModifiedFiles([]);
+      setSubagents([]);
     } catch (e) {
       console.error("Failed to load chat:", e);
     }
@@ -158,6 +149,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
     setActiveChatPath(null);
     savedChatPathRef.current = null;
     setModifiedFiles([]);
+    setSubagents([]);
   };
 
   const handleDeleteChat = async (e: React.MouseEvent, chat: SavedChat) => {
@@ -216,6 +208,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
     consoleBufferRef.current = "";
     streamingResponseMessageIdRef.current = null;
     streamingResponseBufferRef.current = "";
+    setSubagents([]);
     saveChatHistory();
     refreshHistoryAfterSave();
 
@@ -302,23 +295,23 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
 
         if (msg.type === "token" && msg.tabId === tab.id) {
           streamingResponseBufferRef.current += msg.content;
-          if (!streamingResponseMessageIdRef.current) {
-            const responseMessageId = `msg_${Date.now()}_stream`;
-            streamingResponseMessageIdRef.current = responseMessageId;
-            addAgentMessage(tab.id, {
-              id: responseMessageId,
-              role: "assistant" as const,
-              content: streamingResponseBufferRef.current,
-              timestamp: new Date().toISOString(),
-            });
-          } else {
-            updateAgentMessage(tab.id, streamingResponseMessageIdRef.current, streamingResponseBufferRef.current);
-          }
           return;
         }
 
-        if (msg.type === "todo_update" && msg.tabId === tab.id) {
-          setTodos(Array.isArray(msg.tasks) ? msg.tasks : []);
+        if (msg.type === "subagent_update" && msg.tabId === tab.id && msg.subagent?.id) {
+          const incoming = {
+            ...msg.subagent,
+            updatedAt: msg.subagent.updatedAt || new Date().toISOString(),
+          } as SubagentActivity & { previousId?: string };
+          setSubagents((prev) => {
+            const index = prev.findIndex((item) =>
+              item.id === incoming.id || (!!incoming.previousId && item.id === incoming.previousId)
+            );
+            if (index === -1) return [...prev, incoming];
+            const next = [...prev];
+            next[index] = { ...next[index], ...incoming, id: incoming.id };
+            return next;
+          });
           return;
         }
 
@@ -385,6 +378,9 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
           }
 
           const responseContent = msg.response || "Agent complete.";
+          if (Array.isArray(msg.subagents)) {
+            setSubagents(msg.subagents);
+          }
           if (streamingResponseMessageIdRef.current) {
             updateAgentMessage(tab.id, streamingResponseMessageIdRef.current, responseContent);
           } else {
@@ -723,7 +719,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
             messages={agentChats}
             isStreaming={isStreaming}
             streamingMessageId={consoleMessageIdRef.current}
-            todoTasks={todos}
+            subagents={subagents}
           />
           
           <div className="p-4 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/10 flex-shrink-0 w-full mb-2">
