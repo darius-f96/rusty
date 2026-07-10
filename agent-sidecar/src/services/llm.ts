@@ -20,6 +20,16 @@ export function truncateToolResult(content: string, maxLength: number): string {
   return content.slice(0, maxLength) + `\n\n[...truncated ${content.length - maxLength} characters...]`;
 }
 
+/** A safe, user-facing explanation of an action; never includes file contents or secrets. */
+function describeToolIntent(toolName: string, args: Record<string, any>): string {
+  const value = (key: string) => typeof args[key] === "string" ? args[key] : "";
+  if (toolName === "read_file" || toolName === "write_file") return `${toolName === "read_file" ? "Reading" : "Updating"} ${value("path") || "a workspace file"}.`;
+  if (toolName === "search_codebase") return `Searching the codebase for “${value("pattern") || "a relevant pattern"}”.`;
+  if (toolName === "web_search") return `Searching the web for “${value("query") || "current information"}”.`;
+  if (toolName === "list_files") return "Inspecting the workspace structure.";
+  return `Using ${toolName}.`;
+}
+
 export async function callLlmWithTools(
   config: LlmConfig,
   systemPrompt: string,
@@ -495,6 +505,7 @@ export async function callLlmWithToolsMultiRoundStreaming(
   }));
 
   sendLog(`Calling LLM (streaming): ${model} at ${baseUrl}`);
+  sendLog("Reviewing the request and deciding on the next useful action.");
   console.log(`WebSocket [Server] LLM Start (streaming): ${model} @ ${baseUrl}`);
 
   let round = 0;
@@ -504,7 +515,7 @@ export async function callLlmWithToolsMultiRoundStreaming(
       throw new Error("Client disconnected");
     }
     round++;
-    sendLog(`LLM round ${round} starting...`);
+    sendLog(`Planning step ${round}: reviewing the available context and tools.`);
     console.log(`\n--- WebSocket [Server] Streaming LLM Round ${round} ---`);
     console.log(`WebSocket [Server] Messages count: ${messages.length}`);
 
@@ -558,7 +569,7 @@ export async function callLlmWithToolsMultiRoundStreaming(
       }
 
       // Execute tools in parallel
-      sendLog(`LLM requested ${toolCalls.length} tool call(s)`);
+      sendLog(`Selected ${toolCalls.length} action${toolCalls.length === 1 ? "" : "s"} to gather the needed information.`);
       const toolResults = await executeToolCallsParallel(toolCalls, tools, sendLog, shouldAbort);
       messages.push(...toolResults);
       sendLog(`Tool execution complete, continuing to round ${round + 1}...`);
@@ -636,12 +647,12 @@ export async function callLlmWithToolsMultiRoundStreaming(
     }
 
     // Execute tools in parallel
-    sendLog(`LLM requested ${toolCallsAccumulator.length} tool call(s)`);
+    sendLog(`Selected ${toolCallsAccumulator.length} action${toolCallsAccumulator.length === 1 ? "" : "s"} to gather the needed information.`);
     console.log(`WebSocket [Server] Executing ${toolCallsAccumulator.length} tool calls in parallel`);
 
     const toolResults = await executeToolCallsParallel(toolCallsAccumulator, tools, sendLog, shouldAbort);
     messages.push(...toolResults);
-    sendLog(`Tool execution complete, continuing to round ${round + 1}...`);
+    sendLog("Reviewing the tool results before continuing.");
   }
 
   // Max rounds reached — generate a summary
@@ -742,7 +753,7 @@ async function executeToolCallsParallel(
         toolArgs = {};
       }
 
-      sendLog(`Executing tool: ${toolName}`);
+      sendLog(describeToolIntent(toolName, toolArgs));
       console.log(`WebSocket [Server] Executing tool (parallel): ${toolName}`, toolArgs);
 
       const tool = tools.find(t => t.name === toolName);
@@ -760,6 +771,7 @@ async function executeToolCallsParallel(
         const result = await tool.execute(toolArgs);
         const resultStr = typeof result === "string" ? result : JSON.stringify(result);
         const truncatedResult = truncateToolResult(resultStr, MAX_TOOL_RESULT_LENGTH);
+        sendLog(`Finished ${toolName}; incorporating the result.`);
         console.log(`WebSocket [Server] Tool ${toolName} success (${truncatedResult.length} chars)`);
         return {
           role: "tool" as const,
@@ -768,6 +780,7 @@ async function executeToolCallsParallel(
           content: truncatedResult
         };
       } catch (err: any) {
+        sendLog(`${toolName} could not complete; choosing a fallback if available.`);
         console.error(`WebSocket [Server] Tool ${toolName} error:`, err);
         return {
           role: "tool" as const,

@@ -15,6 +15,13 @@ import { createLspTools } from "../services/lspTools";
 import { createMcpTools, McpServerConfig } from "../services/mcpClient";
 import { createWebSearchTool } from "../services/webSearchTool";
 
+type AgentTool = {
+  name: string;
+  description: string;
+  inputSchema?: any;
+  execute: (args: any) => Promise<any>;
+};
+
 export async function agentChat(ws: WebSocket, data: any): Promise<void> {
   const { tabId, message, model, workspaceRoot, chatHistory, customProvider, skill, lspSettings, mcpServers } = data;
   console.log(`WebSocket [Server] agent_chat starting`, { tabId, workspaceRoot, model, hasSkill: !!skill, lspEnabled: lspSettings?.enabled, mcpCount: mcpServers?.length || 0 });
@@ -91,8 +98,24 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
     };
 
     const lspTools = createLspTools(workspaceRoot, lspSettings, sendLog);
+    const progressTool = {
+      name: "report_progress",
+      description: "Publish a concise, user-visible reasoning summary and the next intended action to the Agent Activity panel.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          summary: { type: "string", description: "Brief evidence-based summary of what you know and why the next step is useful." },
+          nextAction: { type: "string", description: "The next action you intend to take." }
+        },
+        required: ["summary", "nextAction"]
+      },
+      execute: async ({ summary, nextAction }: { summary: string; nextAction: string }) => {
+        sendLog(`Reasoning summary: ${summary}\nNext: ${nextAction}`);
+        return "Progress update shown to the user.";
+      }
+    };
 
-    const allTools = [
+    const allTools: AgentTool[] = [
       readVfsTool,
       writeVfsTool,
       createListFilesTool(workspaceRoot),
@@ -109,7 +132,9 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
       "web_search",
       ...(lspSettings?.enabled ? ["lsp_get_definition", "lsp_get_references", "lsp_get_diagnostics"] : [])
     ];
-    const tools = allTools.filter((t: any) => enabledToolNames.includes(t.name));
+    const tools: AgentTool[] = allTools.filter((t) => enabledToolNames.includes(t.name));
+    // Observability is always available, including when a restrictive skill is selected.
+    tools.push(progressTool);
 
     // Connect to MCP servers and register their tools
     const mcpToolLines: string[] = [];
@@ -138,7 +163,10 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
       lsp_get_references: "- 'lsp_get_references': Find all references of a symbol (input: {\"path\": \"file/path\", \"line\": lineNum, \"character\": colNum}).",
       lsp_get_diagnostics: "- 'lsp_get_diagnostics': Get compile errors/warnings for a file (input: {\"path\": \"file/path\"})."
     };
-    const toolListText = enabledToolNames.map((name: string) => toolDescriptions[name] || `- '${name}'`).join("\n");
+    const toolListText = [
+      ...enabledToolNames.map((name: string) => toolDescriptions[name] || `- '${name}'`),
+      "- 'report_progress': Publish a concise reasoning summary and the next intended action."
+    ].join("\n");
 
     const defaultSystemPrompt = `You are an AI coding agent operating inside the Axiom spatial development canvas.
 You help the user analyze, modify, and implement code in their workspace.
@@ -158,7 +186,12 @@ Guidelines:
 ${mcpToolLines.length > 0 ? `\nMCP integration tools (external data sources):\n${mcpToolLines.join("\n")}\n` : ""}
 `;
 
-    const systemPrompt = skill?.systemPrompt || defaultSystemPrompt;
+    const systemPrompt = `${skill?.systemPrompt || defaultSystemPrompt}
+
+User-visible reasoning updates:
+- Before the first substantive action, call 'report_progress' with a concise summary of your approach and the next action.
+- Call it again whenever the evidence changes your plan or before a distinct new phase.
+- Base updates on concrete context and tool results. Do not reveal private chain-of-thought or hidden reasoning; keep each update to 1-3 clear sentences.`;
 
     sendLog("Initializing agent...");
 

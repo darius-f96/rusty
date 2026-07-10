@@ -53,6 +53,8 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
   const agentSocketRef = useRef<WebSocket | null>(null);
   const consoleMessageIdRef = useRef<string | null>(null);
   const consoleBufferRef = useRef<string>("");
+  const streamingResponseMessageIdRef = useRef<string | null>(null);
+  const streamingResponseBufferRef = useRef<string>("");
   const savedChatPathRef = useRef<string | null>(null);
   const chatSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isStreamingRef = useRef(false);
@@ -201,6 +203,8 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
     addAgentMessage(tab.id, consoleMessage);
     consoleMessageIdRef.current = consoleMessageId;
     consoleBufferRef.current = "";
+    streamingResponseMessageIdRef.current = null;
+    streamingResponseBufferRef.current = "";
     saveChatHistory();
     refreshHistoryAfterSave();
 
@@ -286,9 +290,18 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
         }
 
         if (msg.type === "token" && msg.tabId === tab.id) {
-          consoleBufferRef.current += msg.content;
-          if (consoleMessageIdRef.current) {
-            updateAgentMessage(tab.id, consoleMessageIdRef.current, consoleBufferRef.current);
+          streamingResponseBufferRef.current += msg.content;
+          if (!streamingResponseMessageIdRef.current) {
+            const responseMessageId = `msg_${Date.now()}_stream`;
+            streamingResponseMessageIdRef.current = responseMessageId;
+            addAgentMessage(tab.id, {
+              id: responseMessageId,
+              role: "assistant" as const,
+              content: streamingResponseBufferRef.current,
+              timestamp: new Date().toISOString(),
+            });
+          } else {
+            updateAgentMessage(tab.id, streamingResponseMessageIdRef.current, streamingResponseBufferRef.current);
           }
           return;
         }
@@ -356,18 +369,20 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
           }
 
           const responseContent = msg.response || "Agent complete.";
-          addAgentMessage(tab.id, {
-            id: `msg_${Date.now()}`,
-            role: "assistant" as const,
-            content: responseContent,
-            timestamp: new Date().toISOString(),
-          });
-
-          if (consoleMessageIdRef.current) {
-            updateAgentMessage(tab.id, consoleMessageIdRef.current, "");
+          if (streamingResponseMessageIdRef.current) {
+            updateAgentMessage(tab.id, streamingResponseMessageIdRef.current, responseContent);
+          } else {
+            addAgentMessage(tab.id, {
+              id: `msg_${Date.now()}`,
+              role: "assistant" as const,
+              content: responseContent,
+              timestamp: new Date().toISOString(),
+            });
           }
 
           isStreamingRef.current = false;
+          streamingResponseMessageIdRef.current = null;
+          streamingResponseBufferRef.current = "";
           setIsStreaming(false);
           saveChatHistory();
           refreshHistoryAfterSave();
@@ -422,27 +437,6 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
 
     socket.onclose = (event) => {
       console.log(`[AgentTab] WebSocket closed (code: ${event.code})`);
-
-      if (isStreamingRef.current && consoleBufferRef.current && consoleBufferRef.current.trim()) {
-        const consoleContent = consoleBufferRef.current.trim();
-        if (consoleContent.length > 50) {
-          addAgentMessage(tab.id, {
-            id: `msg_${Date.now()}`,
-            role: "assistant" as const,
-            content: consoleContent,
-            timestamp: new Date().toISOString(),
-          });
-          if (consoleMessageIdRef.current) {
-            updateAgentMessage(tab.id, consoleMessageIdRef.current, "");
-          }
-          isStreamingRef.current = false;
-          setIsStreaming(false);
-          saveChatHistory();
-          refreshHistoryAfterSave();
-          agentSocketRef.current = null;
-          return;
-        }
-      }
 
       if (isStreamingRef.current) {
         addAgentMessage(tab.id, {
