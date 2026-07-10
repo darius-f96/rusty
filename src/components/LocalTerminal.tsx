@@ -19,6 +19,10 @@ export const LocalTerminal: React.FC<LocalTerminalProps> = ({ sessionId, cwd, is
   const rootPath = useWorkspaceStore((state) => state.rootPath);
   const isSessionCreatedRef = useRef<boolean>(false);
   const isActiveRef = useRef<boolean>(isActive);
+  const lastSizeRef = useRef<{ cols: number; rows: number } | null>(null);
+  const resizeFrameRef = useRef<number | null>(null);
+  const resizeTimerRef = useRef<number | null>(null);
+  const writeChainRef = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     isActiveRef.current = isActive;
@@ -27,11 +31,16 @@ export const LocalTerminal: React.FC<LocalTerminalProps> = ({ sessionId, cwd, is
   useEffect(() => {
     if (!containerRef.current) return;
 
-    // Instantiate XTerm
     const term = new Terminal({
       cursorBlink: true,
       fontSize: 12,
       fontFamily: 'Fira Code, Menlo, Monaco, Consolas, "Courier New", monospace',
+      allowProposedApi: false,
+      convertEol: false,
+      scrollback: 10000,
+      fastScrollModifier: "alt",
+      fastScrollSensitivity: 5,
+      macOptionIsMeta: true,
       theme: {
         background: "#000000",
         foreground: "#cccccc",
@@ -44,37 +53,66 @@ export const LocalTerminal: React.FC<LocalTerminalProps> = ({ sessionId, cwd, is
     term.loadAddon(fitAddon);
 
     term.open(containerRef.current);
-    if (isActive && containerRef.current.clientWidth > 0 && containerRef.current.clientHeight > 0) {
+
+    const fitAndResize = (notifyBackend: boolean) => {
+      if (!containerRef.current || containerRef.current.clientWidth <= 0 || containerRef.current.clientHeight <= 0) {
+        return;
+      }
+
       try {
         fitAddon.fit();
+        const cols = term.cols;
+        const rows = term.rows;
+        const lastSize = lastSizeRef.current;
+        if (cols <= 0 || rows <= 0 || (lastSize?.cols === cols && lastSize?.rows === rows)) {
+          return;
+        }
+
+        lastSizeRef.current = { cols, rows };
+        if (notifyBackend && isSessionCreatedRef.current) {
+          invoke("resize_terminal", { sessionId, cols, rows }).catch((err) => {
+            console.error("Failed to resize terminal:", err);
+          });
+        }
       } catch (err) {
-        console.warn("xterm initial fit failed:", err);
+        console.warn("xterm fit failed:", err);
       }
+    };
+
+    if (containerRef.current.clientWidth > 0 && containerRef.current.clientHeight > 0) {
+      fitAndResize(false);
     }
 
     terminalRef.current = term;
     fitAddonRef.current = fitAddon;
+    isSessionCreatedRef.current = false;
+    writeChainRef.current = Promise.resolve();
 
     let unlisten: (() => void) | null = null;
+    const inputDisposable = term.onData((data) => {
+      if (!isSessionCreatedRef.current) return;
+
+      // xterm already produces the exact terminal control sequences. Preserve
+      // their order but otherwise pass them straight through to the native PTY.
+      writeChainRef.current = writeChainRef.current
+        .then(async () => {
+          await invoke("write_to_terminal", { sessionId, input: data });
+        })
+        .catch((err) => {
+          console.error("Failed to write to terminal:", err);
+        });
+    });
 
     const initTerminal = async () => {
       try {
         const terminalCwd = cwd || rootPath;
         
-        // Listen to outputs from the backend
-        const unsubscribe = await listen("terminal-output", (event) => {
-          const payload = event.payload as { session_id: string; data: string };
-          if (payload.session_id === sessionId) {
-            term.write(payload.data);
-          }
+        const unsubscribe = await listen<number[]>(`terminal-output-${sessionId}`, (event) => {
+          term.write(Uint8Array.from(event.payload));
         });
 
-        // Listen to process exit notifications
-        const unsubscribeExit = await listen("terminal-exit", (event) => {
-          const payload = event.payload as { session_id: string };
-          if (payload.session_id === sessionId) {
-            term.write("\r\n[Process completed]\r\n");
-          }
+        const unsubscribeExit = await listen(`terminal-exit-${sessionId}`, () => {
+          term.write("\r\n[Process completed]\r\n");
         });
 
         unlisten = () => {
@@ -82,9 +120,8 @@ export const LocalTerminal: React.FC<LocalTerminalProps> = ({ sessionId, cwd, is
           unsubscribeExit();
         };
 
-        // Create terminal session in Rust
-        const cols = term.cols;
-        const rows = term.rows;
+        const cols = lastSizeRef.current?.cols || term.cols;
+        const rows = lastSizeRef.current?.rows || term.rows;
         await invoke("create_terminal_session", {
           sessionId,
           cols,
@@ -93,14 +130,8 @@ export const LocalTerminal: React.FC<LocalTerminalProps> = ({ sessionId, cwd, is
         });
         isSessionCreatedRef.current = true;
 
-        // Handle user input
-        term.onData((data) => {
-          invoke("write_to_terminal", { sessionId, input: data }).catch((err) => {
-            console.error("Failed to write to terminal:", err);
-          });
-        });
+        fitAndResize(true);
 
-        // Focus the terminal
         if (isActive) {
           term.focus();
         }
@@ -112,7 +143,6 @@ export const LocalTerminal: React.FC<LocalTerminalProps> = ({ sessionId, cwd, is
 
     initTerminal();
 
-    // Resize observer to handle container size changes
     const resizeObserver = new ResizeObserver((entries) => {
       if (!isActiveRef.current) return;
       const entry = entries[0];
@@ -120,21 +150,16 @@ export const LocalTerminal: React.FC<LocalTerminalProps> = ({ sessionId, cwd, is
       const { width, height } = entry.contentRect;
       if (width <= 0 || height <= 0) return;
 
-      requestAnimationFrame(() => {
-        if (fitAddonRef.current && terminalRef.current && isSessionCreatedRef.current) {
-          try {
-            fitAddonRef.current.fit();
-            const cols = terminalRef.current.cols;
-            const rows = terminalRef.current.rows;
-            if (cols > 0 && rows > 0) {
-              invoke("resize_terminal", { sessionId, cols, rows }).catch((err) => {
-                console.error("Failed to resize terminal:", err);
-              });
-            }
-          } catch (err) {
-            console.warn("xterm fit error:", err);
-          }
+      if (resizeFrameRef.current !== null) {
+        cancelAnimationFrame(resizeFrameRef.current);
+      }
+
+      resizeFrameRef.current = requestAnimationFrame(() => {
+        fitAndResize(false);
+        if (resizeTimerRef.current !== null) {
+          window.clearTimeout(resizeTimerRef.current);
         }
+        resizeTimerRef.current = window.setTimeout(() => fitAndResize(true), 80);
       });
     });
     resizeObserver.observe(containerRef.current);
@@ -142,7 +167,14 @@ export const LocalTerminal: React.FC<LocalTerminalProps> = ({ sessionId, cwd, is
     return () => {
       resizeObserver.disconnect();
       if (unlisten) unlisten();
-      // Clean up session in Rust backend
+      inputDisposable.dispose();
+      if (resizeFrameRef.current !== null) {
+        cancelAnimationFrame(resizeFrameRef.current);
+      }
+      if (resizeTimerRef.current !== null) {
+        window.clearTimeout(resizeTimerRef.current);
+      }
+      isSessionCreatedRef.current = false;
       invoke("close_terminal_session", { sessionId }).catch((err) => {
         console.error("Failed to close terminal session:", err);
       });
@@ -152,19 +184,24 @@ export const LocalTerminal: React.FC<LocalTerminalProps> = ({ sessionId, cwd, is
 
   // Recalculate size and focus when tab becomes active
   useEffect(() => {
-    if (isActive && terminalRef.current && fitAddonRef.current && isSessionCreatedRef.current) {
+    if (isActive && terminalRef.current && fitAddonRef.current) {
       const timer = setTimeout(() => {
-        if (fitAddonRef.current && terminalRef.current) {
+        const terminal = terminalRef.current;
+        const fitAddon = fitAddonRef.current;
+        const container = containerRef.current;
+        if (fitAddon && terminal && container && container.clientWidth > 0 && container.clientHeight > 0) {
           try {
-            fitAddonRef.current.fit();
-            const cols = terminalRef.current.cols;
-            const rows = terminalRef.current.rows;
-            if (cols > 0 && rows > 0) {
+            fitAddon.fit();
+            const cols = terminal.cols;
+            const rows = terminal.rows;
+            const lastSize = lastSizeRef.current;
+            if (cols > 0 && rows > 0 && (lastSize?.cols !== cols || lastSize?.rows !== rows)) {
+              lastSizeRef.current = { cols, rows };
               invoke("resize_terminal", { sessionId, cols, rows }).catch((err) => {
                 console.error("Failed to resize terminal:", err);
               });
             }
-            terminalRef.current.focus();
+            terminal.focus();
           } catch (err) {
             console.warn("xterm fit error on activate:", err);
           }

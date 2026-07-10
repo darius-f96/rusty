@@ -185,72 +185,70 @@ export const TerminalPanel: React.FC = () => {
       </div>
 
       {/* Terminal / Logs Content */}
-      {showDevConsole && (
-        <div className="flex-1 min-h-0 bg-black relative">
-          {terminalTabs.length === 0 ? (
-            <div className="w-full h-full flex flex-col items-center justify-center text-[var(--text-muted)] font-mono text-xs select-none">
-              <span>No active terminals</span>
-              <button
-                onClick={() => addTerminalTab("local")}
-                className="mt-2 px-3 py-1 bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 text-black font-bold rounded cursor-pointer transition-all border-none"
-              >
-                Open Terminal
-              </button>
-            </div>
-          ) : (
-            terminalTabs.map((tab) => {
-              const isActive = tab.id === activeTerminalTabId;
-              
-              if (tab.type === "dev-logs") {
-                return (
-                  <div
-                    key={tab.id}
-                    ref={consoleScrollRef}
-                    style={{ display: isActive ? "block" : "none" }}
-                    className="w-full h-full p-4 font-mono text-[11px] overflow-y-auto space-y-1 bg-black text-zinc-400 select-text selection:bg-indigo-900 selection:text-white"
-                  >
-                    {devLogs.length === 0 ? (
-                      <span className="text-[var(--text-muted)] select-none">// No dev console logs captured yet.</span>
-                    ) : (
-                      devLogs.map((log) => {
-                        const colors = {
-                          log: "text-zinc-400",
-                          warn: "text-amber-400 font-semibold",
-                          error: "text-rose-400 font-bold",
-                          system: "text-indigo-400 font-bold",
-                        };
-                        return (
-                          <div
-                            key={log.id}
-                            className="flex items-start space-x-2 leading-relaxed border-b border-zinc-950 pb-0.5 hover:bg-zinc-900/10"
-                          >
-                            <span className="text-[var(--text-muted)] select-none">[{log.timestamp}]</span>
-                            <span className={colors[log.type]}>{log.text}</span>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                );
-              } else {
-                return (
-                  <div
-                    key={tab.id}
-                    style={{ display: isActive ? "block" : "none" }}
-                    className="w-full h-full"
-                  >
-                    <LocalTerminal
-                      sessionId={tab.id}
-                      cwd={tab.cwd}
-                      isActive={isActive}
-                    />
-                  </div>
-                );
-              }
-            })
-          )}
-        </div>
-      )}
+      <div className={`flex-1 min-h-0 bg-black relative ${showDevConsole ? "" : "hidden"}`}>
+        {terminalTabs.length === 0 ? (
+          <div className="w-full h-full flex flex-col items-center justify-center text-[var(--text-muted)] font-mono text-xs select-none">
+            <span>No active terminals</span>
+            <button
+              onClick={() => addTerminalTab("local")}
+              className="mt-2 px-3 py-1 bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 text-black font-bold rounded cursor-pointer transition-all border-none"
+            >
+              Open Terminal
+            </button>
+          </div>
+        ) : (
+          terminalTabs.map((tab) => {
+            const isActive = tab.id === activeTerminalTabId;
+
+            if (tab.type === "dev-logs") {
+              return (
+                <div
+                  key={tab.id}
+                  ref={consoleScrollRef}
+                  style={{ display: isActive ? "block" : "none" }}
+                  className="w-full h-full p-4 font-mono text-[11px] overflow-y-auto space-y-1 bg-black text-zinc-400 select-text selection:bg-indigo-900 selection:text-white"
+                >
+                  {devLogs.length === 0 ? (
+                    <span className="text-[var(--text-muted)] select-none">// No dev console logs captured yet.</span>
+                  ) : (
+                    devLogs.map((log) => {
+                      const colors = {
+                        log: "text-zinc-400",
+                        warn: "text-amber-400 font-semibold",
+                        error: "text-rose-400 font-bold",
+                        system: "text-indigo-400 font-bold",
+                      };
+                      return (
+                        <div
+                          key={log.id}
+                          className="flex items-start space-x-2 leading-relaxed border-b border-zinc-950 pb-0.5 hover:bg-zinc-900/10"
+                        >
+                          <span className="text-[var(--text-muted)] select-none">[{log.timestamp}]</span>
+                          <span className={colors[log.type]}>{log.text}</span>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              );
+            } else {
+              return (
+                <div
+                  key={tab.id}
+                  style={{ display: isActive ? "block" : "none" }}
+                  className="w-full h-full"
+                >
+                  <LocalTerminal
+                    sessionId={tab.id}
+                    cwd={tab.cwd}
+                    isActive={isActive}
+                  />
+                </div>
+              );
+            }
+          })
+        )}
+      </div>
     </div>
   );
 };

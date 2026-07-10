@@ -11,6 +11,8 @@ use tauri::Manager;
 use tauri::Emitter;
 use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem, MasterPty};
 use std::io::{Write, Read};
+use std::sync::mpsc;
+use std::time::Duration;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct FileEntry {
@@ -33,6 +35,41 @@ pub struct TerminalSession {
 }
 
 pub struct TerminalState(pub Arc<Mutex<HashMap<String, TerminalSession>>>);
+
+/// Build the command for an interactive, login shell backed by a native PTY.
+///
+/// On macOS, GUI applications do not necessarily inherit the environment that
+/// Terminal.app receives. Starting the user's configured shell as a login
+/// shell lets zsh/bash/fish load the same profile files as a normal terminal.
+fn terminal_shell_command() -> (String, Vec<&'static str>) {
+    #[cfg(target_os = "windows")]
+    {
+        return ("powershell.exe".to_string(), vec!["-NoLogo"]);
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let shell = std::env::var("SHELL")
+            .ok()
+            .filter(|candidate| Path::new(candidate).is_file())
+            .unwrap_or_else(|| "/bin/zsh".to_string());
+        return (shell, vec!["-l"]);
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let shell = std::env::var("SHELL")
+            .ok()
+            .filter(|candidate| Path::new(candidate).is_file())
+            .unwrap_or_else(|| "/bin/sh".to_string());
+        return (shell, vec!["-l"]);
+    }
+
+    #[cfg(not(any(unix, target_os = "windows")))]
+    {
+        ("sh".to_string(), Vec::new())
+    }
+}
 
 
 fn get_tab_id(tab_id: Option<String>) -> String {
@@ -459,12 +496,15 @@ async fn create_terminal_session(
     cwd: Option<String>,
 ) -> Result<(), String> {
     println!("Rust [create_terminal_session] session_id: {}, cols: {}, rows: {}, cwd: {:?}", session_id, cols, rows, cwd);
+
+    {
+        let map = state.0.lock().map_err(|e| e.to_string())?;
+        if map.contains_key(&session_id) {
+            return Ok(());
+        }
+    }
     
-    let shell = if cfg!(target_os = "windows") {
-        "powershell.exe".to_string()
-    } else {
-        std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string())
-    };
+    let (shell, shell_args) = terminal_shell_command();
 
     let pty_system = NativePtySystem::default();
     let size = PtySize {
@@ -477,6 +517,13 @@ async fn create_terminal_session(
     let pair = pty_system.openpty(size).map_err(|e| e.to_string())?;
     
     let mut cmd = CommandBuilder::new(&shell);
+    cmd.args(shell_args);
+    // portable-pty assigns this PTY as the controlling TTY by default, so the
+    // login shell is also interactive (the same model used by native terminals).
+    cmd.env("TERM", "xterm-256color");
+    cmd.env("COLORTERM", "truecolor");
+    cmd.env("TERM_PROGRAM", "Axiom");
+    cmd.env("SHELL", &shell);
     if let Some(ref cwd_dir) = cwd {
         if !cwd_dir.is_empty() {
             cmd.cwd(cwd_dir);
@@ -496,42 +543,44 @@ async fn create_terminal_session(
         });
     }
 
+    let output_event = format!("terminal-output-{}", session_id);
+    let exit_event = format!("terminal-exit-{}", session_id);
+    let (tx, rx) = mpsc::channel::<Vec<u8>>();
+
     let app_clone = app.clone();
-    let session_id_clone = session_id.clone();
+    let output_event_clone = output_event.clone();
+    let exit_event_clone = exit_event.clone();
+    std::thread::spawn(move || {
+        while let Ok(mut chunk) = rx.recv() {
+            while let Ok(next) = rx.recv_timeout(Duration::from_millis(8)) {
+                chunk.extend_from_slice(&next);
+                if chunk.len() >= 64 * 1024 {
+                    break;
+                }
+            }
+
+            // Keep PTY output byte-for-byte intact. xterm accepts Uint8Array,
+            // while converting with from_utf8_lossy corrupts binary/invalid UTF-8
+            // sequences emitted by real terminal programs.
+            let _ = app_clone.emit(&output_event_clone, chunk);
+        }
+
+        let _ = app_clone.emit(&exit_event_clone, ());
+    });
+
     std::thread::spawn(move || {
         let mut buf = [0u8; 4096];
         loop {
             match reader.read(&mut buf) {
                 Ok(0) => break,
                 Ok(n) => {
-                    let data = String::from_utf8_lossy(&buf[..n]).to_string();
-                    #[derive(Clone, serde::Serialize)]
-                    struct TerminalOutputPayload {
-                        session_id: String,
-                        data: String,
+                    if tx.send(buf[..n].to_vec()).is_err() {
+                        break;
                     }
-                    let _ = app_clone.emit(
-                        "terminal-output",
-                        TerminalOutputPayload {
-                            session_id: session_id_clone.clone(),
-                            data,
-                        },
-                    );
                 }
                 Err(_) => break,
             }
         }
-        
-        #[derive(Clone, serde::Serialize)]
-        struct TerminalExitPayload {
-            session_id: String,
-        }
-        let _ = app_clone.emit(
-            "terminal-exit",
-            TerminalExitPayload {
-                session_id: session_id_clone,
-            },
-        );
     });
 
     Ok(())
@@ -544,10 +593,11 @@ async fn write_to_terminal(
     input: String,
 ) -> Result<(), String> {
     let mut map = state.0.lock().map_err(|e| e.to_string())?;
-    if let Some(session) = map.get_mut(&session_id) {
-        session.writer.write_all(input.as_bytes()).map_err(|e| e.to_string())?;
-        session.writer.flush().map_err(|e| e.to_string())?;
-    }
+    let session = map
+        .get_mut(&session_id)
+        .ok_or_else(|| format!("Terminal session '{session_id}' does not exist"))?;
+    session.writer.write_all(input.as_bytes()).map_err(|e| e.to_string())?;
+    session.writer.flush().map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -559,14 +609,15 @@ async fn resize_terminal(
     rows: u16,
 ) -> Result<(), String> {
     let map = state.0.lock().map_err(|e| e.to_string())?;
-    if let Some(session) = map.get(&session_id) {
-        session.master.resize(PtySize {
-            rows,
-            cols,
-            pixel_width: 0,
-            pixel_height: 0,
-        }).map_err(|e| e.to_string())?;
-    }
+    let session = map
+        .get(&session_id)
+        .ok_or_else(|| format!("Terminal session '{session_id}' does not exist"))?;
+    session.master.resize(PtySize {
+        rows,
+        cols,
+        pixel_width: 0,
+        pixel_height: 0,
+    }).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -576,7 +627,9 @@ async fn close_terminal_session(
     session_id: String,
 ) -> Result<(), String> {
     let mut map = state.0.lock().map_err(|e| e.to_string())?;
-    map.remove(&session_id);
+    if let Some(mut session) = map.remove(&session_id) {
+        let _ = session.child.kill();
+    }
     Ok(())
 }
 
