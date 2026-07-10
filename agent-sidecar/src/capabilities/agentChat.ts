@@ -14,6 +14,7 @@ import { callLlmWithToolsMultiRoundStreaming, LlmConfig } from "../services/llm"
 import { createLspTools } from "../services/lspTools";
 import { createMcpTools, McpServerConfig } from "../services/mcpClient";
 import { createWebSearchTool } from "../services/webSearchTool";
+import { runPiAgentChat } from "../services/piAgentChat";
 
 type AgentTool = {
   name: string;
@@ -238,13 +239,26 @@ User-visible reasoning updates:
       throw new Error("No API key available.");
     }
 
-    console.log(`WebSocket [Server] agent_chat Calling LLM (streaming): ${llmConfig.model} at ${llmConfig.baseUrl}`);
-
     const sendToken = (token: string) => {
       safeSend(ws, { type: "token", tabId, content: token });
     };
 
-    const responseText = await callLlmWithToolsMultiRoundStreaming(
+    const piModel = model?.includes("/")
+      ? model
+      : customProvider ? `${customProvider.id}/${llmConfig.model}` : model || "";
+    const piResponse = await runPiAgentChat({
+      model: piModel,
+      workspaceRoot,
+      systemPrompt,
+      conversationHistory: chatHistory || [],
+      message,
+      tools,
+      customProvider,
+      sendLog,
+      sendToken
+    });
+
+    const responseText = piResponse ?? await callLlmWithToolsMultiRoundStreaming(
       llmConfig,
       systemPrompt,
       message,

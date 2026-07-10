@@ -70,17 +70,22 @@ export async function writeMcpConfig(workspaceRoot: string, axiomServers: any[])
  * created even when the canvas has no MCP nodes. The MCP extension still reads
  * the workspace `.pi/mcp.json` written above when servers are configured.
  */
-export async function getPiResourceLoader(workspaceRoot: string): Promise<any | undefined> {
+export async function getPiResourceLoader(
+  workspaceRoot: string,
+  appendSystemPrompt: string[] = []
+): Promise<any | undefined> {
   try {
     const { DefaultResourceLoader } = await import("@earendil-works/pi-coding-agent");
     const mcpExtensionPath = path.join(__dirname, "../node_modules/pi-mcp-extension");
     const webAccessPackagePath = path.join(__dirname, "../node_modules/pi-web-access");
+    const subagentsPackagePath = path.join(__dirname, "../node_modules/@tintinweb/pi-subagents");
     const agentDir = path.join(os.homedir(), ".pi", "agent");
 
     const loader = new DefaultResourceLoader({
       cwd: workspaceRoot,
       agentDir,
-      additionalExtensionPaths: [mcpExtensionPath, webAccessPackagePath]
+      additionalExtensionPaths: [mcpExtensionPath, webAccessPackagePath, subagentsPackagePath],
+      appendSystemPrompt
     });
     await loader.reload();
     return loader;
