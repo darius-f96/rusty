@@ -79,12 +79,13 @@ export async function getPiResourceLoader(
     const mcpExtensionPath = path.join(__dirname, "../node_modules/pi-mcp-extension");
     const webAccessPackagePath = path.join(__dirname, "../node_modules/pi-web-access");
     const subagentsPackagePath = path.join(__dirname, "../node_modules/@tintinweb/pi-subagents");
+    const todoPackagePath = path.join(__dirname, "../node_modules/@juicesharp/rpiv-todo");
     const agentDir = path.join(os.homedir(), ".pi", "agent");
 
     const loader = new DefaultResourceLoader({
       cwd: workspaceRoot,
       agentDir,
-      additionalExtensionPaths: [mcpExtensionPath, webAccessPackagePath, subagentsPackagePath],
+      additionalExtensionPaths: [mcpExtensionPath, webAccessPackagePath, subagentsPackagePath, todoPackagePath],
       appendSystemPrompt
     });
     await loader.reload();

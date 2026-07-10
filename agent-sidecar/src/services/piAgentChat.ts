@@ -24,6 +24,7 @@ interface RunPiAgentChatOptions {
   } | null;
   sendLog: (message: string) => void;
   sendToken: (token: string) => void;
+  sendTodoUpdate: (tasks: any[]) => void;
 }
 
 function supportsPiRuntime(): boolean {
@@ -127,6 +128,7 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
     "web_search",
     "fetch_content",
     "get_search_content",
+    "todo",
     "Agent",
     "get_subagent_result",
     "steer_subagent"
@@ -155,6 +157,9 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
       options.sendLog(label);
     }
     if (event.type === "tool_execution_end") {
+      if (event.toolName === "todo" && Array.isArray(event.result?.details?.tasks)) {
+        options.sendTodoUpdate(event.result.details.tasks);
+      }
       options.sendLog(event.isError ? `${event.toolName} failed.` : `${event.toolName} completed.`);
     }
   });

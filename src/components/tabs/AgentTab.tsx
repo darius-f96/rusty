@@ -20,6 +20,16 @@ interface SavedChat {
   messageCount: number;
 }
 
+interface AgentTodo {
+  id: number;
+  subject: string;
+  description?: string;
+  activeForm?: string;
+  status: "pending" | "in_progress" | "completed" | "deleted";
+  blockedBy?: number[];
+  owner?: string;
+}
+
 export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) => {
   const customProviders = useWorkspaceStore((state) => state.customProviders);
   const activeModel = useWorkspaceStore((state) => state.activeModel);
@@ -43,6 +53,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
   const [isStreaming, setIsStreaming] = useState(false);
   const [pendingPermission, setPendingPermission] = useState<any>(null);
   const [modifiedFiles, setModifiedFiles] = useState<string[]>([]);
+  const [todos, setTodos] = useState<AgentTodo[]>([]);
 
   // Chat history panel state
   const [showHistory, setShowHistory] = useState(true);
@@ -303,6 +314,11 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
           } else {
             updateAgentMessage(tab.id, streamingResponseMessageIdRef.current, streamingResponseBufferRef.current);
           }
+          return;
+        }
+
+        if (msg.type === "todo_update" && msg.tabId === tab.id) {
+          setTodos(Array.isArray(msg.tasks) ? msg.tasks : []);
           return;
         }
 
@@ -707,6 +723,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
             messages={agentChats}
             isStreaming={isStreaming}
             streamingMessageId={consoleMessageIdRef.current}
+            todoTasks={todos}
           />
           
           <div className="p-4 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/10 flex-shrink-0 w-full mb-2">

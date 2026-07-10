@@ -23,6 +23,18 @@ type AgentTool = {
   execute: (args: any) => Promise<any>;
 };
 
+/** Keep lightweight questions fast, but make multi-step work visibly planned. */
+function needsTodoEnrichment(message: string): boolean {
+  const text = message.toLowerCase();
+  const planningSignals = [
+    "implement", "build", "create", "refactor", "migrate", "fix", "debug",
+    "investigate", "analyze", "review", "research", "plan", "delegate",
+    "multiple", "several", "step", "tasks", "and then"
+  ];
+  const signalCount = planningSignals.filter((signal) => text.includes(signal)).length;
+  return signalCount >= 2 || text.length > 280 || /\n\s*(?:\d+[.)]|[-*])\s+/.test(message);
+}
+
 export async function agentChat(ws: WebSocket, data: any): Promise<void> {
   const { tabId, message, model, workspaceRoot, chatHistory, customProvider, skill, lspSettings, mcpServers } = data;
   console.log(`WebSocket [Server] agent_chat starting`, { tabId, workspaceRoot, model, hasSkill: !!skill, lspEnabled: lspSettings?.enabled, mcpCount: mcpServers?.length || 0 });
@@ -193,6 +205,16 @@ User-visible reasoning updates:
 - Before the first substantive action, call 'report_progress' with a concise summary of your approach and the next action.
 - Call it again whenever the evidence changes your plan or before a distinct new phase.
 - Base updates on concrete context and tool results. Do not reveal private chain-of-thought or hidden reasoning; keep each update to 1-3 clear sentences.`;
+    const taskTrackingPrompt = needsTodoEnrichment(message) ? `
+
+Task tracking:
+- This request has been identified as multi-step work. Before any substantive tool call, use the 'todo' tool to create a concise plan.
+- Mark the active task in_progress before starting it, and completed only after verifying its outcome.
+- Use blockedBy to show real dependencies between tasks when applicable.`
+      : "";
+    if (taskTrackingPrompt) {
+      sendLog("Task-planning enrichment added: the agent will maintain a todo list for this request.");
+    }
 
     sendLog("Initializing agent...");
 
@@ -249,13 +271,14 @@ User-visible reasoning updates:
     const piResponse = await runPiAgentChat({
       model: piModel,
       workspaceRoot,
-      systemPrompt,
+      systemPrompt: `${systemPrompt}${taskTrackingPrompt}`,
       conversationHistory: chatHistory || [],
       message,
       tools,
       customProvider,
       sendLog,
-      sendToken
+      sendToken,
+      sendTodoUpdate: (tasks) => safeSend(ws, { type: "todo_update", tabId, tasks })
     });
 
     const responseText = piResponse ?? await callLlmWithToolsMultiRoundStreaming(

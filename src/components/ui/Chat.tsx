@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { formatMessageText } from "../../services/markdownService";
-import { ChevronRight, Terminal, Loader2, FileText, Folder } from "lucide-react";
+import { ChevronRight, Terminal, Loader2, FileText, Folder, CheckCircle2, Circle, ListTodo } from "lucide-react";
 
 export interface Message {
   id: string;
@@ -16,9 +16,17 @@ interface ChatProps {
   streamingMessageId?: string | null;
   compact?: boolean;
   scrollKey?: string;
+  todoTasks?: Array<{
+    id: number;
+    subject: string;
+    description?: string;
+    activeForm?: string;
+    status: "pending" | "in_progress" | "completed" | "deleted";
+    blockedBy?: number[];
+  }>;
 }
 
-export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, streamingMessageId = null, compact = false, scrollKey }) => {
+export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, streamingMessageId = null, compact = false, scrollKey, todoTasks = [] }) => {
   const [collapsedConsoles, setCollapsedConsoles] = useState<Record<string, boolean>>({});
   const consoleContentRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -102,13 +110,36 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
           </button>
 
           {!isCollapsed && (
-            <div
-              ref={isThisStreaming ? consoleContentRef : null}
-              className="px-4 py-3 max-h-60 overflow-y-auto bg-black/30 border-t border-[var(--border-color)]/20 font-mono text-[11px] leading-relaxed text-zinc-400"
-            >
-              <pre className="whitespace-pre-wrap font-mono">
-                {msg.content || "// Initializing agent workflow..."}
-              </pre>
+            <div className="bg-black/30 border-t border-[var(--border-color)]/20">
+              <div
+                ref={isThisStreaming ? consoleContentRef : null}
+                className="px-4 py-3 max-h-52 overflow-y-auto font-mono text-[11px] leading-relaxed text-zinc-400"
+              >
+                <pre className="whitespace-pre-wrap font-mono">
+                  {msg.content || "// Initializing agent workflow..."}
+                </pre>
+              </div>
+              {todoTasks.filter((task) => task.status !== "deleted").length > 0 && (
+                <div className="px-4 py-3 border-t border-[var(--border-color)]/30 bg-black/20">
+                  <div className="flex items-center space-x-2 mb-2 text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
+                    <ListTodo size={12} className="text-[var(--accent-color)]" />
+                    <span>Task list</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {todoTasks.filter((task) => task.status !== "deleted").map((task) => {
+                      const done = task.status === "completed";
+                      const active = task.status === "in_progress";
+                      return (
+                        <div key={task.id} className={`flex items-center space-x-2 text-[11px] font-mono ${done ? "text-emerald-300" : active ? "text-violet-200" : "text-[var(--text-normal)]"}`}>
+                          {done ? <CheckCircle2 size={12} /> : <Circle size={12} className={active ? "animate-pulse text-violet-400" : "text-[var(--text-muted)]"} />}
+                          <span className={done ? "line-through opacity-70" : ""}>{active ? task.activeForm || task.subject : task.subject}</span>
+                          {task.blockedBy?.length ? <span className="text-[9px] text-amber-300/80">blocked</span> : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
