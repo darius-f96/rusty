@@ -65,6 +65,8 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
   const savedChatPathRef = useRef<string | null>(null);
   const chatSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isStreamingRef = useRef(false);
+  const lastUserMessageIdRef = useRef<string | null>(null);
+  const lastConsoleMessageIdRef = useRef<string | null>(null);
 
   const modelOptions = customProviders.flatMap((p) => p.models).map((m) => ({
     id: m.id,
@@ -193,6 +195,18 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
       }
       window.setTimeout(() => agentSocketRef.current?.close(), 250);
     }
+
+    // Clean up the unfinished/stopped messages from store
+    const currentChats = useWorkspaceStore.getState().agentChats[tab.id] || [];
+    const filteredChats = currentChats.filter(
+      (m) => m.id !== lastUserMessageIdRef.current && m.id !== lastConsoleMessageIdRef.current
+    );
+    setAgentMessages(tab.id, filteredChats);
+
+    // Clear message tracking refs
+    lastUserMessageIdRef.current = null;
+    lastConsoleMessageIdRef.current = null;
+
     setSubagents((current) => current.map((subagent) =>
       subagent.status === "queued" || subagent.status === "running" || subagent.status === "background"
         ? {
@@ -207,6 +221,8 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
     isStreamingRef.current = false;
     setIsStreaming(false);
     setAgentQuestion(null);
+    saveChatHistory();
+    refreshHistoryAfterSave();
   };
 
   const handleAgentQuestionAnswer = (answer: string) => {
@@ -248,6 +264,9 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
       content: "",
       timestamp: new Date().toISOString(),
     };
+
+    lastUserMessageIdRef.current = userMessage.id;
+    lastConsoleMessageIdRef.current = consoleMessageId;
 
     addAgentMessage(tab.id, userMessage);
     addAgentMessage(tab.id, consoleMessage);
@@ -475,6 +494,8 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
           }
 
           isStreamingRef.current = false;
+          lastUserMessageIdRef.current = null;
+          lastConsoleMessageIdRef.current = null;
           streamingResponseMessageIdRef.current = null;
           streamingResponseBufferRef.current = "";
           setIsStreaming(false);
@@ -495,6 +516,8 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
             timestamp: new Date().toISOString(),
           });
           isStreamingRef.current = false;
+          lastUserMessageIdRef.current = null;
+          lastConsoleMessageIdRef.current = null;
           setIsStreaming(false);
           socket.close();
           notify("Agent Error", `The agent encountered an error: ${msg.error}`, "error");
@@ -521,6 +544,8 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
         timestamp: new Date().toISOString(),
       });
       isStreamingRef.current = false;
+      lastUserMessageIdRef.current = null;
+      lastConsoleMessageIdRef.current = null;
       setIsStreaming(false);
       notify(
         "Sidecar Connection Failed",
@@ -540,6 +565,8 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
           timestamp: new Date().toISOString(),
         });
         isStreamingRef.current = false;
+        lastUserMessageIdRef.current = null;
+        lastConsoleMessageIdRef.current = null;
         setIsStreaming(false);
         notify(
           "Connection Lost",

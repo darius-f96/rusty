@@ -1,3 +1,4 @@
+import { memo } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
@@ -9,7 +10,7 @@ interface MarkdownRendererProps {
 }
 
 /** Renders untrusted Markdown without allowing raw HTML. */
-export const MarkdownRenderer = ({ content, className = "" }: MarkdownRendererProps) => (
+export const MarkdownRenderer = memo(({ content, className = "" }: MarkdownRendererProps) => (
   <div className={`markdown-content text-left ${className}`}>
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
@@ -47,4 +48,5 @@ export const MarkdownRenderer = ({ content, className = "" }: MarkdownRendererPr
       {content}
     </ReactMarkdown>
   </div>
-);
+));
+
