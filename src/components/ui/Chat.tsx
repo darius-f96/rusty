@@ -104,10 +104,10 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
     return seconds < 60 ? `working ${seconds}s` : `working ${Math.floor(seconds / 60)}m ${seconds % 60}s`;
   };
 
-  const renderSubagentLogs = (subagent: SubagentActivity, active: boolean) => {
+  const renderSubagentLogs = (subagent: SubagentActivity) => {
     const logs = subagent.logs || [];
     if (logs.length === 0 && !subagent.outputFile) return null;
-    const visibleLogs = logs.slice(-50);
+    const visibleLogs = logs.slice(-4);
 
     return (
       <div className="mt-2 rounded bg-black/20 border border-[var(--border-color)]/25 overflow-hidden">
@@ -117,7 +117,7 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
             <span className="normal-case tracking-normal">last {visibleLogs.length} of {logs.length}</span>
           )}
         </div>
-        <div className={`px-2 py-1.5 font-mono text-[10px] leading-relaxed text-zinc-400 ${active ? "max-h-52" : "max-h-40"} overflow-y-auto`}>
+        <div className="px-2 py-1.5 font-mono text-[10px] leading-relaxed text-zinc-400">
           {visibleLogs.map((log, idx) => (
             <div key={`${subagent.id}_log_${idx}`} className="whitespace-pre-wrap break-words">
               {log}
@@ -137,6 +137,8 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
     if (msg.role === "console") {
       const isCollapsed = collapsedConsoles[msg.id] ?? false;
       const isThisStreaming = isStreaming && streamingMessageId === msg.id;
+      const consoleLines = msg.content.split("\n").filter((line) => line.trim());
+      const visibleConsoleLines = consoleLines.slice(-4);
 
       return (
         <div key={msg.id} className="mb-4 bg-black/15 border border-[var(--border-color)]/70 rounded-lg overflow-hidden shadow-sm">
@@ -164,10 +166,10 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
             <div className="bg-black/30 border-t border-[var(--border-color)]/20">
               <div
                 ref={isThisStreaming ? consoleContentRef : null}
-                className="px-4 py-3 max-h-52 overflow-y-auto font-mono text-[11px] leading-relaxed text-zinc-400"
+                className="px-4 py-3 font-mono text-[11px] leading-relaxed text-zinc-400"
               >
                 <pre className="whitespace-pre-wrap font-mono">
-                  {msg.content || "// Initializing agent workflow..."}
+                  {visibleConsoleLines.join("\n") || "// Initializing agent workflow..."}
                 </pre>
               </div>
               {subagents.length > 0 && (
@@ -212,12 +214,7 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
                                   <span className="text-[9px] text-violet-300/70 whitespace-nowrap">{activeDuration(subagent)}</span>
                                 </div>
                               )}
-                              {renderSubagentLogs(subagent, active)}
-                              {(subagent.result || subagent.error) && !active && (
-                                <pre className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap rounded bg-black/25 border border-[var(--border-color)]/30 p-2 text-[10px] leading-relaxed text-zinc-400">
-                                  {subagent.error || subagent.result}
-                                </pre>
-                              )}
+                              {renderSubagentLogs(subagent)}
                             </div>
                           </div>
                         </div>

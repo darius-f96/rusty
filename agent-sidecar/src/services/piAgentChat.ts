@@ -4,6 +4,7 @@ import { importEsm } from "./esmImport";
 
 interface ActivePiRun {
   stop: (reason: string) => Promise<void>;
+  backgroundAgents: Set<string>;
 }
 
 const activePiRuns = new Map<string, ActivePiRun>();
@@ -18,11 +19,52 @@ export async function stopPiAgentRun(tabId: string, reason = "Stopped by user.")
   return true;
 }
 
+/** True while the main agent still needs to collect one or more delegated results. */
+export function hasActiveBackgroundSubagents(tabId: string): boolean {
+  return (activePiRuns.get(tabId)?.backgroundAgents.size ?? 0) > 0;
+}
+
 export interface PiChatTool {
   name: string;
   description: string;
   inputSchema?: any;
   execute: (args: any) => Promise<any>;
+}
+
+/**
+ * Pi's SDK tools use `parameters` and a five-argument execute callback, whereas
+ * the sidecar's existing tools use JSON-schema `inputSchema` and accept only
+ * the parsed arguments. Keep that adapter here so every UI, search, and
+ * question tool is presented to Pi in the contract it expects.
+ */
+function toPiSdkTool(tool: PiChatTool) {
+  return {
+    name: tool.name,
+    label: tool.name.replace(/_/g, " "),
+    description: tool.description,
+    parameters: tool.inputSchema ?? { type: "object", properties: {} },
+    execute: async (_toolCallId: string, params: any) => {
+      try {
+        const result = await tool.execute(params ?? {});
+        const text = typeof result === "string" ? result : JSON.stringify(result);
+        return {
+          content: [{ type: "text", text }],
+          details: {},
+        };
+      } catch (error: any) {
+        return {
+          content: [{ type: "text", text: error?.message || String(error) }],
+          details: { error: error?.message || String(error) },
+          isError: true,
+        };
+      }
+    },
+  };
+}
+
+export interface DeferredUserQuestion {
+  question: string;
+  options: Array<{ label: string; description?: string }>;
 }
 
 export interface SubagentUpdate {
@@ -68,6 +110,8 @@ interface RunPiAgentChatOptions {
   sendLog: (message: string) => void;
   sendToken: (token: string) => void;
   sendSubagentUpdate: (subagent: SubagentUpdate) => void;
+  consumeDeferredQuestion?: () => DeferredUserQuestion | undefined;
+  requestUserQuestion?: (question: DeferredUserQuestion) => Promise<string>;
 }
 
 function supportsPiRuntime(): boolean {
@@ -149,7 +193,9 @@ function toolLogLines(content: any): string[] {
 
 function summarizeTranscriptEntry(entry: any): string | undefined {
   const message = entry?.message;
-  if (entry?.type === "user") return "Subagent prompt recorded.";
+  // The initial user entry is the parent-issued task, not live subagent work.
+  // It belongs in the main agent activity stream rather than the compact card.
+  if (entry?.type === "user") return undefined;
 
   if (entry?.type === "assistant") {
     const toolLines = toolLogLines(message?.content);
@@ -177,6 +223,11 @@ function normalizeSubagentStatus(status: any, isError?: boolean): SubagentUpdate
     return status;
   }
   return "completed";
+}
+
+function getLiveSubagentRecord(id: string): any | undefined {
+  const registry = (globalThis as any)[Symbol.for("pi-subagents:manager")];
+  return registry?.getRecord?.(id);
 }
 
 /**
@@ -269,6 +320,7 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
   const customTools = hasWebAccessExtension
     ? options.tools.filter((tool) => tool.name !== "web_search")
     : options.tools;
+  const piCustomTools = customTools.map(toPiSdkTool);
   const toolNames = Array.from(new Set([
     ...customTools.map((tool) => tool.name),
     "web_search",
@@ -285,7 +337,7 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
     model: selectedModel,
     modelRegistry,
     tools: toolNames,
-    customTools: customTools as any,
+    customTools: piCustomTools as any,
     resourceLoader
   });
 
@@ -311,6 +363,11 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
   };
 
   const descriptionFor = (id: string, fallback: string) => subagentDescriptions.get(id) || fallback;
+  const logSubagentActivity = (id: string, message: string) => {
+    // Keep verbose subagent traces in the sidecar terminal; the frontend gets
+    // them through subagent_update so the main activity panel stays concise.
+    console.log(`[Subagent ${id.slice(0, 8)}] ${message}`);
+  };
 
   const appendActivityLog = (id: string, activity: string | undefined): string | undefined => {
     if (!activity) return undefined;
@@ -381,8 +438,11 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
     activePiRuns.delete(options.tabId);
   };
 
+  const backgroundAgents = new Set<string>();
+  const dispatchedBackgroundAgentIds = new Set<string>();
   activePiRuns.set(options.tabId, {
     stop: async (reason) => disposeRun(reason),
+    backgroundAgents,
   });
 
   const startTranscriptWatcher = (id: string, outputFile: string | undefined) => {
@@ -392,7 +452,28 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
         const raw = await fs.readFile(outputFile, "utf-8");
         const lines = raw.split("\n").filter((line) => line.trim().length > 0);
         const seen = transcriptLineCounts.get(id) ?? 0;
+        const record = getLiveSubagentRecord(id);
+        const terminal = record && record.status !== "running" && record.status !== "queued";
         if (lines.length <= seen) {
+          if (terminal) {
+            const status = normalizeSubagentStatus(record.status, record.status === "error");
+            backgroundAgents.delete(id);
+            logSubagentActivity(id, `${status}.`);
+            options.sendSubagentUpdate({
+              id,
+              description: descriptionFor(id, `Agent ${id}`),
+              status,
+              activity: status === "completed" ? "Completed." : `Finished with status: ${status}.`,
+              result: record.result,
+              error: record.error,
+              toolUses: record.toolUses,
+              durationMs: record.completedAt ? record.completedAt - record.startedAt : undefined,
+              appendLog: status === "completed" ? "Subagent completed." : `Subagent ${status}.`,
+              updatedAt: new Date().toISOString()
+            });
+            stopTranscriptWatcher(id);
+            return;
+          }
           const now = Date.now();
           const lastHeartbeat = transcriptHeartbeatAt.get(id) ?? 0;
           if (now - lastHeartbeat >= 3000 && transcriptWatchers.has(id)) {
@@ -400,7 +481,7 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
             const lastLog = transcriptHeartbeatLogAt.get(id) ?? 0;
             if (now - lastLog >= 10_000) {
               transcriptHeartbeatLogAt.set(id, now);
-              options.sendLog(`[Subagent ${id.slice(0, 8)}] Still active; awaiting the next completed step.`);
+              logSubagentActivity(id, "Still active; awaiting the next completed step.");
             }
             options.sendSubagentUpdate({
               id,
@@ -431,7 +512,7 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
         const latestActivity = logs[logs.length - 1];
         transcriptHeartbeatAt.set(id, Date.now());
         for (const log of logs) {
-          options.sendLog(`[Subagent ${id.slice(0, 8)}] ${log.replace(/\n/g, " · ")}`);
+          logSubagentActivity(id, log.replace(/\n/g, " · "));
         }
         options.sendSubagentUpdate({
           id,
@@ -443,6 +524,24 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
           outputFile,
           updatedAt: new Date().toISOString()
         });
+        if (terminal) {
+          const status = normalizeSubagentStatus(record.status, record.status === "error");
+          backgroundAgents.delete(id);
+          logSubagentActivity(id, `${status}.`);
+          options.sendSubagentUpdate({
+            id,
+            description: descriptionFor(id, `Agent ${id}`),
+            status,
+            activity: status === "completed" ? "Completed." : `Finished with status: ${status}.`,
+            result: record.result,
+            error: record.error,
+            toolUses: record.toolUses,
+            durationMs: record.completedAt ? record.completedAt - record.startedAt : undefined,
+            appendLog: status === "completed" ? "Subagent completed." : `Subagent ${status}.`,
+            updatedAt: new Date().toISOString()
+          });
+          stopTranscriptWatcher(id);
+        }
       } catch {
         // The transcript appears asynchronously; ignore read misses.
       }
@@ -565,6 +664,8 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
         });
         if (status === "background") {
           keepSessionForBackgroundAgents = true;
+          backgroundAgents.add(id);
+          dispatchedBackgroundAgentIds.add(id);
           startTranscriptWatcher(id, outputFile);
         } else {
           stopTranscriptWatcher(id);
@@ -605,17 +706,56 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
           updatedAt: new Date().toISOString()
         });
         if (status !== "background" && status !== "queued" && status !== "running") {
+          backgroundAgents.delete(event.args.agent_id);
           stopTranscriptWatcher(event.args.agent_id);
           hasSubagentResultForAggregation = true;
           maybeStartAggregation(`Subagent result incorporated: ${description}`);
         }
       }
-      options.sendLog(event.isError ? `${event.toolName} failed.` : `${event.toolName} completed.`);
+      if (event.isError) {
+        const details = textFromToolResult(event.result);
+        options.sendLog(`${event.toolName} failed${details ? `: ${details.slice(0, 500)}` : "."}`);
+      } else {
+        options.sendLog(`${event.toolName} completed.`);
+      }
     }
   });
 
   try {
     await session.prompt(options.message);
+    if (backgroundAgents.size > 0) {
+      options.sendLog(`Waiting for ${backgroundAgents.size} delegated subagent${backgroundAgents.size === 1 ? "" : "s"} before aggregation.`);
+      while (backgroundAgents.size > 0 && !disposed) {
+        const pending = [...backgroundAgents]
+          .map((id) => getLiveSubagentRecord(id)?.promise)
+          .filter((promise): promise is Promise<unknown> => Boolean(promise));
+        if (pending.length > 0) {
+          await Promise.race(pending);
+        } else {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+        for (const id of [...backgroundAgents]) {
+          const record = getLiveSubagentRecord(id);
+          if (record && record.status !== "running" && record.status !== "queued") {
+            backgroundAgents.delete(id);
+          }
+        }
+      }
+      if (!disposed) {
+        const agentIds = [...dispatchedBackgroundAgentIds].join(", ");
+        await session.prompt(
+          `All delegated subagents have finished. Retrieve the results for these agent IDs using get_subagent_result, then synthesize them into one response: ${agentIds}. Do not ask the user any refining question until that synthesis is complete.`
+        );
+      }
+    }
+    const deferredQuestion = options.consumeDeferredQuestion?.();
+    if (deferredQuestion && !disposed && options.requestUserQuestion) {
+      options.sendLog("Delegated work is complete; presenting the deferred question to the user.");
+      const answer = await options.requestUserQuestion(deferredQuestion);
+      await session.prompt(
+        `The user answered the deferred question "${deferredQuestion.question}" with: "${answer}". Incorporate this answer into the final recommendation, then respond concisely.`
+      );
+    }
     if (aggregationStarted) {
       sendAggregationUpdate("completed", "Final synthesized response is ready.", "Aggregation complete.");
     }
@@ -623,7 +763,7 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
     return textFromAssistantMessage(lastAssistant) || latestText || "Agent complete.";
   } finally {
     unsubscribe();
-    if (keepSessionForBackgroundAgents && !disposed) {
+    if (keepSessionForBackgroundAgents && backgroundAgents.size > 0 && !disposed) {
       options.sendLog("Main agent is standing by while background subagents continue. Stop remains available.");
     } else {
       await disposeRun();

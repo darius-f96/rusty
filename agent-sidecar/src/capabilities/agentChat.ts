@@ -14,7 +14,7 @@ import { callLlmWithToolsMultiRoundStreaming, LlmConfig } from "../services/llm"
 import { createLspTools } from "../services/lspTools";
 import { createMcpTools, McpServerConfig } from "../services/mcpClient";
 import { createWebSearchTool } from "../services/webSearchTool";
-import { runPiAgentChat } from "../services/piAgentChat";
+import { DeferredUserQuestion, hasActiveBackgroundSubagents, runPiAgentChat } from "../services/piAgentChat";
 
 type AgentTool = {
   name: string;
@@ -30,6 +30,7 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
 
   const modifiedFiles = new Set<string>();
   const mcpDisposers: Array<() => void> = [];
+  let deferredQuestion: DeferredUserQuestion | undefined;
 
   const sendLog = (logMessage: string) => {
     console.log(`[Agent:${tabId}] ${logMessage}`);
@@ -118,6 +119,25 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
       }
     };
 
+    const requestUserQuestion = (request: DeferredUserQuestion) => {
+      const requestId = `agent_question_${getNextId()}`;
+      sendLog(`Awaiting user input: ${request.question}`);
+      safeSend(ws, { type: "agent_question", tabId, requestId, ...request });
+      return new Promise<string>((resolve, reject) => {
+        registerPendingRequest(requestId, ws, (response) => {
+          if (response?.error) {
+            const error = String(response.error);
+            sendLog(`User question was not answered: ${error}`);
+            reject(new Error(error));
+            return;
+          }
+          const answer = String(response?.answer || "").trim();
+          sendLog(`User answered: ${answer || "(no answer)"}`);
+          resolve(answer || "The user did not provide an answer.");
+        }, 10 * 60_000);
+      });
+    };
+
     const askUserQuestionTool = {
       name: "ask_user_question",
       description: "Ask the user a focused question when a product or implementation choice blocks progress. Offer 2-4 concrete suggestions whenever possible.",
@@ -141,25 +161,16 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
         required: ["question"]
       },
       execute: async ({ question, options = [] }: { question: string; options?: Array<{ label: string; description?: string }> }) => {
-        const requestId = `agent_question_${getNextId()}`;
-        const normalizedOptions = Array.isArray(options)
-          ? options.filter((option) => option?.label?.trim()).slice(0, 4)
-          : [];
-        sendLog(`Awaiting user input: ${question}`);
-        safeSend(ws, { type: "agent_question", tabId, requestId, question, options: normalizedOptions });
-        return new Promise<string>((resolve, reject) => {
-          registerPendingRequest(requestId, ws, (response) => {
-            if (response?.error) {
-              const error = String(response.error);
-              sendLog(`User question was not answered: ${error}`);
-              reject(new Error(error));
-              return;
-            }
-            const answer = String(response?.answer || "").trim();
-            sendLog(`User answered: ${answer || "(no answer)"}`);
-            resolve(answer || "The user did not provide an answer.");
-          }, 10 * 60_000);
-        });
+        const normalizedQuestion: DeferredUserQuestion = {
+          question,
+          options: Array.isArray(options) ? options.filter((option) => option?.label?.trim()).slice(0, 4) : [],
+        };
+        if (hasActiveBackgroundSubagents(tabId)) {
+          deferredQuestion = normalizedQuestion;
+          sendLog("Deferred user question until delegated results are aggregated.");
+          return "Question deferred. Continue waiting for all subagent results; it will be shown after aggregation.";
+        }
+        return requestUserQuestion(normalizedQuestion);
       }
     };
 
@@ -249,6 +260,7 @@ Delegation:
 - When two or more investigations, reviews, or implementation steps are independent, delegate them concurrently by issuing multiple 'Agent' tool calls in the same turn.
 - Use background subagents for independent long-running work, and continue with work that does not depend on their results.
 - Keep dependent work sequential and wait for subagent results only when later work depends on them.
+- Never ask the user a refining question or present a final recommendation while delegated subagents are active. First retrieve every delegated result with get_subagent_result (use wait: true when necessary), then aggregate the findings.
 - Every delegated task must be narrowly scoped with a concrete deliverable. Ask for a concise findings memo, not an open-ended investigation.
 - Always set max_turns when delegating: use 3 for codebase mapping and 4 for web research or implementation analysis. Stop once the requested evidence is sufficient.
 - For codebase discovery, use the Explore agent with only the smallest relevant set of files. For product research, use at most three web searches and summarize the sources; do not keep browsing for marginal detail.
@@ -320,7 +332,13 @@ Questions:
       customProvider,
       sendLog,
       sendToken,
-      sendSubagentUpdate: (subagent) => safeSend(ws, { type: "subagent_update", tabId, subagent })
+      sendSubagentUpdate: (subagent) => safeSend(ws, { type: "subagent_update", tabId, subagent }),
+      consumeDeferredQuestion: () => {
+        const question = deferredQuestion;
+        deferredQuestion = undefined;
+        return question;
+      },
+      requestUserQuestion,
     });
 
     const responseText = piResponse ?? await callLlmWithToolsMultiRoundStreaming(

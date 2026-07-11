@@ -39,7 +39,7 @@ export function registerPendingRequest(
       pendingRequests.delete(requestId);
       resolver({ error: `Request timed out after ${timeoutMs / 1000}s — client may have disconnected.` });
     }
-  }, PENDING_REQUEST_TIMEOUT_MS);
+  }, timeoutMs);
 
   pendingRequests.set(requestId, {
     resolver: (res) => {

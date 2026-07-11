@@ -41,7 +41,7 @@ export const MarkdownRenderer = ({ content, className = "" }: MarkdownRendererPr
             <code className="px-1.5 py-0.5 rounded bg-[var(--bg-sidebar)] border border-[var(--border-color)] text-rose-400 font-mono text-[11px]" {...props}>{children}</code>
           );
         },
-        pre: ({ children }) => <pre className="my-3 max-h-[400px] overflow-auto rounded-lg border border-[var(--border-color)] bg-[#0d1117] p-3">{children}</pre>,
+        pre: ({ children }) => <pre className="my-3 whitespace-pre-wrap break-words rounded-lg border border-[var(--border-color)] bg-[#0d1117] p-3">{children}</pre>,
       }}
     >
       {content}

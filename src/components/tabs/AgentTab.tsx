@@ -359,7 +359,11 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
               ...(Array.isArray(incoming.logs) ? incoming.logs : []),
               ...(incoming.appendLog ? [incoming.appendLog] : []),
             ];
-            const cleanIncoming = { ...incoming };
+            // Subagent conclusions are intentionally not retained in the activity
+            // panel. The parent agent receives them for the final aggregation, but
+            // showing them here makes the live-status view turn into a second,
+            // very long answer.
+            const cleanIncoming = { ...incoming, result: undefined, error: undefined };
             delete cleanIncoming.appendLog;
             delete cleanIncoming.previousId;
             if (index === -1) {
@@ -450,7 +454,14 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
 
           const responseContent = msg.response || "Agent complete.";
           if (Array.isArray(msg.subagents)) {
-            setSubagents(msg.subagents);
+            // The completed response can contain each subagent's full result.
+            // Keep the panel focused on status and its last few activity lines.
+            setSubagents(msg.subagents.map((subagent: SubagentActivity) => ({
+              ...subagent,
+              result: undefined,
+              error: undefined,
+              logs: (subagent.logs || []).slice(-4),
+            })));
           }
           if (streamingResponseMessageIdRef.current) {
             updateAgentMessage(tab.id, streamingResponseMessageIdRef.current, responseContent);

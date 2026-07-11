@@ -251,7 +251,7 @@ function renderBlocks(blocks: ParsedBlock[]): React.ReactNode[] {
                 Copy
               </button>
             </div>
-            <pre className="overflow-auto m-0 p-3 text-[10px] leading-relaxed font-mono text-[var(--text-normal)] max-h-[400px]">
+            <pre className="m-0 whitespace-pre-wrap break-words p-3 text-[10px] leading-relaxed font-mono text-[var(--text-normal)]">
               <code>{block.content}</code>
             </pre>
           </div>
@@ -259,7 +259,7 @@ function renderBlocks(blocks: ParsedBlock[]): React.ReactNode[] {
 
       case "table":
         return (
-          <div key={k} className="my-3 overflow-x-auto rounded-lg border border-[var(--border-color)]">
+          <div key={k} className="my-3 rounded-lg border border-[var(--border-color)]">
             <table className="w-full text-left border-collapse font-sans text-[11px]">
               <thead>
                 <tr className="bg-[var(--bg-sidebar)] border-b border-[var(--border-color)]">
