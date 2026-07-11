@@ -17,15 +17,19 @@ export interface SubagentActivity {
   displayName?: string;
   description: string;
   subagentType?: string;
+  isAggregation?: boolean;
   status: "queued" | "running" | "background" | "completed" | "steered" | "aborted" | "stopped" | "error";
   activity?: string;
   result?: string;
   error?: string;
+  outputFile?: string;
   toolUses?: number;
   tokens?: string;
   turnCount?: number;
   maxTurns?: number;
   durationMs?: number;
+  appendLog?: string;
+  logs?: string[];
   updatedAt?: string;
 }
 
@@ -113,6 +117,35 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
     return parts.join(" · ");
   };
 
+  const renderSubagentLogs = (subagent: SubagentActivity, active: boolean) => {
+    const logs = subagent.logs || [];
+    if (logs.length === 0 && !subagent.outputFile) return null;
+    const visibleLogs = logs.slice(-30);
+
+    return (
+      <div className="mt-2 rounded bg-black/20 border border-[var(--border-color)]/25 overflow-hidden">
+        <div className="px-2 py-1 border-b border-[var(--border-color)]/20 text-[9px] uppercase tracking-wider text-[var(--text-muted)] flex items-center justify-between">
+          <span>{subagent.isAggregation ? "Aggregation log" : "Subagent log"}</span>
+          {logs.length > visibleLogs.length && (
+            <span className="normal-case tracking-normal">last {visibleLogs.length} of {logs.length}</span>
+          )}
+        </div>
+        <div className={`px-2 py-1.5 font-mono text-[10px] leading-relaxed text-zinc-400 ${active ? "max-h-32" : "max-h-40"} overflow-y-auto`}>
+          {visibleLogs.map((log, idx) => (
+            <div key={`${subagent.id}_log_${idx}`} className="whitespace-pre-wrap break-words">
+              {log}
+            </div>
+          ))}
+          {subagent.outputFile && (
+            <div className="whitespace-pre-wrap break-words text-[var(--text-muted)]">
+              Transcript: {subagent.outputFile}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const renderMessage = (msg: Message) => {
     if (msg.role === "console") {
       const isCollapsed = collapsedConsoles[msg.id] ?? false;
@@ -154,7 +187,7 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
                 <div className="px-4 py-3 border-t border-[var(--border-color)]/30 bg-black/20">
                   <div className="flex items-center space-x-2 mb-2 text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
                     <Bot size={12} className="text-[var(--accent-color)]" />
-                    <span>Subagents</span>
+                    <span>Subagents & aggregation</span>
                     <span className="text-[9px] normal-case tracking-normal text-[var(--text-muted)]">
                       {subagents.filter((subagent) => isSubagentActive(subagent.status)).length} active · {subagents.filter((subagent) => !isSubagentActive(subagent.status)).length} done
                     </span>
@@ -171,6 +204,8 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
                               <AlertCircle size={13} className="mt-0.5 text-rose-400 flex-shrink-0" />
                             ) : active ? (
                               <Circle size={13} className="mt-0.5 animate-pulse text-violet-400 flex-shrink-0" />
+                            ) : subagent.isAggregation ? (
+                              <Bot size={13} className="mt-0.5 text-emerald-400 flex-shrink-0" />
                             ) : (
                               <CheckCircle2 size={13} className="mt-0.5 text-emerald-400 flex-shrink-0" />
                             )}
@@ -186,6 +221,7 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
                               {subagent.activity && active && (
                                 <div className="text-[10px] text-[var(--text-muted)] mt-1">{subagent.activity}</div>
                               )}
+                              {renderSubagentLogs(subagent, active)}
                               {(subagent.result || subagent.error) && !active && (
                                 <pre className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap rounded bg-black/25 border border-[var(--border-color)]/30 p-2 text-[10px] leading-relaxed text-zinc-400">
                                   {subagent.error || subagent.result}

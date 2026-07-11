@@ -1,3 +1,4 @@
+import * as fs from "node:fs/promises";
 import { getPiResourceLoader } from "./piMcp";
 import { importEsm } from "./esmImport";
 
@@ -15,15 +16,19 @@ export interface SubagentUpdate {
   displayName?: string;
   description: string;
   subagentType?: string;
+  isAggregation?: boolean;
   status: "queued" | "running" | "background" | "completed" | "steered" | "aborted" | "stopped" | "error";
   activity?: string;
   result?: string;
   error?: string;
+  outputFile?: string;
   toolUses?: number;
   tokens?: string;
   turnCount?: number;
   maxTurns?: number;
   durationMs?: number;
+  appendLog?: string;
+  logs?: string[];
   updatedAt: string;
 }
 
@@ -76,6 +81,54 @@ function textFromToolResult(result: any): string | undefined {
       .join("\n")
       .trim() || undefined;
   }
+  return undefined;
+}
+
+function outputFileFromText(text: string | undefined): string | undefined {
+  if (!text) return undefined;
+  const match = text.match(/^Output file:\s*(.+)$/m);
+  return match?.[1]?.trim();
+}
+
+function compactLogText(text: string | undefined, maxLength = 180): string | undefined {
+  const normalized = text?.replace(/\s+/g, " ").trim();
+  if (!normalized) return undefined;
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}…` : normalized;
+}
+
+function textFromMessageContent(content: any): string | undefined {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return undefined;
+  return content
+    .filter((part: any) => part?.type === "text" && typeof part.text === "string")
+    .map((part: any) => part.text)
+    .join("\n")
+    .trim() || undefined;
+}
+
+function toolNamesFromMessageContent(content: any): string[] {
+  if (!Array.isArray(content)) return [];
+  return content
+    .filter((part: any) => part?.type === "tool_use" && typeof part.name === "string")
+    .map((part: any) => part.name);
+}
+
+function summarizeTranscriptEntry(entry: any): string | undefined {
+  const message = entry?.message;
+  if (entry?.type === "user") return "Subagent prompt recorded.";
+
+  if (entry?.type === "assistant") {
+    const tools = toolNamesFromMessageContent(message?.content);
+    if (tools.length > 0) return `Assistant requested tool${tools.length === 1 ? "" : "s"}: ${tools.join(", ")}.`;
+    const text = compactLogText(textFromMessageContent(message?.content));
+    return text ? `Assistant: ${text}` : "Assistant response updated.";
+  }
+
+  if (entry?.type === "toolResult") {
+    const text = compactLogText(textFromMessageContent(message?.content) || textFromToolResult(message));
+    return text ? `Tool result: ${text}` : "Tool result received.";
+  }
+
   return undefined;
 }
 
@@ -198,18 +251,129 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
   let latestText = "";
   let syntheticSubagentCounter = 0;
   const pendingSubagentIds = new Map<string, string>();
+  const subagentDescriptions = new Map<string, string>();
+  const lastActivityLog = new Map<string, { activity: string; at: number }>();
+  const transcriptWatchers = new Map<string, NodeJS.Timeout>();
+  const transcriptLineCounts = new Map<string, number>();
+  let activeSubagentToolCalls = 0;
+  let hasSubagentResultForAggregation = false;
+  let aggregationStarted = false;
+  let aggregationWritingLogged = false;
+  const aggregationId = "main-agent-aggregation";
+
+  const rememberDescription = (id: string, description: string | undefined) => {
+    if (description) subagentDescriptions.set(id, description);
+  };
+
+  const descriptionFor = (id: string, fallback: string) => subagentDescriptions.get(id) || fallback;
+
+  const appendActivityLog = (id: string, activity: string | undefined): string | undefined => {
+    if (!activity) return undefined;
+    const now = Date.now();
+    const last = lastActivityLog.get(id);
+    if (last?.activity === activity) return undefined;
+    if (last && now - last.at < 2500) return undefined;
+    lastActivityLog.set(id, { activity, at: now });
+    return activity.startsWith("Agent ") || activity.endsWith(".") ? activity : `Activity: ${activity}`;
+  };
+
+  const sendAggregationUpdate = (
+    status: SubagentUpdate["status"],
+    activity: string,
+    appendLog?: string
+  ) => {
+    options.sendSubagentUpdate({
+      id: aggregationId,
+      displayName: "Aggregation",
+      description: "Main agent synthesis",
+      subagentType: "Main agent",
+      isAggregation: true,
+      status,
+      activity,
+      appendLog,
+      updatedAt: new Date().toISOString()
+    });
+  };
+
+  const maybeStartAggregation = (reason: string) => {
+    if (!hasSubagentResultForAggregation || activeSubagentToolCalls > 0 || aggregationStarted) return;
+    aggregationStarted = true;
+    aggregationWritingLogged = false;
+    sendAggregationUpdate(
+      "running",
+      "Synthesizing subagent results.",
+      reason
+    );
+    options.sendLog("Aggregating subagent results.");
+  };
+
+  const stopTranscriptWatcher = (id: string) => {
+    const timer = transcriptWatchers.get(id);
+    if (timer) clearInterval(timer);
+    transcriptWatchers.delete(id);
+    transcriptLineCounts.delete(id);
+  };
+
+  const startTranscriptWatcher = (id: string, outputFile: string | undefined) => {
+    if (!outputFile || transcriptWatchers.has(id)) return;
+    const poll = async () => {
+      try {
+        const raw = await fs.readFile(outputFile, "utf-8");
+        const lines = raw.split("\n").filter((line) => line.trim().length > 0);
+        const seen = transcriptLineCounts.get(id) ?? 0;
+        if (lines.length <= seen) return;
+
+        const logs = lines
+          .slice(seen)
+          .map((line) => {
+            try {
+              return summarizeTranscriptEntry(JSON.parse(line));
+            } catch {
+              return undefined;
+            }
+          })
+          .filter((line): line is string => Boolean(line));
+
+        transcriptLineCounts.set(id, lines.length);
+        if (logs.length === 0) return;
+        if (!transcriptWatchers.has(id)) return;
+
+        options.sendSubagentUpdate({
+          id,
+          description: descriptionFor(id, `Agent ${id}`),
+          status: "background",
+          activity: "Transcript updated.",
+          logs,
+          outputFile,
+          updatedAt: new Date().toISOString()
+        });
+      } catch {
+        // The transcript appears asynchronously; ignore read misses.
+      }
+    };
+
+    transcriptWatchers.set(id, setInterval(poll, 1500));
+    void poll();
+  };
+
   const unsubscribe = session.subscribe((event: any) => {
     if (event.type === "message_update" && event.assistantMessageEvent?.type === "text_delta") {
       latestText += event.assistantMessageEvent.delta;
       options.sendToken(event.assistantMessageEvent.delta);
+      if (aggregationStarted && !aggregationWritingLogged) {
+        aggregationWritingLogged = true;
+        sendAggregationUpdate("running", "Writing the final synthesized response.", "Writing final response from aggregated results.");
+      }
     }
     if (event.type === "tool_execution_start") {
       if (event.toolName === "Agent") {
+        activeSubagentToolCalls++;
         const key = toolEventKey(event) || `agent_start_${++syntheticSubagentCounter}`;
         const id = `pending-${key}`;
         pendingSubagentIds.set(key, id);
         const description = subagentDescription(event.args);
         const subagentType = event.args?.subagent_type;
+        rememberDescription(id, description);
         options.sendSubagentUpdate({
           id,
           displayName: subagentType || "Agent",
@@ -217,14 +381,17 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
           subagentType,
           status: event.args?.run_in_background ? "background" : "running",
           activity: "Delegated; waiting for result.",
+          appendLog: `Delegated ${subagentType || "Agent"} subagent.`,
           updatedAt: new Date().toISOString()
         });
       } else if (event.toolName === "get_subagent_result" && event.args?.agent_id) {
+        activeSubagentToolCalls++;
         options.sendSubagentUpdate({
           id: event.args.agent_id,
-          description: `Agent ${event.args.agent_id}`,
+          description: descriptionFor(event.args.agent_id, `Agent ${event.args.agent_id}`),
           status: "running",
           activity: event.args?.wait ? "Waiting for background result." : "Fetching background result.",
+          appendLog: event.args?.wait ? "Waiting for background result." : "Fetching background result.",
           updatedAt: new Date().toISOString()
         });
       }
@@ -234,52 +401,116 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
         : `Running ${event.toolName}.`;
       options.sendLog(label);
     }
+    if (event.type === "tool_execution_update" && event.toolName === "Agent") {
+      const key = toolEventKey(event);
+      const pendingId = key ? pendingSubagentIds.get(key) : undefined;
+      const details = event.partialResult?.details || {};
+      const id = details.agentId || pendingId || `agent-${++syntheticSubagentCounter}`;
+      const description = details.description || (pendingId ? descriptionFor(pendingId, subagentDescription(event.args)) : subagentDescription(event.args));
+      rememberDescription(id, description);
+      if (pendingId) rememberDescription(pendingId, description);
+
+      const activity = details.activity || textFromToolResult(event.partialResult);
+      options.sendSubagentUpdate({
+        id,
+        previousId: details.agentId && pendingId && details.agentId !== pendingId ? pendingId : undefined,
+        agentId: details.agentId,
+        displayName: details.displayName,
+        description,
+        subagentType: details.subagentType || event.args?.subagent_type,
+        status: normalizeSubagentStatus(details.status || "running", false),
+        activity,
+        appendLog: appendActivityLog(id, activity),
+        toolUses: details.toolUses,
+        tokens: details.tokens,
+        turnCount: details.turnCount,
+        maxTurns: details.maxTurns,
+        durationMs: details.durationMs,
+        updatedAt: new Date().toISOString()
+      });
+    }
     if (event.type === "tool_execution_end") {
       if (event.toolName === "Agent") {
+        activeSubagentToolCalls = Math.max(0, activeSubagentToolCalls - 1);
         const key = toolEventKey(event);
         const pendingId = key ? pendingSubagentIds.get(key) : undefined;
         if (key) pendingSubagentIds.delete(key);
         const details = event.result?.details || {};
         const resultText = textFromToolResult(event.result);
         const id = details.agentId || pendingId || `agent-${++syntheticSubagentCounter}`;
+        const status = normalizeSubagentStatus(details.status, event.isError);
+        const description = details.description || subagentDescription(event.args);
+        const outputFile = outputFileFromText(resultText);
+        rememberDescription(id, description);
         options.sendSubagentUpdate({
           id,
           previousId: details.agentId && pendingId ? pendingId : undefined,
           agentId: details.agentId,
           displayName: details.displayName,
-          description: details.description || subagentDescription(event.args),
+          description,
           subagentType: details.subagentType || event.args?.subagent_type,
-          status: normalizeSubagentStatus(details.status, event.isError),
+          status,
           activity: details.activity,
           result: resultText,
           error: details.error || (event.isError ? resultText : undefined),
+          outputFile,
           toolUses: details.toolUses,
           tokens: details.tokens,
           turnCount: details.turnCount,
           maxTurns: details.maxTurns,
           durationMs: details.durationMs,
+          appendLog: event.isError
+            ? `Subagent failed${details.error ? `: ${details.error}` : "."}`
+            : status === "background"
+              ? "Background subagent started."
+              : `Subagent completed${details.toolUses ? ` after ${details.toolUses} tool use${details.toolUses === 1 ? "" : "s"}` : ""}.`,
           updatedAt: new Date().toISOString()
         });
+        if (status === "background") {
+          startTranscriptWatcher(id, outputFile);
+        } else {
+          stopTranscriptWatcher(id);
+        }
+        if (status !== "background" && status !== "queued" && status !== "running") {
+          hasSubagentResultForAggregation = true;
+          maybeStartAggregation(`Subagent result incorporated: ${description}`);
+        }
       } else if (event.toolName === "get_subagent_result" && event.args?.agent_id) {
+        activeSubagentToolCalls = Math.max(0, activeSubagentToolCalls - 1);
         const details = event.result?.details || {};
         const resultText = textFromToolResult(event.result);
+        const status = normalizeSubagentStatus(details.status, event.isError);
+        const description = details.description || descriptionFor(event.args.agent_id, `Agent ${event.args.agent_id}`);
+        const outputFile = outputFileFromText(resultText);
+        rememberDescription(event.args.agent_id, description);
         options.sendSubagentUpdate({
           id: event.args.agent_id,
           agentId: event.args.agent_id,
           displayName: details.displayName,
-          description: details.description || `Agent ${event.args.agent_id}`,
+          description,
           subagentType: details.subagentType,
-          status: normalizeSubagentStatus(details.status, event.isError),
+          status,
           activity: details.activity,
           result: resultText,
           error: details.error || (event.isError ? resultText : undefined),
+          outputFile,
           toolUses: details.toolUses,
           tokens: details.tokens,
           turnCount: details.turnCount,
           maxTurns: details.maxTurns,
           durationMs: details.durationMs,
+          appendLog: event.isError
+            ? "Failed to retrieve subagent result."
+            : status === "running" || status === "background" || status === "queued"
+              ? "Subagent result checked; still running."
+              : "Subagent result retrieved.",
           updatedAt: new Date().toISOString()
         });
+        if (status !== "background" && status !== "queued" && status !== "running") {
+          stopTranscriptWatcher(event.args.agent_id);
+          hasSubagentResultForAggregation = true;
+          maybeStartAggregation(`Subagent result incorporated: ${description}`);
+        }
       }
       options.sendLog(event.isError ? `${event.toolName} failed.` : `${event.toolName} completed.`);
     }
@@ -287,9 +518,13 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
 
   try {
     await session.prompt(options.message);
+    if (aggregationStarted) {
+      sendAggregationUpdate("completed", "Final synthesized response is ready.", "Aggregation complete.");
+    }
     const lastAssistant = [...session.messages].reverse().find((entry: any) => entry?.role === "assistant");
     return textFromAssistantMessage(lastAssistant) || latestText || "Agent complete.";
   } finally {
+    for (const id of transcriptWatchers.keys()) stopTranscriptWatcher(id);
     unsubscribe();
     session.dispose();
   }

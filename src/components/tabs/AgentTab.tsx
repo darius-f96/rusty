@@ -302,14 +302,28 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
           const incoming = {
             ...msg.subagent,
             updatedAt: msg.subagent.updatedAt || new Date().toISOString(),
-          } as SubagentActivity & { previousId?: string };
+          } as SubagentActivity & { previousId?: string; appendLog?: string; logs?: string[] };
           setSubagents((prev) => {
             const index = prev.findIndex((item) =>
               item.id === incoming.id || (!!incoming.previousId && item.id === incoming.previousId)
             );
-            if (index === -1) return [...prev, incoming];
+            const incomingLogs = [
+              ...(Array.isArray(incoming.logs) ? incoming.logs : []),
+              ...(incoming.appendLog ? [incoming.appendLog] : []),
+            ];
+            const cleanIncoming = { ...incoming };
+            delete cleanIncoming.appendLog;
+            delete cleanIncoming.previousId;
+            if (index === -1) {
+              return [...prev, { ...cleanIncoming, logs: incomingLogs }];
+            }
             const next = [...prev];
-            next[index] = { ...next[index], ...incoming, id: incoming.id };
+            const currentLogs = next[index].logs || [];
+            const mergedLogs = [...currentLogs];
+            for (const log of incomingLogs) {
+              if (log && mergedLogs[mergedLogs.length - 1] !== log) mergedLogs.push(log);
+            }
+            next[index] = { ...next[index], ...cleanIncoming, id: incoming.id, logs: mergedLogs.slice(-80) };
             return next;
           });
           return;
