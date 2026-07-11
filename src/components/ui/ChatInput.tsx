@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Send, X, FileText, Folder, Paperclip, Square } from "lucide-react";
+import { Send, X, FileText, Folder, Paperclip, Square, CircleHelp } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { searchService } from "../../services/searchService";
@@ -12,6 +12,14 @@ interface ChatInputProps {
   disabled?: boolean;
   isStreaming?: boolean;
   onStop?: () => void;
+  agentQuestion?: AgentQuestion | null;
+  onAgentQuestionAnswer?: (answer: string) => void;
+}
+
+export interface AgentQuestion {
+  requestId: string;
+  question: string;
+  options: Array<{ label: string; description?: string }>;
 }
 
 interface FileItem {
@@ -28,6 +36,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   disabled = false,
   isStreaming = false,
   onStop,
+  agentQuestion,
+  onAgentQuestionAnswer,
 }) => {
   const fileTree = useWorkspaceStore((state) => state.fileTree);
   const rootPath = useWorkspaceStore((state) => state.rootPath);
@@ -153,6 +163,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         e.preventDefault();
         setShowSuggestions(false);
       }
+    } else if (agentQuestion) {
+      if (e.key === "Enter" && !e.shiftKey && value.trim()) {
+        e.preventDefault();
+        onAgentQuestionAnswer?.(value.trim());
+        onChange("");
+      }
     } else {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
@@ -244,6 +260,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     setAttachments([]);
   };
 
+  const answerQuestion = (answer: string) => {
+    const normalized = answer.trim();
+    if (!normalized) return;
+    onAgentQuestionAnswer?.(normalized);
+    onChange("");
+  };
+
   return (
     <div className="w-full flex flex-col relative bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-lg shadow-sm focus-within:border-[var(--accent-color)]/40 transition-colors">
       {/* 1. Autocomplete Dropdown */}
@@ -282,6 +305,33 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       )}
 
       {/* 2. Attachments Preview Drawer */}
+      {agentQuestion && (
+        <div className="mx-3 mt-3 rounded-lg border border-violet-500/35 bg-violet-500/10 overflow-hidden">
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-violet-500/20 text-violet-200">
+            <CircleHelp size={14} className="text-violet-400 flex-shrink-0" />
+            <span className="text-[10px] font-mono uppercase tracking-wider font-semibold">Agent needs your decision</span>
+          </div>
+          <div className="px-3 pt-2.5 pb-3">
+            <p className="text-xs text-[var(--text-light)] leading-relaxed">{agentQuestion.question}</p>
+            {agentQuestion.options.length > 0 && (
+              <div className="mt-2 grid gap-1.5">
+                {agentQuestion.options.map((option, index) => (
+                  <button
+                    key={`${option.label}-${index}`}
+                    type="button"
+                    onClick={() => answerQuestion(option.label)}
+                    className="w-full text-left rounded border border-[var(--border-color)]/70 bg-[var(--bg-app)]/65 px-2.5 py-2 hover:border-violet-400/70 hover:bg-violet-500/10 transition-colors cursor-pointer"
+                  >
+                    <div className="text-[11px] text-[var(--text-light)] font-medium">{option.label}</div>
+                    {option.description && <div className="mt-0.5 text-[10px] text-[var(--text-muted)]">{option.description}</div>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {attachments.length > 0 && (
         <div className="flex flex-wrap gap-1.5 px-3 pt-3 pb-2 border-b border-[var(--border-color)]/20 bg-black/10">
           {attachments.map((att) => (
@@ -309,8 +359,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           value={value}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          disabled={disabled}
+          placeholder={agentQuestion ? "Type a different answer, then press Enter..." : placeholder}
+          disabled={disabled && !agentQuestion}
           className="w-full bg-transparent border-none outline-none py-1 text-xs text-[var(--text-light)] placeholder-[var(--text-muted)] resize-none font-sans leading-relaxed min-h-[36px] select-text focus:ring-0 focus:outline-none"
           rows={1}
           style={{ height: "auto", maxHeight: "200px" }}
@@ -343,7 +393,29 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           </span>
 
           {/* Send or Stop Button */}
-          {isStreaming && onStop ? (
+          {agentQuestion ? (
+            <>
+              <button
+                type="button"
+                onClick={() => answerQuestion(value)}
+                disabled={!value.trim()}
+                className="flex items-center space-x-1.5 px-3 py-1 rounded bg-violet-600 disabled:opacity-40 text-white hover:bg-violet-500 font-semibold transition-all cursor-pointer shadow-sm text-[10px]"
+              >
+                <Send size={9} />
+                <span>ANSWER</span>
+              </button>
+              {isStreaming && onStop && (
+                <button
+                  type="button"
+                  onClick={onStop}
+                  className="flex items-center space-x-1.5 px-3 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white font-semibold transition-all cursor-pointer shadow-sm text-[10px]"
+                >
+                  <Square size={9} fill="currentColor" />
+                  <span>STOP</span>
+                </button>
+              )}
+            </>
+          ) : isStreaming && onStop ? (
             <button
               type="button"
               onClick={onStop}

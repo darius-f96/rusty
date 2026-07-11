@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "build:sidecar": "cd agent-sidecar && npm run build && cp dist/server.js ../src-tauri/resources/sidecar/server.js",
+    "build:sidecar": "npm --prefix agent-sidecar run build && node scripts/prepare-sidecar-runtime.mjs",
     "preview": "vite preview",
     "tauri": "tauri"
   },
@@ -17,10 +17,14 @@
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "@tauri-apps/plugin-opener": "^2",
     "@xyflow/react": "^12.11.1",
+    "highlight.js": "^11.11.1",
     "lucide-react": "^1.21.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-hook-form": "^7.80.0",
+    "react-markdown": "^10.1.0",
+    "rehype-highlight": "^7.0.2",
+    "remark-gfm": "^4.0.1",
     "tailwindcss": "^4.3.1",
     "xterm": "^5.3.0",
     "xterm-addon-fit": "^0.8.0",

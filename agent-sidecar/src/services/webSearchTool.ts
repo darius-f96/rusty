@@ -60,23 +60,31 @@ export function createWebSearchTool(sendLog: (message: string) => void) {
       }
 
       sendLog(`Searching the web: ${query}`);
-      const search = await getSearchImplementation();
-      const response = await search(query.trim(), {
-        provider,
-        numResults: numResults ? Math.min(Math.max(Math.floor(numResults), 1), 20) : undefined,
-        recencyFilter,
-        domainFilter,
-      });
+      try {
+        const search = await getSearchImplementation();
+        const response = await search(query.trim(), {
+          provider,
+          numResults: numResults ? Math.min(Math.max(Math.floor(numResults), 1), 20) : undefined,
+          recencyFilter,
+          domainFilter,
+        });
 
-      const sources = response.results
-        .map((result, index) => `${index + 1}. ${result.title}\n   ${result.url}${result.snippet ? `\n   ${result.snippet}` : ""}`)
-        .join("\n");
+        const sources = response.results
+          .map((result, index) => `${index + 1}. ${result.title}\n   ${result.url}${result.snippet ? `\n   ${result.snippet}` : ""}`)
+          .join("\n");
 
-      return [
-        `Web search provider: ${response.provider}`,
-        response.answer || "The search returned sources without a synthesized answer.",
-        sources ? `Sources:\n${sources}` : "No sources were returned."
-      ].join("\n\n");
+        sendLog(`Web search completed via ${response.provider}: ${response.results.length} source(s).`);
+        return [
+          `Web search provider: ${response.provider}`,
+          response.answer || "The search returned sources without a synthesized answer.",
+          sources ? `Sources:\n${sources}` : "No sources were returned."
+        ].join("\n\n");
+      } catch (error: any) {
+        const detail = error instanceof Error ? error.message : String(error);
+        console.error(`[web_search] Failed for query "${query}":`, error);
+        sendLog(`Web search failed for "${query}": ${detail}`);
+        throw new Error(`Web search failed: ${detail}`);
+      }
     }
   };
 }

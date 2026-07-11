@@ -4,7 +4,7 @@ import { useWorkspaceStore, AgentMessage } from "../../store";
 import { CustomSelect } from "../CustomSelect";
 import { invoke } from "@tauri-apps/api/core";
 import { Chat, SubagentActivity } from "../ui/Chat";
-import { ChatInput } from "../ui/ChatInput";
+import { AgentQuestion, ChatInput } from "../ui/ChatInput";
 import { notify } from "../../notificationStore";
 
 interface AgentTabProps {
@@ -38,12 +38,18 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
   const setActiveSkill = useWorkspaceStore((state) => state.setActiveSkill);
 
   const [selectedModel, setSelectedModel] = useState(activeModel);
-  const [selectedSkillId, setSelectedSkillId] = useState<string | null>(activeSkillId);
+  const [selectedSkillId, setSelectedSkillId] = useState<string | null>(activeSkillId || "skill_grind_me");
   const [message, setMessage] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [pendingPermission, setPendingPermission] = useState<any>(null);
   const [modifiedFiles, setModifiedFiles] = useState<string[]>([]);
   const [subagents, setSubagents] = useState<SubagentActivity[]>([]);
+  const [agentQuestion, setAgentQuestion] = useState<AgentQuestion | null>(null);
+  const hasActiveSubagents = subagents.some((subagent) =>
+    subagent.status === "queued" || subagent.status === "running" || subagent.status === "background"
+  );
+  const isAgentBusy = isStreaming || hasActiveSubagents;
+  const hasSelectedSkill = selectedSkillId !== null && skills.some((skill) => skill.id === selectedSkillId);
 
   // Chat history panel state
   const [showHistory, setShowHistory] = useState(true);
@@ -72,8 +78,16 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
   }, [selectedModel]);
 
   useEffect(() => {
-    setSelectedSkillId(activeSkillId);
-  }, [activeSkillId]);
+    const activeSkillIsAvailable = activeSkillId && skills.some((skill) => skill.id === activeSkillId);
+    const fallbackSkillId = skills.find((skill) => skill.id === "skill_grind_me" || skill.name === "grind-me")?.id || skills[0]?.id || null;
+    const nextSkillId = activeSkillIsAvailable ? activeSkillId : fallbackSkillId;
+    if (nextSkillId && selectedSkillId !== nextSkillId) {
+      setSelectedSkillId(nextSkillId);
+    }
+    if (nextSkillId && activeSkillId !== nextSkillId) {
+      setActiveSkill(nextSkillId);
+    }
+  }, [activeSkillId, selectedSkillId, setActiveSkill, skills]);
 
   useEffect(() => {
     return () => {
@@ -128,7 +142,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
   }, [loadChatHistory]);
 
   const handleLoadChat = async (chat: SavedChat) => {
-    if (isStreaming) return;
+    if (isAgentBusy) return;
     try {
       const content = await invoke<string>("read_file_disk", { path: chat.path });
       const parsed = JSON.parse(content);
@@ -144,7 +158,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
   };
 
   const handleNewChat = () => {
-    if (isStreaming) return;
+    if (isAgentBusy) return;
     clearAgentMessages(tab.id);
     setActiveChatPath(null);
     savedChatPathRef.current = null;
@@ -174,14 +188,47 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
 
   const handleStopExecution = () => {
     if (agentSocketRef.current) {
-      agentSocketRef.current.close();
+      if (agentSocketRef.current.readyState === WebSocket.OPEN) {
+        agentSocketRef.current.send(JSON.stringify({ type: "agent_chat_stop", tabId: tab.id }));
+      }
+      window.setTimeout(() => agentSocketRef.current?.close(), 250);
     }
+    setSubagents((current) => current.map((subagent) =>
+      subagent.status === "queued" || subagent.status === "running" || subagent.status === "background"
+        ? {
+            ...subagent,
+            status: "stopped",
+            activity: "Stopped by user.",
+            logs: [...(subagent.logs || []), "Stopped by user."].slice(-200),
+            updatedAt: new Date().toISOString(),
+          }
+        : subagent
+    ));
     isStreamingRef.current = false;
     setIsStreaming(false);
+    setAgentQuestion(null);
+  };
+
+  const handleAgentQuestionAnswer = (answer: string) => {
+    if (!agentQuestion || !agentSocketRef.current || agentSocketRef.current.readyState !== WebSocket.OPEN) return;
+    agentSocketRef.current.send(JSON.stringify({
+      type: "agent_question_response",
+      requestId: agentQuestion.requestId,
+      answer,
+    }));
+    consoleBufferRef.current += `User answer: ${answer}\n`;
+    if (consoleMessageIdRef.current) {
+      updateAgentMessage(tab.id, consoleMessageIdRef.current, consoleBufferRef.current);
+    }
+    setAgentQuestion(null);
   };
 
   const handleSendMessage = (attachedFiles: { path: string; name: string; isDir?: boolean }[]) => {
-    if (!message.trim() || isStreaming) return;
+    if (!message.trim() || isAgentBusy) return;
+    if (!hasSelectedSkill) {
+      notify("Skill Required", "Select an Agent Tab skill before sending a prompt.", "error");
+      return;
+    }
 
     const now = Date.now();
     const attachments = attachedFiles.map(a => ({ path: a.path, name: a.name }));
@@ -209,6 +256,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
     streamingResponseMessageIdRef.current = null;
     streamingResponseBufferRef.current = "";
     setSubagents([]);
+    setAgentQuestion(null);
     saveChatHistory();
     refreshHistoryAfterSave();
 
@@ -323,8 +371,17 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
             for (const log of incomingLogs) {
               if (log && mergedLogs[mergedLogs.length - 1] !== log) mergedLogs.push(log);
             }
-            next[index] = { ...next[index], ...cleanIncoming, id: incoming.id, logs: mergedLogs.slice(-80) };
+            next[index] = { ...next[index], ...cleanIncoming, id: incoming.id, logs: mergedLogs.slice(-200) };
             return next;
+          });
+          return;
+        }
+
+        if (msg.type === "agent_question" && msg.tabId === tab.id && msg.requestId) {
+          setAgentQuestion({
+            requestId: msg.requestId,
+            question: String(msg.question || "The agent needs your input."),
+            options: Array.isArray(msg.options) ? msg.options : [],
           });
           return;
         }
@@ -598,7 +655,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
               </button>
               <button
                 onClick={handleNewChat}
-                disabled={isStreaming}
+                disabled={isAgentBusy}
                 className="p-1 rounded hover:bg-[var(--accent-bg)] text-[var(--text-muted)] hover:text-[var(--text-color)] transition-colors cursor-pointer disabled:opacity-40 border-none bg-transparent"
                 title="New chat"
               >
@@ -684,12 +741,13 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
               className="w-64"
             />
             <CustomSelect
-              value={selectedSkillId || ""}
+              value={selectedSkillId || "skill_grind_me"}
               onChange={(val) => {
-                setSelectedSkillId(val || null);
-                setActiveSkill(val || null);
+                if (!val) return;
+                setSelectedSkillId(val);
+                setActiveSkill(val);
               }}
-              options={[{ id: "", name: "No skill" }, ...skills.map(s => ({ id: s.id, name: s.name }))]}
+              options={skills.map(s => ({ id: s.id, name: s.name }))}
               placeholder="Select skill"
               className="w-48"
             />
@@ -701,8 +759,8 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
             )}
           </div>
           <div className="flex items-center space-x-1.5 text-[var(--text-muted)] font-mono text-[10px]">
-            {isStreaming && <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-color)] animate-ping" />}
-            <span>{isStreaming ? "Thinking" : "Ready"}</span>
+            {isAgentBusy && <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-color)] animate-ping" />}
+            <span>{isStreaming ? "Thinking" : hasActiveSubagents ? "Subagents working" : "Ready"}</span>
           </div>
         </div>
 
@@ -731,7 +789,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
         <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden max-w-6xl mx-auto w-full">
           <Chat
             messages={agentChats}
-            isStreaming={isStreaming}
+            isStreaming={isAgentBusy}
             streamingMessageId={consoleMessageIdRef.current}
             subagents={subagents}
           />
@@ -741,9 +799,11 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
               value={message}
               onChange={setMessage}
               onSend={handleSendMessage}
-              disabled={isStreaming}
-              isStreaming={isStreaming}
+              disabled={isAgentBusy || !hasSelectedSkill}
+              isStreaming={isAgentBusy}
               onStop={handleStopExecution}
+              agentQuestion={agentQuestion}
+              onAgentQuestionAnswer={handleAgentQuestionAnswer}
               placeholder="Message agent... (type @ to reference files)"
             />
           </div>

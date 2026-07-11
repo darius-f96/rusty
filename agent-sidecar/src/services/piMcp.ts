@@ -67,6 +67,9 @@ export async function writeMcpConfig(workspaceRoot: string, axiomServers: any[])
 
 function resolveInstalledPackageDir(packageName: string): string {
   const nodeModuleRoots = [
+    // Production: server.js and node_modules are staged together in the
+    // Tauri resource directory.
+    path.resolve(__dirname, "node_modules"),
     path.resolve(__dirname, "../node_modules"),
     path.resolve(__dirname, "../../node_modules"),
     path.resolve(__dirname, "../../../agent-sidecar/node_modules"),

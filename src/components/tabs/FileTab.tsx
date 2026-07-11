@@ -5,10 +5,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { VfsRegistry } from "../../services/vfs";
 import { getFileTypeDetails } from "../../services/fileTypeService";
 import { themes, defineMonacoTheme } from "../../theme";
-import { FileSearch, GitBranch, History, Loader2, TreePine, X } from "lucide-react";
+import { Eye, FileCode2, FileSearch, GitBranch, History, Loader2, TreePine, X } from "lucide-react";
 import { LspStatus } from "../../services/lspService";
 import { MonacoLspBinding } from "../../services/monacoLspBinding";
 import { searchService, SearchMatch } from "../../services/searchService";
+import { MarkdownRenderer } from "../ui/MarkdownRenderer";
 
 const LSP_EDITOR_ENABLED = false;
 const DEFINITION_MENU_WIDTH = 360;
@@ -44,6 +45,7 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
     results: DefinitionCandidate[];
     message?: string;
   } | null>(null);
+  const [markdownPreview, setMarkdownPreview] = useState(false);
   const saveTimeoutRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<any>(null);
@@ -57,6 +59,11 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
   
   const targetGroup = editorGroups.find((g) => g.id === groupId);
   const isActive = targetGroup ? targetGroup.activeTabId === tab.id : false;
+  const isMarkdown = getFileTypeDetails(tab.key).language === "markdown";
+
+  useEffect(() => {
+    setMarkdownPreview(isMarkdown);
+  }, [isMarkdown, tab.key]);
 
   const canvasTabId = useMemo(() => {
     const contexts = useWorkspaceStore.getState().canvasContexts;
@@ -391,6 +398,16 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
     <div ref={containerRef} className="w-full h-full relative bg-[var(--bg-app)]">
       {/* Floating Action Controls */}
       <div className="absolute top-2.5 right-6 z-10 flex items-center space-x-2">
+        {isMarkdown && (
+          <button
+            onClick={() => setMarkdownPreview((preview) => !preview)}
+            className="flex items-center space-x-1 px-2.5 py-1 rounded-md text-[10px] font-mono font-bold border transition-all shadow-md cursor-pointer bg-[var(--bg-sidebar)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-light)] hover:border-[var(--border-active)]"
+            title={markdownPreview ? "Edit Markdown source" : "Preview Markdown"}
+          >
+            {markdownPreview ? <FileCode2 size={10} /> : <Eye size={10} />}
+            <span>{markdownPreview ? "Edit" : "Preview"}</span>
+          </button>
+        )}
         {/* LSP Status Chip — shows language-server state so the user can see why
             the first cmd+click on a freshly-opened Java project is slow (jdtls
             indexes for several seconds before answering definition requests). */}
@@ -510,30 +527,36 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
         </div>
       )}
 
-      <Editor
-        height="100%"
-        path={`file://${tab.key}`}
-        language={getEditorLanguage(tab.key)}
-        theme="axiom-custom-theme"
-        value={fileContent}
-        onChange={handleEditorChange}
-        onMount={handleEditorMount}
-        keepCurrentModel
-        options={{
-          minimap: { enabled: true },
-          scrollBeyondLastLine: false,
-          lineNumbers: (num: number) => {
-            if (showBlame && blameData[num]) {
-              const blame = blameData[num];
-              return `${blame.author} (${blame.date}) │ ${num}`;
-            }
-            return String(num);
-          },
-          lineNumbersMinChars: showBlame ? maxBlameLength + 2 : 5,
-          fontSize: 12,
-          tabSize: 2,
-        }}
-      />
+      {isMarkdown && markdownPreview ? (
+        <div className="h-full overflow-auto px-6 py-5 pr-24 scrollbar-wider">
+          <MarkdownRenderer content={fileContent} className="max-w-4xl mx-auto" />
+        </div>
+      ) : (
+        <Editor
+          height="100%"
+          path={`file://${tab.key}`}
+          language={getEditorLanguage(tab.key)}
+          theme="axiom-custom-theme"
+          value={fileContent}
+          onChange={handleEditorChange}
+          onMount={handleEditorMount}
+          keepCurrentModel
+          options={{
+            minimap: { enabled: true },
+            scrollBeyondLastLine: false,
+            lineNumbers: (num: number) => {
+              if (showBlame && blameData[num]) {
+                const blame = blameData[num];
+                return `${blame.author} (${blame.date}) │ ${num}`;
+              }
+              return String(num);
+            },
+            lineNumbersMinChars: showBlame ? maxBlameLength + 2 : 5,
+            fontSize: 12,
+            tabSize: 2,
+          }}
+        />
+      )}
     </div>
   );
 };

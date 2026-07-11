@@ -52,6 +52,7 @@ import {
 
 // Capabilities
 import { executeNode } from "./capabilities/executeNode";
+import { stopPiAgentRun } from "./services/piAgentChat";
 import { globalExplore } from "./capabilities/globalExplore";
 import { reconciliateEdge } from "./capabilities/reconciliateEdge";
 import { reconciliateGraph } from "./capabilities/reconciliateGraph";
@@ -255,7 +256,7 @@ wss.on("connection", (ws: WebSocket, req: http.IncomingMessage) => {
     console.log(`WebSocket [Server] Received message type: ${data.type}`);
 
     // Pair request callbacks returning from frontend VFS
-    if (data.type === "read_file_response" || data.type === "write_file_response") {
+    if (data.type === "read_file_response" || data.type === "write_file_response" || data.type === "agent_question_response") {
       console.log(`WebSocket [Server] Resolving pending request: ${data.requestId}`, { hasError: !!data.error });
       const pending = pendingRequests.get(data.requestId);
       if (pending) {
@@ -267,7 +268,14 @@ wss.on("connection", (ws: WebSocket, req: http.IncomingMessage) => {
 
     // Inject capabilities
     try {
-      if (data.type === "execute_node") {
+      if (data.type === "agent_chat_stop") {
+        const stopped = await stopPiAgentRun(data.tabId, "Stop requested by user; cancelling all agent tasks.");
+        safeSend(ws, {
+          type: "agent_chat_stopped",
+          tabId: data.tabId,
+          stopped,
+        });
+      } else if (data.type === "execute_node") {
         await executeNode(ws, data);
       } else if (data.type === "global_explore") {
         await globalExplore(ws, data);
@@ -290,6 +298,10 @@ wss.on("connection", (ws: WebSocket, req: http.IncomingMessage) => {
   ws.on("close", (code, reason) => {
     console.log(`WebSocket [Server] Client disconnected (code: ${code}, reason: "${reason ? reason.toString() : ""}"`);
     cleanupPendingRequests(ws);
+    const tabId = (ws as any).__activeAgentTabId;
+    if (typeof tabId === "string") {
+      void stopPiAgentRun(tabId, "Client disconnected; cancelling all agent tasks.");
+    }
   });
 });
 

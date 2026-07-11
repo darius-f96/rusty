@@ -25,12 +25,14 @@ type AgentTool = {
 
 export async function agentChat(ws: WebSocket, data: any): Promise<void> {
   const { tabId, message, model, workspaceRoot, chatHistory, customProvider, skill, lspSettings, mcpServers } = data;
+  (ws as any).__activeAgentTabId = tabId;
   console.log(`WebSocket [Server] agent_chat starting`, { tabId, workspaceRoot, model, hasSkill: !!skill, lspEnabled: lspSettings?.enabled, mcpCount: mcpServers?.length || 0 });
 
   const modifiedFiles = new Set<string>();
   const mcpDisposers: Array<() => void> = [];
 
   const sendLog = (logMessage: string) => {
+    console.log(`[Agent:${tabId}] ${logMessage}`);
     safeSend(ws, { type: "log", tabId, message: logMessage });
   };
 
@@ -116,6 +118,51 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
       }
     };
 
+    const askUserQuestionTool = {
+      name: "ask_user_question",
+      description: "Ask the user a focused question when a product or implementation choice blocks progress. Offer 2-4 concrete suggestions whenever possible.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          question: { type: "string", description: "The concise question to show the user." },
+          options: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                label: { type: "string", description: "Short selectable answer." },
+                description: { type: "string", description: "Optional trade-off or explanation." }
+              },
+              required: ["label"]
+            },
+            description: "Optional 2-4 suggested answers."
+          }
+        },
+        required: ["question"]
+      },
+      execute: async ({ question, options = [] }: { question: string; options?: Array<{ label: string; description?: string }> }) => {
+        const requestId = `agent_question_${getNextId()}`;
+        const normalizedOptions = Array.isArray(options)
+          ? options.filter((option) => option?.label?.trim()).slice(0, 4)
+          : [];
+        sendLog(`Awaiting user input: ${question}`);
+        safeSend(ws, { type: "agent_question", tabId, requestId, question, options: normalizedOptions });
+        return new Promise<string>((resolve, reject) => {
+          registerPendingRequest(requestId, ws, (response) => {
+            if (response?.error) {
+              const error = String(response.error);
+              sendLog(`User question was not answered: ${error}`);
+              reject(new Error(error));
+              return;
+            }
+            const answer = String(response?.answer || "").trim();
+            sendLog(`User answered: ${answer || "(no answer)"}`);
+            resolve(answer || "The user did not provide an answer.");
+          }, 10 * 60_000);
+        });
+      }
+    };
+
     const allTools: AgentTool[] = [
       readVfsTool,
       writeVfsTool,
@@ -136,6 +183,7 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
     const tools: AgentTool[] = allTools.filter((t) => enabledToolNames.includes(t.name));
     // Observability is always available, including when a restrictive skill is selected.
     tools.push(progressTool);
+    tools.push(askUserQuestionTool);
 
     // Connect to MCP servers and register their tools
     const mcpToolLines: string[] = [];
@@ -160,13 +208,15 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
       list_files: "- 'list_files': List all files in the workspace (no input needed).",
       search_codebase: "- 'search_codebase': Search for text patterns across the codebase (input: {\"pattern\": \"search text\"}).",
       web_search: "- 'web_search': Search the public web for current information and cited sources (input: {\"query\": \"search query\"}).",
+      ask_user_question: "- 'ask_user_question': Pause for a focused user decision, optionally with selectable suggestions.",
       lsp_get_definition: "- 'lsp_get_definition': Find definition of a symbol (input: {\"path\": \"file/path\", \"line\": lineNum, \"character\": colNum}).",
       lsp_get_references: "- 'lsp_get_references': Find all references of a symbol (input: {\"path\": \"file/path\", \"line\": lineNum, \"character\": colNum}).",
       lsp_get_diagnostics: "- 'lsp_get_diagnostics': Get compile errors/warnings for a file (input: {\"path\": \"file/path\"})."
     };
     const toolListText = [
       ...enabledToolNames.map((name: string) => toolDescriptions[name] || `- '${name}'`),
-      "- 'report_progress': Publish a concise reasoning summary and the next intended action."
+      "- 'report_progress': Publish a concise reasoning summary and the next intended action.",
+      toolDescriptions.ask_user_question
     ].join("\n");
 
     const defaultSystemPrompt = `You are an AI coding agent operating inside the Axiom spatial development canvas.
@@ -184,6 +234,7 @@ Guidelines:
 - Be concise and focused. Only modify what is requested.
 - Output clean code without placeholder comments.
 - Once done, summarize the changes you made.
+- When a material product, UX, or architecture decision cannot be inferred safely, call 'ask_user_question' instead of guessing. Keep questions focused and offer concrete options with their trade-offs.
 ${mcpToolLines.length > 0 ? `\nMCP integration tools (external data sources):\n${mcpToolLines.join("\n")}\n` : ""}
 `;
 
@@ -197,7 +248,14 @@ User-visible reasoning updates:
 Delegation:
 - When two or more investigations, reviews, or implementation steps are independent, delegate them concurrently by issuing multiple 'Agent' tool calls in the same turn.
 - Use background subagents for independent long-running work, and continue with work that does not depend on their results.
-- Keep dependent work sequential and wait for subagent results only when later work depends on them.`;
+- Keep dependent work sequential and wait for subagent results only when later work depends on them.
+- Every delegated task must be narrowly scoped with a concrete deliverable. Ask for a concise findings memo, not an open-ended investigation.
+- Always set max_turns when delegating: use 3 for codebase mapping and 4 for web research or implementation analysis. Stop once the requested evidence is sufficient.
+- For codebase discovery, use the Explore agent with only the smallest relevant set of files. For product research, use at most three web searches and summarize the sources; do not keep browsing for marginal detail.
+- Do not delegate verification, retries, or follow-up exploration unless the user explicitly requests deeper research.
+
+Questions:
+- When a material product, UX, or architecture decision cannot be inferred safely, call 'ask_user_question' instead of guessing. Keep questions focused and offer concrete options with their trade-offs.`;
 
     sendLog("Initializing agent...");
 
@@ -252,6 +310,7 @@ Delegation:
       ? model
       : customProvider ? `${customProvider.id}/${llmConfig.model}` : model || "";
     const piResponse = await runPiAgentChat({
+      tabId,
       model: piModel,
       workspaceRoot,
       systemPrompt,

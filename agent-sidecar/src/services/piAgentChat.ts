@@ -2,6 +2,22 @@ import * as fs from "node:fs/promises";
 import { getPiResourceLoader } from "./piMcp";
 import { importEsm } from "./esmImport";
 
+interface ActivePiRun {
+  stop: (reason: string) => Promise<void>;
+}
+
+const activePiRuns = new Map<string, ActivePiRun>();
+const DEFAULT_SUBAGENT_MAX_TURNS = 4;
+const DEFAULT_SUBAGENT_GRACE_TURNS = 1;
+
+/** Stop the main Pi session and all background agents associated with a chat tab. */
+export async function stopPiAgentRun(tabId: string, reason = "Stopped by user."): Promise<boolean> {
+  const run = activePiRuns.get(tabId);
+  if (!run) return false;
+  await run.stop(reason);
+  return true;
+}
+
 export interface PiChatTool {
   name: string;
   description: string;
@@ -29,10 +45,12 @@ export interface SubagentUpdate {
   durationMs?: number;
   appendLog?: string;
   logs?: string[];
+  startedAt?: string;
   updatedAt: string;
 }
 
 interface RunPiAgentChatOptions {
+  tabId: string;
   model: string;
   workspaceRoot: string;
   systemPrompt: string;
@@ -106,11 +124,27 @@ function textFromMessageContent(content: any): string | undefined {
     .trim() || undefined;
 }
 
-function toolNamesFromMessageContent(content: any): string[] {
+function describeToolInput(input: any): string | undefined {
+  if (!input || typeof input !== "object") return undefined;
+  const preferredKeys = ["path", "file_path", "query", "pattern", "command", "url", "description", "prompt"];
+  for (const key of preferredKeys) {
+    if (typeof input[key] === "string" && input[key].trim()) return compactLogText(input[key], 120);
+  }
+  const entries = Object.entries(input)
+    .filter(([, value]) => typeof value === "string" || typeof value === "number" || typeof value === "boolean")
+    .slice(0, 2)
+    .map(([key, value]) => `${key}=${String(value)}`);
+  return entries.length > 0 ? compactLogText(entries.join(", "), 120) : undefined;
+}
+
+function toolLogLines(content: any): string[] {
   if (!Array.isArray(content)) return [];
   return content
     .filter((part: any) => part?.type === "tool_use" && typeof part.name === "string")
-    .map((part: any) => part.name);
+    .map((part: any) => {
+      const input = describeToolInput(part.input ?? part.arguments);
+      return input ? `Tool started: ${part.name} — ${input}` : `Tool started: ${part.name}`;
+    });
 }
 
 function summarizeTranscriptEntry(entry: any): string | undefined {
@@ -118,8 +152,8 @@ function summarizeTranscriptEntry(entry: any): string | undefined {
   if (entry?.type === "user") return "Subagent prompt recorded.";
 
   if (entry?.type === "assistant") {
-    const tools = toolNamesFromMessageContent(message?.content);
-    if (tools.length > 0) return `Assistant requested tool${tools.length === 1 ? "" : "s"}: ${tools.join(", ")}.`;
+    const toolLines = toolLogLines(message?.content);
+    if (toolLines.length > 0) return toolLines.join("\n");
     const text = compactLogText(textFromMessageContent(message?.content));
     return text ? `Assistant: ${text}` : "Assistant response updated.";
   }
@@ -209,6 +243,13 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
     return undefined;
   }
 
+  // Pi Subagents defaults to unlimited turns. Bound delegated investigations so
+  // a slow provider or an overly broad prompt cannot spend tokens indefinitely.
+  const { setDefaultMaxTurns, setGraceTurns } = await importEsm<any>("@tintinweb/pi-subagents/dist/agent-runner.js");
+  setDefaultMaxTurns(DEFAULT_SUBAGENT_MAX_TURNS);
+  setGraceTurns(DEFAULT_SUBAGENT_GRACE_TURNS);
+  options.sendLog(`Subagent budget: ${DEFAULT_SUBAGENT_MAX_TURNS} turns maximum (${DEFAULT_SUBAGENT_GRACE_TURNS} final wrap-up turn).`);
+
   const loadedExtensions = resourceLoader.getExtensions().extensions;
   const hasWebAccessExtension = loadedExtensions.some((extension: any) =>
     typeof extension.path === "string" && extension.path.includes("pi-web-access")
@@ -252,13 +293,17 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
   let syntheticSubagentCounter = 0;
   const pendingSubagentIds = new Map<string, string>();
   const subagentDescriptions = new Map<string, string>();
-  const lastActivityLog = new Map<string, { activity: string; at: number }>();
+  const lastActivityLog = new Map<string, string>();
   const transcriptWatchers = new Map<string, NodeJS.Timeout>();
   const transcriptLineCounts = new Map<string, number>();
+  const transcriptHeartbeatAt = new Map<string, number>();
+  const transcriptHeartbeatLogAt = new Map<string, number>();
   let activeSubagentToolCalls = 0;
   let hasSubagentResultForAggregation = false;
   let aggregationStarted = false;
   let aggregationWritingLogged = false;
+  let keepSessionForBackgroundAgents = false;
+  let disposed = false;
   const aggregationId = "main-agent-aggregation";
 
   const rememberDescription = (id: string, description: string | undefined) => {
@@ -269,11 +314,9 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
 
   const appendActivityLog = (id: string, activity: string | undefined): string | undefined => {
     if (!activity) return undefined;
-    const now = Date.now();
     const last = lastActivityLog.get(id);
-    if (last?.activity === activity) return undefined;
-    if (last && now - last.at < 2500) return undefined;
-    lastActivityLog.set(id, { activity, at: now });
+    if (last === activity) return undefined;
+    lastActivityLog.set(id, activity);
     return activity.startsWith("Agent ") || activity.endsWith(".") ? activity : `Activity: ${activity}`;
   };
 
@@ -312,7 +355,35 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
     if (timer) clearInterval(timer);
     transcriptWatchers.delete(id);
     transcriptLineCounts.delete(id);
+    transcriptHeartbeatAt.delete(id);
+    transcriptHeartbeatLogAt.delete(id);
   };
+
+  const disposeRun = async (reason?: string) => {
+    if (disposed) return;
+    disposed = true;
+    if (reason) {
+      options.sendLog(reason);
+      for (const id of transcriptWatchers.keys()) {
+        options.sendSubagentUpdate({
+          id,
+          description: descriptionFor(id, `Agent ${id}`),
+          status: "stopped",
+          activity: "Stopped by user.",
+          appendLog: "Stop requested; cancelling subagent.",
+          updatedAt: new Date().toISOString()
+        });
+      }
+    }
+    for (const id of transcriptWatchers.keys()) stopTranscriptWatcher(id);
+    await session.abort().catch(() => {});
+    session.dispose();
+    activePiRuns.delete(options.tabId);
+  };
+
+  activePiRuns.set(options.tabId, {
+    stop: async (reason) => disposeRun(reason),
+  });
 
   const startTranscriptWatcher = (id: string, outputFile: string | undefined) => {
     if (!outputFile || transcriptWatchers.has(id)) return;
@@ -321,7 +392,26 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
         const raw = await fs.readFile(outputFile, "utf-8");
         const lines = raw.split("\n").filter((line) => line.trim().length > 0);
         const seen = transcriptLineCounts.get(id) ?? 0;
-        if (lines.length <= seen) return;
+        if (lines.length <= seen) {
+          const now = Date.now();
+          const lastHeartbeat = transcriptHeartbeatAt.get(id) ?? 0;
+          if (now - lastHeartbeat >= 3000 && transcriptWatchers.has(id)) {
+            transcriptHeartbeatAt.set(id, now);
+            const lastLog = transcriptHeartbeatLogAt.get(id) ?? 0;
+            if (now - lastLog >= 10_000) {
+              transcriptHeartbeatLogAt.set(id, now);
+              options.sendLog(`[Subagent ${id.slice(0, 8)}] Still active; awaiting the next completed step.`);
+            }
+            options.sendSubagentUpdate({
+              id,
+              description: descriptionFor(id, `Agent ${id}`),
+              status: "background",
+              activity: "Working on delegated task — awaiting the next completed step.",
+              updatedAt: new Date(now).toISOString()
+            });
+          }
+          return;
+        }
 
         const logs = lines
           .slice(seen)
@@ -338,11 +428,17 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
         if (logs.length === 0) return;
         if (!transcriptWatchers.has(id)) return;
 
+        const latestActivity = logs[logs.length - 1];
+        transcriptHeartbeatAt.set(id, Date.now());
+        for (const log of logs) {
+          options.sendLog(`[Subagent ${id.slice(0, 8)}] ${log.replace(/\n/g, " · ")}`);
+        }
         options.sendSubagentUpdate({
           id,
           description: descriptionFor(id, `Agent ${id}`),
           status: "background",
-          activity: "Transcript updated.",
+          activity: latestActivity || "Working on delegated task.",
+          appendLog: appendActivityLog(id, latestActivity),
           logs,
           outputFile,
           updatedAt: new Date().toISOString()
@@ -352,7 +448,7 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
       }
     };
 
-    transcriptWatchers.set(id, setInterval(poll, 1500));
+    transcriptWatchers.set(id, setInterval(poll, 750));
     void poll();
   };
 
@@ -382,6 +478,7 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
           status: event.args?.run_in_background ? "background" : "running",
           activity: "Delegated; waiting for result.",
           appendLog: `Delegated ${subagentType || "Agent"} subagent.`,
+          startedAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         });
       } else if (event.toolName === "get_subagent_result" && event.args?.agent_id) {
@@ -467,6 +564,7 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
           updatedAt: new Date().toISOString()
         });
         if (status === "background") {
+          keepSessionForBackgroundAgents = true;
           startTranscriptWatcher(id, outputFile);
         } else {
           stopTranscriptWatcher(id);
@@ -524,8 +622,11 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
     const lastAssistant = [...session.messages].reverse().find((entry: any) => entry?.role === "assistant");
     return textFromAssistantMessage(lastAssistant) || latestText || "Agent complete.";
   } finally {
-    for (const id of transcriptWatchers.keys()) stopTranscriptWatcher(id);
     unsubscribe();
-    session.dispose();
+    if (keepSessionForBackgroundAgents && !disposed) {
+      options.sendLog("Main agent is standing by while background subagents continue. Stop remains available.");
+    } else {
+      await disposeRun();
+    }
   }
 }

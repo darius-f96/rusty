@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { formatMessageText } from "../../services/markdownService";
+import { MarkdownRenderer } from "./MarkdownRenderer";
 import { AlertCircle, Bot, CheckCircle2, ChevronRight, Circle, FileText, Folder, Loader2, Terminal } from "lucide-react";
 
 export interface Message {
@@ -30,6 +30,7 @@ export interface SubagentActivity {
   durationMs?: number;
   appendLog?: string;
   logs?: string[];
+  startedAt?: string;
   updatedAt?: string;
 }
 
@@ -44,6 +45,7 @@ interface ChatProps {
 
 export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, streamingMessageId = null, compact = false, scrollKey, subagents = [] }) => {
   const [collapsedConsoles, setCollapsedConsoles] = useState<Record<string, boolean>>({});
+  const [now, setNow] = useState(() => Date.now());
   const consoleContentRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -64,38 +66,16 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
     }
   }, [scrollKey]);
 
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
   const toggleConsoleCollapse = (id: string) => {
     setCollapsedConsoles((prev) => ({
       ...prev,
       [id]: !prev[id],
     }));
-  };
-
-  const renderMessageContent = (content: string) => {
-    // Parse @ references and format inline markdown
-    const parts = content.split(/(@[^\s@]+)/g);
-    return parts.map((part, idx) => {
-      if (part.startsWith("@") && part.length > 1) {
-        const filePath = part.substring(1);
-        const fileName = filePath.split("/").pop() || filePath;
-        const isDir = !filePath.includes("."); // Simple heuristic for directory
-        
-        return (
-          <span
-            key={idx}
-            className="inline-flex items-center space-x-1.5 px-1.5 py-0.5 mx-0.5 bg-violet-500/10 border border-violet-500/25 rounded text-violet-300 text-[11px] font-mono align-middle"
-          >
-            {isDir ? (
-              <Folder size={10} className="text-violet-400 flex-shrink-0" />
-            ) : (
-              <FileText size={10} className="text-violet-400 flex-shrink-0" />
-            )}
-            <span>{fileName}</span>
-          </span>
-        );
-      }
-      return <React.Fragment key={idx}>{formatMessageText(part)}</React.Fragment>;
-    });
   };
 
   const isSubagentActive = (status: SubagentActivity["status"]) => {
@@ -117,20 +97,27 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
     return parts.join(" · ");
   };
 
+  const activeDuration = (subagent: SubagentActivity) => {
+    const started = Date.parse(subagent.startedAt || subagent.updatedAt || "");
+    if (Number.isNaN(started)) return "working";
+    const seconds = Math.max(1, Math.floor((now - started) / 1000));
+    return seconds < 60 ? `working ${seconds}s` : `working ${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  };
+
   const renderSubagentLogs = (subagent: SubagentActivity, active: boolean) => {
     const logs = subagent.logs || [];
     if (logs.length === 0 && !subagent.outputFile) return null;
-    const visibleLogs = logs.slice(-30);
+    const visibleLogs = logs.slice(-50);
 
     return (
       <div className="mt-2 rounded bg-black/20 border border-[var(--border-color)]/25 overflow-hidden">
         <div className="px-2 py-1 border-b border-[var(--border-color)]/20 text-[9px] uppercase tracking-wider text-[var(--text-muted)] flex items-center justify-between">
-          <span>{subagent.isAggregation ? "Aggregation log" : "Subagent log"}</span>
+          <span>{subagent.isAggregation ? "Aggregation activity" : "Live tool activity"}</span>
           {logs.length > visibleLogs.length && (
             <span className="normal-case tracking-normal">last {visibleLogs.length} of {logs.length}</span>
           )}
         </div>
-        <div className={`px-2 py-1.5 font-mono text-[10px] leading-relaxed text-zinc-400 ${active ? "max-h-32" : "max-h-40"} overflow-y-auto`}>
+        <div className={`px-2 py-1.5 font-mono text-[10px] leading-relaxed text-zinc-400 ${active ? "max-h-52" : "max-h-40"} overflow-y-auto`}>
           {visibleLogs.map((log, idx) => (
             <div key={`${subagent.id}_log_${idx}`} className="whitespace-pre-wrap break-words">
               {log}
@@ -218,8 +205,12 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
                                 {stats && <span className="text-[9px] text-[var(--text-muted)]">{stats}</span>}
                               </div>
                               <div className="text-[var(--text-normal)] break-words">{subagent.description}</div>
-                              {subagent.activity && active && (
-                                <div className="text-[10px] text-[var(--text-muted)] mt-1">{subagent.activity}</div>
+                              {active && (
+                                <div className="mt-1.5 flex items-center gap-1.5 rounded bg-violet-500/10 border border-violet-500/20 px-2 py-1 text-[10px] text-violet-200">
+                                  <Circle size={7} className="animate-pulse text-violet-400 fill-violet-400 flex-shrink-0" />
+                                  <span className="min-w-0 flex-1 break-words">{subagent.activity || "Working on delegated task…"}</span>
+                                  <span className="text-[9px] text-violet-300/70 whitespace-nowrap">{activeDuration(subagent)}</span>
+                                </div>
                               )}
                               {renderSubagentLogs(subagent, active)}
                               {(subagent.result || subagent.error) && !active && (
@@ -275,7 +266,7 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
         {/* Content Area */}
         <div className="p-4 text-xs leading-relaxed text-[var(--text-normal)] select-text text-left max-w-full overflow-hidden">
           <div className="prose prose-invert max-w-none">
-            {renderMessageContent(msg.content)}
+            <MarkdownRenderer content={msg.content} />
           </div>
 
           {/* Attachments List */}

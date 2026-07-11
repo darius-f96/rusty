@@ -30,13 +30,14 @@ export function getNextId() {
 export function registerPendingRequest(
   requestId: string,
   ws: WebSocket,
-  resolver: (response: any) => void
+  resolver: (response: any) => void,
+  timeoutMs = PENDING_REQUEST_TIMEOUT_MS
 ): () => void {
   const timer = setTimeout(() => {
     if (pendingRequests.has(requestId)) {
-      console.warn(`WebSocket [Server] Pending request ${requestId} timed out after ${PENDING_REQUEST_TIMEOUT_MS}ms`);
+      console.warn(`WebSocket [Server] Pending request ${requestId} timed out after ${timeoutMs}ms`);
       pendingRequests.delete(requestId);
-      resolver({ error: `Request timed out after ${PENDING_REQUEST_TIMEOUT_MS / 1000}s — client may have disconnected.` });
+      resolver({ error: `Request timed out after ${timeoutMs / 1000}s — client may have disconnected.` });
     }
   }, PENDING_REQUEST_TIMEOUT_MS);
 
