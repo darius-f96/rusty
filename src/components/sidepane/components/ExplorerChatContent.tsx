@@ -3,7 +3,8 @@ import { Sparkles } from "lucide-react";
 import { CustomSelect } from "../../CustomSelect";
 import { useWorkspaceStore } from "../../../store";
 import { Chat } from "../../ui/Chat";
-import { ChatInput } from "../../ui/ChatInput";
+import { AgentQuestion, ChatInput } from "../../ui/ChatInput";
+import type { SubagentActivity } from "../../ui/Chat";
 
 interface ExplorerChatContentProps {
   selectedNode: any;
@@ -18,6 +19,9 @@ interface ExplorerChatContentProps {
   exploreModel: string;
   summarizeModel: string;
   allAvailableModels: { id: string; name: string }[];
+  subagents: SubagentActivity[];
+  agentQuestion: AgentQuestion | null;
+  handleAgentQuestionAnswer: (answer: string) => void;
 }
 
 const EMPTY_ARRAY: any[] = [];
@@ -35,6 +39,9 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
   exploreModel,
   summarizeModel,
   allAvailableModels,
+  subagents,
+  agentQuestion,
+  handleAgentQuestionAnswer,
 }) => {
   const globalChatHistory = useWorkspaceStore(
     (state) => state.globalChatHistory[selectedNode?.id || ""] || EMPTY_ARRAY
@@ -84,6 +91,8 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
         streamingMessageId={streamingMessageId}
         compact
         scrollKey={selectedNode?.id}
+        followLatest
+        subagents={subagents}
       />
 
       {/* Reusable Chat Input area */}
@@ -96,6 +105,8 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
             disabled={nodeStatus === "running"}
             isStreaming={nodeStatus === "running"}
             onStop={handleStopExplorer}
+            agentQuestion={agentQuestion}
+            onAgentQuestionAnswer={handleAgentQuestionAnswer}
             placeholder="Discuss task, plan changes... (type @ to reference files)"
           />
         </div>

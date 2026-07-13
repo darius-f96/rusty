@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { AlertCircle, Bot, CheckCircle2, ChevronRight, Circle, FileText, Folder, Loader2, Terminal } from "lucide-react";
 
@@ -41,17 +41,26 @@ interface ChatProps {
   compact?: boolean;
   scrollKey?: string;
   subagents?: SubagentActivity[];
+  /** Keep the view on new activity, but only while the reader is already at the bottom. */
+  followLatest?: boolean;
 }
 
-export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, streamingMessageId = null, compact = false, scrollKey, subagents = [] }) => {
+export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, streamingMessageId = null, compact = false, scrollKey, subagents = [], followLatest = false }) => {
   const [collapsedConsoles, setCollapsedConsoles] = useState<Record<string, boolean>>({});
   const [now, setNow] = useState(() => Date.now());
   const consoleContentRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const isAtBottomRef = useRef(true);
 
   const handleScroll = () => {
-    if (scrollKey && containerRef.current) {
-      localStorage.setItem(`chat_scroll_${scrollKey}`, String(containerRef.current.scrollTop));
+    const container = containerRef.current;
+    if (!container) return;
+
+    // A small tolerance avoids stopping follow mode because of fractional pixel
+    // rounding or the scrollbar itself.
+    isAtBottomRef.current = container.scrollHeight - container.scrollTop - container.clientHeight <= 48;
+    if (scrollKey) {
+      localStorage.setItem(`chat_scroll_${scrollKey}`, String(container.scrollTop));
     }
   };
 
@@ -63,8 +72,18 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
       } else {
         containerRef.current.scrollTop = containerRef.current.scrollHeight;
       }
+      handleScroll();
     }
   }, [scrollKey]);
+
+  // Agent activity can grow every few seconds. Follow it only for readers who
+  // are already viewing the latest activity; never pull someone away from an
+  // earlier message they are reading.
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!followLatest || !container || !isAtBottomRef.current) return;
+    container.scrollTop = container.scrollHeight;
+  }, [followLatest, messages, subagents, isStreaming]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 1000);

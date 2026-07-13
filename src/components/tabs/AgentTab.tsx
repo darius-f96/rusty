@@ -38,13 +38,14 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
   const setActiveSkill = useWorkspaceStore((state) => state.setActiveSkill);
 
   const [selectedModel, setSelectedModel] = useState(activeModel);
-  const [selectedSkillId, setSelectedSkillId] = useState<string | null>(activeSkillId || "skill_grind_me");
+  const [selectedSkillId, setSelectedSkillId] = useState<string | null>(activeSkillId || "skill_task_auditor");
   const [message, setMessage] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [pendingPermission, setPendingPermission] = useState<any>(null);
   const [modifiedFiles, setModifiedFiles] = useState<string[]>([]);
   const [subagents, setSubagents] = useState<SubagentActivity[]>([]);
-  const [agentQuestion, setAgentQuestion] = useState<AgentQuestion | null>(null);
+  const [agentQuestions, setAgentQuestions] = useState<AgentQuestion[]>([]);
+  const agentQuestion = agentQuestions[0] || null;
   const hasActiveSubagents = subagents.some((subagent) =>
     subagent.status === "queued" || subagent.status === "running" || subagent.status === "background"
   );
@@ -81,7 +82,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
 
   useEffect(() => {
     const activeSkillIsAvailable = activeSkillId && skills.some((skill) => skill.id === activeSkillId);
-    const fallbackSkillId = skills.find((skill) => skill.id === "skill_grind_me" || skill.name === "grind-me")?.id || skills[0]?.id || null;
+    const fallbackSkillId = skills.find((skill) => skill.id === "skill_task_auditor" || skill.name === "task-auditor")?.id || skills[0]?.id || null;
     const nextSkillId = activeSkillIsAvailable ? activeSkillId : fallbackSkillId;
     if (nextSkillId && selectedSkillId !== nextSkillId) {
       setSelectedSkillId(nextSkillId);
@@ -220,23 +221,24 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
     ));
     isStreamingRef.current = false;
     setIsStreaming(false);
-    setAgentQuestion(null);
+    setAgentQuestions([]);
     saveChatHistory();
     refreshHistoryAfterSave();
   };
 
   const handleAgentQuestionAnswer = (answer: string) => {
-    if (!agentQuestion || !agentSocketRef.current || agentSocketRef.current.readyState !== WebSocket.OPEN) return;
+    if (agentQuestions.length === 0 || !agentSocketRef.current || agentSocketRef.current.readyState !== WebSocket.OPEN) return;
+    const currentQuestion = agentQuestions[0];
     agentSocketRef.current.send(JSON.stringify({
       type: "agent_question_response",
-      requestId: agentQuestion.requestId,
+      requestId: currentQuestion.requestId,
       answer,
     }));
     consoleBufferRef.current += `User answer: ${answer}\n`;
     if (consoleMessageIdRef.current) {
       updateAgentMessage(tab.id, consoleMessageIdRef.current, consoleBufferRef.current);
     }
-    setAgentQuestion(null);
+    setAgentQuestions((prev) => prev.slice(1));
   };
 
   const handleSendMessage = (attachedFiles: { path: string; name: string; isDir?: boolean }[]) => {
@@ -275,7 +277,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
     streamingResponseMessageIdRef.current = null;
     streamingResponseBufferRef.current = "";
     setSubagents([]);
-    setAgentQuestion(null);
+    setAgentQuestions([]);
     saveChatHistory();
     refreshHistoryAfterSave();
 
@@ -401,10 +403,14 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
         }
 
         if (msg.type === "agent_question" && msg.tabId === tab.id && msg.requestId) {
-          setAgentQuestion({
+          const newQuestion = {
             requestId: msg.requestId,
             question: String(msg.question || "The agent needs your input."),
             options: Array.isArray(msg.options) ? msg.options : [],
+          };
+          setAgentQuestions((prev) => {
+            if (prev.some((q) => q.requestId === newQuestion.requestId)) return prev;
+            return [...prev, newQuestion];
           });
           return;
         }
@@ -499,6 +505,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
           streamingResponseMessageIdRef.current = null;
           streamingResponseBufferRef.current = "";
           setIsStreaming(false);
+          setAgentQuestions([]);
           saveChatHistory();
           refreshHistoryAfterSave();
           return;
@@ -519,6 +526,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
           lastUserMessageIdRef.current = null;
           lastConsoleMessageIdRef.current = null;
           setIsStreaming(false);
+          setAgentQuestions([]);
           socket.close();
           notify("Agent Error", `The agent encountered an error: ${msg.error}`, "error");
         }
@@ -547,6 +555,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
       lastUserMessageIdRef.current = null;
       lastConsoleMessageIdRef.current = null;
       setIsStreaming(false);
+      setAgentQuestions([]);
       notify(
         "Sidecar Connection Failed",
         "Connection to agent sidecar closed unexpectedly. Ensure agent sidecar is running on port 4000.",
@@ -568,6 +577,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
         lastUserMessageIdRef.current = null;
         lastConsoleMessageIdRef.current = null;
         setIsStreaming(false);
+        setAgentQuestions([]);
         notify(
           "Connection Lost",
           `The sidecar connection was closed abnormally (code: ${event.code}).`,
@@ -779,7 +789,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
               className="w-64"
             />
             <CustomSelect
-              value={selectedSkillId || "skill_grind_me"}
+              value={selectedSkillId || "skill_task_auditor"}
               onChange={(val) => {
                 if (!val) return;
                 setSelectedSkillId(val);
@@ -830,6 +840,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
             isStreaming={isAgentBusy}
             streamingMessageId={consoleMessageIdRef.current}
             subagents={subagents}
+            followLatest
           />
           
           <div className="p-4 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/10 flex-shrink-0 w-full mb-2">

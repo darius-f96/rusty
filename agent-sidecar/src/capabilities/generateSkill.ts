@@ -99,7 +99,7 @@ For a question-heavy skill (like 'grind-me'), enable all tools but emphasize ask
           { role: "system", content: metaPrompt },
           { role: "user", content: `Generate a skill for: ${description}` }
         ],
-        max_tokens: 1000,
+        max_tokens: 4000,
         temperature: 0.7
       })
     });

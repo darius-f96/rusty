@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useWorkspaceStore } from "../../store";
 import { VfsRegistry } from "../../services/vfs";
 import { notify } from "../../notificationStore";
+import type { SubagentActivity } from "../ui/Chat";
+import type { AgentQuestion } from "../ui/ChatInput";
 const CONTEXT_NODE_CREATION_MARKER = "[CREATE_CONTEXT_NODES]";
 
 const parseAndCreateContextNodes = (response: string, nodePosition: { x: number; y: number }, tabId: string) => {
@@ -71,6 +73,8 @@ export const useExplorerWebSocket = (selectedNode: any) => {
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+  const [subagents, setSubagents] = useState<SubagentActivity[]>([]);
+  const [agentQuestion, setAgentQuestion] = useState<AgentQuestion | null>(null);
   const explorerSocketRef = useRef<WebSocket | null>(null);
   const consoleMessageIdRef = useRef<string | null>(null);
   const consoleBufferRef = useRef<string>("");
@@ -128,6 +132,8 @@ export const useExplorerWebSocket = (selectedNode: any) => {
         explorerSocketRef.current = existing;
       }
     }
+    setSubagents([]);
+    setAgentQuestion(null);
   }, [selectedNodeId]);
 
   useEffect(() => {
@@ -241,9 +247,9 @@ export const useExplorerWebSocket = (selectedNode: any) => {
         .filter((srv): srv is Exclude<typeof srv, undefined> => !!srv);
 
       socket.send(JSON.stringify({
-        type: "global_explore",
-        nodeId: selectedNodeId,
-        prompt: userMessage.content,
+        type: "agent_chat",
+        tabId: selectedNodeId,
+        message: userMessage.content,
         workspaceRoot: rootPath,
         model: currentExploreModel,
         chatHistory: chatHistory
@@ -256,7 +262,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
             ? prov
             : null,
         skill: skillData,
-        planOnly: true,
+        lspSettings: { ...useWorkspaceStore.getState().lspSettings, enabled: false },
       }));
     };
 
@@ -264,10 +270,37 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       console.log(`[SidePane] Received message:`, event.data);
       try {
         const msg = JSON.parse(event.data);
-        if (msg.type === "log" && msg.nodeId === selectedNodeId) {
+        if (msg.type === "log" && msg.tabId === selectedNodeId) {
           addLog(selectedNodeId, msg.message);
           consoleBufferRef.current += msg.message + "\n";
           scheduleConsoleFlush();
+          return;
+        }
+
+        if (msg.type === "subagent_update" && msg.tabId === selectedNodeId && msg.subagent?.id) {
+          const incoming = msg.subagent as SubagentActivity & { previousId?: string; appendLog?: string };
+          setSubagents((current) => {
+            const index = current.findIndex((agent) => agent.id === incoming.id || (!!incoming.previousId && agent.id === incoming.previousId));
+            const incomingLogs = [...(incoming.logs || []), ...(incoming.appendLog ? [incoming.appendLog] : [])];
+            const cleanIncoming = { ...incoming, result: undefined, error: undefined };
+            delete cleanIncoming.previousId;
+            delete cleanIncoming.appendLog;
+            if (index < 0) return [...current, { ...cleanIncoming, logs: incomingLogs }];
+            const next = [...current];
+            const mergedLogs = [...(next[index].logs || [])];
+            for (const line of incomingLogs) if (line && mergedLogs[mergedLogs.length - 1] !== line) mergedLogs.push(line);
+            next[index] = { ...next[index], ...cleanIncoming, logs: mergedLogs.slice(-4) };
+            return next;
+          });
+          return;
+        }
+
+        if (msg.type === "agent_question" && msg.tabId === selectedNodeId && msg.requestId) {
+          setAgentQuestion({
+            requestId: msg.requestId,
+            question: String(msg.question || "The agent needs your input."),
+            options: Array.isArray(msg.options) ? msg.options : [],
+          });
           return;
         }
 
@@ -297,7 +330,20 @@ export const useExplorerWebSocket = (selectedNode: any) => {
           return;
         }
 
-        if (msg.type === "global_explore_complete" && msg.nodeId === selectedNodeId) {
+        if (msg.type === "write_file") {
+          VfsRegistry.getOrCreate(tabId).writeFile(msg.path, msg.content, selectedNodeId || undefined).then(() => {
+            if (socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({ type: "write_file_response", requestId: msg.requestId }));
+            }
+          }).catch((err: any) => {
+            if (socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({ type: "write_file_response", requestId: msg.requestId, error: err.message || String(err) }));
+            }
+          });
+          return;
+        }
+
+        if (msg.type === "agent_chat_complete" && msg.tabId === selectedNodeId) {
           console.log(`[SidePane] Exploration complete! Response length: ${msg.response?.length || 0}`);
           const responseText = msg.response || "Exploration complete.";
           const assistantMsg = {
@@ -317,12 +363,6 @@ export const useExplorerWebSocket = (selectedNode: any) => {
           }
           setStreamingMessageId(null);
 
-          if (msg.summary) {
-            setGlobalContextSummary(msg.summary);
-            updateNode(selectedNodeId, { summary: msg.summary });
-            addLog(selectedNodeId, `Global context summary updated (${msg.summary.length} chars).`);
-          }
-
           const nodePosition = selectedNode?.position || { x: 100, y: 100 };
           const tabId = getActiveCanvasTabId();
           const createdFiles = parseAndCreateContextNodes(responseText, nodePosition, tabId);
@@ -336,7 +376,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
           socket.close();
         }
 
-        if (msg.type === "global_explore_error" && msg.nodeId === selectedNodeId) {
+        if (msg.type === "agent_chat_error" && msg.tabId === selectedNodeId) {
           console.log(`[SidePane] Exploration error: ${msg.error}`);
           const errorMsg = {
             id: `msg_${Date.now()}`,
@@ -412,8 +452,9 @@ export const useExplorerWebSocket = (selectedNode: any) => {
 
   const handleStopExplorer = () => {
     const socket = selectedNodeId ? activeExplorerSockets.get(selectedNodeId) : explorerSocketRef.current;
-    if (socket) {
-      socket.close();
+    if (socket?.readyState === WebSocket.OPEN && selectedNodeId) {
+      socket.send(JSON.stringify({ type: "agent_chat_stop", tabId: selectedNodeId }));
+      window.setTimeout(() => socket.close(), 250);
     }
     if (selectedNodeId) {
       activeExplorerSockets.delete(selectedNodeId);
@@ -421,6 +462,18 @@ export const useExplorerWebSocket = (selectedNode: any) => {
     explorerSocketRef.current = null;
     setStreamingMessageId(null);
     setNodeStatus(selectedNodeId || "", "idle");
+  };
+
+  const handleAgentQuestionAnswer = (answer: string) => {
+    const socket = selectedNodeId ? activeExplorerSockets.get(selectedNodeId) : explorerSocketRef.current;
+    if (!agentQuestion || !socket || socket.readyState !== WebSocket.OPEN) return;
+    socket.send(JSON.stringify({
+      type: "agent_question_response",
+      requestId: agentQuestion.requestId,
+      answer,
+    }));
+    addLog(selectedNodeId || "", `User answer: ${answer}`);
+    setAgentQuestion(null);
   };
 
   const handleExplorerSummarize = () => {
@@ -600,7 +653,10 @@ export const useExplorerWebSocket = (selectedNode: any) => {
     handleExplorerSendMessage,
     handleExplorerSummarize,
     handleStopExplorer,
+    handleAgentQuestionAnswer,
     streamingMessageId,
+    subagents,
+    agentQuestion,
     exploreModel,
     summarizeModel,
     providers: filteredProviders,
