@@ -153,7 +153,7 @@ export const DiffTabContent: React.FC<DiffTabContentProps> = ({
                 onClick={async () => {
                   if (confirm(`Are you sure you want to delete ${activeDiffFile.split("/").pop() || activeDiffFile} from this task's VFS?`)) {
                     try {
-                      await VfsRegistry.getOrCreate(tabId).removeFile(activeDiffFile);
+                      await VfsRegistry.getOrCreate(tabId).deleteNodeFile(selectedNode.id, activeDiffFile);
                       const newFiles = modifiedFiles.filter((f) => f !== activeDiffFile);
                       updateTaskNode(selectedNode.id, { modifiedFiles: newFiles });
                       if (tabId) {

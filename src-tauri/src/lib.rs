@@ -193,6 +193,48 @@ async fn remove_file_vfs(
 }
 
 #[tauri::command]
+async fn delete_node_vfs_file(
+    vfs_state: tauri::State<'_, VfsState>,
+    tracker_state: tauri::State<'_, NodeFileTracker>,
+    node_id: String,
+    path: String,
+    tab_id: Option<String>,
+) -> Result<(), String> {
+    let tid = get_tab_id(tab_id);
+    println!(
+        "Rust [delete_node_vfs_file] deleting path: {} for node: {} under tab: {}",
+        path, node_id, tid
+    );
+
+    let mut tracker = tracker_state.0.lock().map_err(|e| e.to_string())?;
+    let Some(tab_tracker) = tracker.get_mut(&tid) else {
+        return Ok(());
+    };
+
+    if let Some(files) = tab_tracker.get_mut(&node_id) {
+        files.retain(|file_path| file_path != &path);
+        if files.is_empty() {
+            tab_tracker.remove(&node_id);
+        }
+    }
+
+    // Contents are shared by path within a tab, so only remove the final reference.
+    let is_still_tracked = tab_tracker
+        .values()
+        .any(|files| files.iter().any(|file_path| file_path == &path));
+    drop(tracker);
+
+    if !is_still_tracked {
+        let mut vfs = vfs_state.0.lock().map_err(|e| e.to_string())?;
+        if let Some(tab_map) = vfs.get_mut(&tid) {
+            tab_map.remove(&path);
+        }
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 async fn delete_node_vfs_files(
     vfs_state: tauri::State<'_, VfsState>,
     tracker_state: tauri::State<'_, NodeFileTracker>,
@@ -961,6 +1003,7 @@ pub fn run() {
             read_file_vfs,
             write_file_vfs,
             remove_file_vfs,
+            delete_node_vfs_file,
             apply_vfs_to_disk,
             set_current_executing_node,
             delete_node_vfs_files,
@@ -989,7 +1032,9 @@ pub fn run() {
             git::git_get_all_branches,
             git::git_fetch,
             git::git_checkout_branch,
+            git::git_smart_checkout_branch,
             git::git_create_branch,
+            git::git_smart_create_branch,
             git::git_delete_branch,
             git::git_delete_remote_branch,
             git::git_merge_branch,

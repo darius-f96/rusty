@@ -124,12 +124,17 @@ export const gitPresenter: GitActions = {
   async switchBranch(rootDir: string, branchName: string): Promise<void> {
     console.log(`GitPresenter: Checking out branch ${branchName}`);
     try {
-      await invoke("git_checkout_branch", { rootDir, branchName });
+      const result = await invoke<{ stashed: boolean; restored: boolean }>("git_smart_checkout_branch", { rootDir, branchName });
+      // Unmount branch-specific editors and clear the old tree only after the
+      // checkout succeeds, so a failed checkout leaves the current view intact.
+      useWorkspaceStore.getState().resetForBranchChange();
       await useWorkspaceStore.getState().loadGitStatus();
       const tree: any[] = await invoke("get_directory_structure", { rootDir });
       useWorkspaceStore.getState().setFileTree(tree);
       const display = branchName.startsWith("origin/") ? branchName.substring(7) : branchName;
-      notify("Branch Switched", `Active branch is now: ${display}`, "success");
+      const preserved = result.stashed ? " Current branch changes were saved." : "";
+      const restored = result.restored ? " Saved branch changes were restored." : "";
+      notify("Branch Switched", `Active branch is now: ${display}.${preserved}${restored}`, "success");
     } catch (err: any) {
       console.error("Failed to switch branch:", err);
       notify("Checkout Failed", String(err), "error");
@@ -140,13 +145,18 @@ export const gitPresenter: GitActions = {
   async createBranch(rootDir: string, branchName: string, checkout: boolean): Promise<void> {
     console.log(`GitPresenter: Creating branch ${branchName} (checkout: ${checkout})`);
     try {
-      await invoke("git_create_branch", { rootDir, branchName, checkout });
+      const result = await invoke<{ stashed: boolean; restored: boolean }>("git_smart_create_branch", { rootDir, branchName, checkout });
       if (checkout) {
+        useWorkspaceStore.getState().resetForBranchChange();
         await useWorkspaceStore.getState().loadGitStatus();
         const tree: any[] = await invoke("get_directory_structure", { rootDir });
         useWorkspaceStore.getState().setFileTree(tree);
       }
-      notify("Branch Created", `Successfully created branch: ${branchName}`, "success");
+      notify(
+        "Branch Created",
+        `Successfully created branch: ${branchName}.${result.stashed ? " Current branch changes were saved." : ""}`,
+        "success"
+      );
     } catch (err: any) {
       console.error("Failed to create branch:", err);
       notify("Creation Failed", String(err), "error");

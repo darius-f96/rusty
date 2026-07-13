@@ -20,6 +20,15 @@ export async function deleteNodeFiles(tabId: string, nodeId: string): Promise<vo
   await invoke("delete_node_vfs_files", { nodeId, tabId });
 }
 
+/** Delete one tracked file for a node without disturbing another node's ownership. */
+export async function deleteNodeFile(
+  tabId: string,
+  nodeId: string,
+  path: string
+): Promise<void> {
+  await invoke("delete_node_vfs_file", { nodeId, path, tabId });
+}
+
 /**
  * Get all node→files associations for a tab.
  * Returns an array where each entry contains a nodeId and its tracked file paths.

@@ -14,7 +14,7 @@
 
 // Contract layer
 export { VfsRegistry } from "./VfsRegistry";
-export { VfsInstance } from "./VfsInstance";
+export { VfsInstance, VFS_CHANGED_EVENT } from "./VfsInstance";
 
 // Types
 export type { NodeFilesEntry, VfsSnapshot, VfsFileQuery } from "./types";

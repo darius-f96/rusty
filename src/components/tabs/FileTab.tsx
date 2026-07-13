@@ -23,6 +23,8 @@ loader.init().then((monaco) => {
   const activeThemeId = useWorkspaceStore.getState().activeThemeId;
   const activeTheme = themes[activeThemeId] || themes.dark;
   defineMonacoTheme(monaco, activeTheme);
+}).catch((error) => {
+  console.warn("Failed to initialize Monaco for file tabs:", error);
 });
 
 interface FileTabProps {
@@ -132,19 +134,22 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
       // case — closing the original editor would still dispose the model and
       // black out the split copy.) We own model lifecycle here: dispose the
       // model only when this was the last editor group still showing the file.
-      const monaco = (window as any).monaco;
-      if (monaco) {
+      // Let the Monaco React wrapper complete its passive unmount cleanup
+      // before touching a shared model. Disposing synchronously here races its
+      // internal cancellation tokens during a branch reset and causes the
+      // unhandled Monaco rejection reported by the browser.
+      window.setTimeout(() => {
+        const monaco = (window as any).monaco;
+        if (!monaco) return;
         const uri = monaco.Uri.parse(`file://${tab.key}`);
         const model = monaco.editor.getModel(uri);
-        if (model) {
-          const stillOpenElsewhere = useWorkspaceStore
-            .getState()
-            .editorGroups.some((g) => g.openTabs.some((t) => t.key === tab.key));
-          if (!stillOpenElsewhere) {
-            model.dispose();
-          }
+        const stillOpenElsewhere = useWorkspaceStore
+          .getState()
+          .editorGroups.some((g) => g.openTabs.some((t) => t.key === tab.key));
+        if (model && !model.isDisposed?.() && !stillOpenElsewhere) {
+          model.dispose();
         }
-      }
+      }, 0);
     };
   }, [tab.key]);
 

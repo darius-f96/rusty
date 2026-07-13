@@ -248,7 +248,7 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, onStopExec
                   onClick={async () => {
                     if (confirm(`Are you sure you want to delete ${activeDiffFile.split("/").pop() || activeDiffFile} from this task's VFS?`)) {
                       try {
-                        await VfsRegistry.getOrCreate(canvasTabId).removeFile(activeDiffFile);
+                        await VfsRegistry.getOrCreate(canvasTabId).deleteNodeFile(taskNodeId, activeDiffFile);
                         const newFiles = modifiedFiles.filter((f) => f !== activeDiffFile);
                         updateTaskNode(taskNodeId, { modifiedFiles: newFiles });
                         if (canvasTabId) {

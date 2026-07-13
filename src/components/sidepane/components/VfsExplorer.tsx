@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Folder, Trash2, RefreshCw, X, ChevronRight, ChevronDown } from "lucide-react";
-import { VfsRegistry, NodeFilesEntry } from "../../../services/vfs";
+import { VfsRegistry, VFS_CHANGED_EVENT, NodeFilesEntry } from "../../../services/vfs";
 import { useWorkspaceStore } from "../../../store";
 
 interface VfsExplorerProps {
@@ -27,6 +27,18 @@ export const VfsExplorer: React.FC<VfsExplorerProps> = ({ onClose, tabId }) => {
 
   useEffect(() => {
     loadNodeFiles();
+  }, [tabId]);
+
+  useEffect(() => {
+    const handleVfsChanged = (event: Event) => {
+      const changedTabId = (event as CustomEvent<{ tabId: string }>).detail?.tabId;
+      if (changedTabId === (tabId || "global")) {
+        void loadNodeFiles();
+      }
+    };
+
+    window.addEventListener(VFS_CHANGED_EVENT, handleVfsChanged);
+    return () => window.removeEventListener(VFS_CHANGED_EVENT, handleVfsChanged);
   }, [tabId]);
 
   const toggleNode = (nodeId: string) => {

@@ -206,6 +206,7 @@ export interface WorkspaceState {
   setGitStatus: (status: GitStatusResult | null) => void;
   loadGitStatus: (rootDir?: string) => Promise<void>;
   setFileTree: (tree: any[]) => void;
+  resetForBranchChange: () => void;
   setSelectedNodeId: (id: string | null) => void;
   setNodes: (nodes: Node[]) => void;
   setEdges: (edges: Edge[]) => void;
@@ -705,6 +706,28 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     }
   },
   setFileTree: (tree) => set({ fileTree: tree }),
+  resetForBranchChange: () => set((state) => {
+    // A branch checkout can replace or delete any open file. Keep a single
+    // canvas tab, and let the refreshed tree repopulate the editor from the
+    // newly checked-out branch rather than leaving stale Monaco models open.
+    const canvasTab = state.editorGroups
+      .flatMap((group) => group.openTabs)
+      .find((tab) => tab.type === "canvas" || tab.type === "axiom") || {
+        id: "canvas",
+        type: "canvas" as const,
+        title: "Axiom",
+        key: "canvas",
+      };
+    return {
+      fileTree: [],
+      expandedPaths: {},
+      revealPath: null,
+      selectedNodeId: null,
+      editorGroups: [{ id: "group_0", openTabs: [canvasTab], activeTabId: canvasTab.id }],
+      activeGroupId: "group_0",
+      groupSizes: [1.0],
+    };
+  }),
   setSelectedNodeId: (id) => set({ selectedNodeId: id }),
   setNodes: (nodes) => set({ nodes }),
   setEdges: (edges) => set({ edges }),
@@ -1351,7 +1374,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         id,
         name: "Boundary",
         width: 300,
-        height: 200
+        height: 200,
+        fontSize: 12
       }
     };
     return updateContextAndSync(state, targetTabId, (ctx) => ({

@@ -24,6 +24,14 @@ import * as trackerActions from "./actions/trackerActions";
 import * as bulkActions from "./actions/bulkActions";
 import * as lifecycleActions from "./actions/lifecycleActions";
 
+export const VFS_CHANGED_EVENT = "axiom-vfs-changed";
+
+function notifyVfsChanged(tabId: string): void {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(VFS_CHANGED_EVENT, { detail: { tabId } }));
+  }
+}
+
 export class VfsInstance {
   /** The canvas tab ID this instance is scoped to. Immutable after construction. */
   public readonly tabId: string;
@@ -82,7 +90,14 @@ export class VfsInstance {
    * Removes the files from the cache AND clears the node's tracker entry.
    */
   async deleteNodeFiles(nodeId: string): Promise<void> {
-    return nodeActions.deleteNodeFiles(this.tabId, nodeId);
+    await nodeActions.deleteNodeFiles(this.tabId, nodeId);
+    notifyVfsChanged(this.tabId);
+  }
+
+  /** Delete one file from this node's tracker and this tab's VFS. */
+  async deleteNodeFile(nodeId: string, path: string): Promise<void> {
+    await nodeActions.deleteNodeFile(this.tabId, nodeId, path);
+    notifyVfsChanged(this.tabId);
   }
 
   /**

@@ -26,6 +26,109 @@ pub struct GitStatusResult {
     pub unstaged: Vec<GitFileStatus>,
 }
 
+/// Details from an Axiom smart branch switch. `stashed` refers to the branch
+/// being left; `restored` refers to a previously saved state for the branch
+/// that was entered.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct SmartBranchSwitchResult {
+    pub stashed: bool,
+    pub restored: bool,
+}
+
+fn git_command(root_dir: &str, args: &[&str]) -> Result<std::process::Output, String> {
+    Command::new("git")
+        .args(args)
+        .current_dir(root_dir)
+        .output()
+        .map_err(|e| e.to_string())
+}
+
+fn command_error(output: &std::process::Output) -> Result<(), String> {
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+    }
+}
+
+fn current_branch_name(root_dir: &str) -> Result<String, String> {
+    let output = git_command(root_dir, &["rev-parse", "--abbrev-ref", "HEAD"])?;
+    command_error(&output)?;
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+fn working_tree_is_dirty(root_dir: &str) -> Result<bool, String> {
+    let output = git_command(root_dir, &["status", "--porcelain", "-u"])?;
+    command_error(&output)?;
+    Ok(!output.stdout.is_empty())
+}
+
+fn axiom_stash_marker(branch: &str) -> String {
+    format!("axiom-smart-switch:{}", branch)
+}
+
+fn stash_current_branch(root_dir: &str, branch: &str) -> Result<bool, String> {
+    if !working_tree_is_dirty(root_dir)? {
+        return Ok(false);
+    }
+    let marker = axiom_stash_marker(branch);
+    let output = git_command(root_dir, &["stash", "push", "--include-untracked", "-m", &marker])?;
+    command_error(&output)?;
+    Ok(true)
+}
+
+fn axiom_stash_ref_for_branch(root_dir: &str, branch: &str) -> Result<Option<String>, String> {
+    let output = git_command(root_dir, &["stash", "list", "--format=%gd%x09%s"])?;
+    command_error(&output)?;
+    let marker = axiom_stash_marker(branch);
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        if let Some((stash_ref, subject)) = line.split_once('\t') {
+            if subject.ends_with(&marker) {
+                return Ok(Some(stash_ref.to_string()));
+            }
+        }
+    }
+    Ok(None)
+}
+
+fn restore_axiom_stash_for_branch(root_dir: &str, branch: &str) -> Result<bool, String> {
+    let Some(stash_ref) = axiom_stash_ref_for_branch(root_dir, branch)? else {
+        return Ok(false);
+    };
+    let output = git_command(root_dir, &["stash", "pop", &stash_ref])?;
+    if output.status.success() {
+        Ok(true)
+    } else {
+        Err(format!(
+            "Switched branches, but Axiom could not restore saved changes for '{}'. Resolve the conflict, then use the preserved stash {}. {}",
+            branch,
+            stash_ref,
+            String::from_utf8_lossy(&output.stderr).trim()
+        ))
+    }
+}
+
+fn checkout_branch(root_dir: &str, branch_name: &str) -> Result<(), String> {
+    let args: Vec<&str> = if branch_name.starts_with("origin/") {
+        let local_name = branch_name.strip_prefix("origin/").unwrap_or(branch_name);
+        let local_exists = Command::new("git")
+            .args(&["show-ref", "--verify", "--quiet", &format!("refs/heads/{}", local_name)])
+            .current_dir(root_dir)
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+        if local_exists {
+            vec!["checkout", local_name]
+        } else {
+            vec!["checkout", "--track", branch_name]
+        }
+    } else {
+        vec!["checkout", branch_name]
+    };
+    let output = git_command(root_dir, &args)?;
+    command_error(&output)
+}
+
 /// Helper function to check if the given directory contains a git work tree.
 fn check_is_git_repo(root_dir: &str) -> bool {
     let output = Command::new("git")
@@ -454,34 +557,24 @@ pub async fn git_fetch(root_dir: String) -> Result<(), String> {
 /// exist) so that subsequent push/pull operations are wired to origin.
 #[tauri::command]
 pub async fn git_checkout_branch(root_dir: String, branch_name: String) -> Result<(), String> {
-    let args: Vec<&str> = if branch_name.starts_with("origin/") {
-        let local_name = branch_name.strip_prefix("origin/").unwrap_or(&branch_name);
-        let local_exists = Command::new("git")
-            .args(&["show-ref", "--verify", "--quiet", &format!("refs/heads/{}", local_name)])
-            .current_dir(&root_dir)
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false);
-        if local_exists {
-            vec!["checkout", local_name]
-        } else {
-            vec!["checkout", "--track", &branch_name]
-        }
-    } else {
-        vec!["checkout", &branch_name]
-    };
+    checkout_branch(&root_dir, &branch_name)
+}
 
-    let output = Command::new("git")
-        .args(&args)
-        .current_dir(&root_dir)
-        .output()
-        .map_err(|e| e.to_string())?;
-
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(String::from_utf8_lossy(&output.stderr).into_owned())
+/// IntelliJ-style branch switching for a single working directory. Dirty work
+/// is saved to an Axiom-tagged stash before checkout and is restored when the
+/// user later returns to that same branch. The stash preserves staged state,
+/// unstaged changes, and untracked files.
+#[tauri::command]
+pub async fn git_smart_checkout_branch(root_dir: String, branch_name: String) -> Result<SmartBranchSwitchResult, String> {
+    let source_branch = current_branch_name(&root_dir)?;
+    if source_branch == branch_name || format!("origin/{}", source_branch) == branch_name {
+        return Ok(SmartBranchSwitchResult { stashed: false, restored: false });
     }
+    let stashed = stash_current_branch(&root_dir, &source_branch)?;
+    checkout_branch(&root_dir, &branch_name)?;
+    let destination_branch = current_branch_name(&root_dir)?;
+    let restored = restore_axiom_stash_for_branch(&root_dir, &destination_branch)?;
+    Ok(SmartBranchSwitchResult { stashed, restored })
 }
 
 /// Creates a new branch and optionally checks it out.
@@ -503,6 +596,22 @@ pub async fn git_create_branch(root_dir: String, branch_name: String, checkout: 
     } else {
         Err(String::from_utf8_lossy(&output.stderr).into_owned())
     }
+}
+
+/// Creates a branch and, when requested, uses the same safe stash workflow as
+/// smart checkout so the new branch starts clean and the source work remains
+/// associated with its original branch.
+#[tauri::command]
+pub async fn git_smart_create_branch(root_dir: String, branch_name: String, checkout: bool) -> Result<SmartBranchSwitchResult, String> {
+    if !checkout {
+        git_create_branch(root_dir, branch_name, false).await?;
+        return Ok(SmartBranchSwitchResult { stashed: false, restored: false });
+    }
+    let source_branch = current_branch_name(&root_dir)?;
+    let stashed = stash_current_branch(&root_dir, &source_branch)?;
+    let output = git_command(&root_dir, &["checkout", "-b", &branch_name])?;
+    command_error(&output)?;
+    Ok(SmartBranchSwitchResult { stashed, restored: false })
 }
 
 /// Deletes a local branch. When `force` is true uses `git branch -D` (delete
