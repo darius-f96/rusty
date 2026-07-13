@@ -61,14 +61,14 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
       {/* Chat sub-header with model dropdowns */}
       <div className="flex items-center gap-2 px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/20 select-none flex-shrink-0">
         <div className="flex items-center gap-1.5 flex-1 min-w-0">
-          <span className="text-[9px] font-mono uppercase text-violet-400 flex-shrink-0">Chat</span>
+          <span className="text-[9px] font-mono uppercase text-red-400 flex-shrink-0">Chat</span>
           <CustomSelect
             value={exploreModel}
             onChange={(val) => updateNode(selectedNode.id, { exploreModel: val })}
             options={allAvailableModels}
             placeholder={allAvailableModels.length === 0 ? (exploreModel || "None") : "Chat model"}
             className="flex-1 min-w-0 nodrag nopan"
-            buttonClassName="w-full flex items-center justify-between bg-[var(--bg-app)] text-[var(--text-light)] border border-[var(--border-color)] focus:border-violet-500 rounded px-1.5 py-1 outline-none cursor-pointer text-left transition-all hover:border-violet-500/50 text-[10px] font-mono"
+            buttonClassName="w-full flex items-center justify-between bg-[var(--bg-app)] text-[var(--text-light)] border border-[var(--border-color)] focus:border-red-700 rounded px-1.5 py-1 outline-none cursor-pointer text-left transition-all hover:border-red-700/50 text-[10px] font-mono"
           />
         </div>
         <div className="flex items-center gap-1.5 flex-1 min-w-0">

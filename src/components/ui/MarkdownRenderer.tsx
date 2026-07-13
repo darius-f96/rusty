@@ -21,14 +21,14 @@ export const MarkdownRenderer = memo(({ content, className = "" }: MarkdownRende
         h3: ({ children }) => <h3 className="text-[11px] font-bold text-[var(--text-light)] mt-3 mb-1.5 uppercase font-mono tracking-wider">{children}</h3>,
         p: ({ children }) => <p className="leading-relaxed text-[11px] text-[var(--text-normal)] my-1">{children}</p>,
         a: ({ children, href }) => (
-          <a href={href} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:text-violet-300 underline font-semibold transition-colors">
+          <a href={href} target="_blank" rel="noopener noreferrer" className="text-red-400 hover:text-red-300 underline font-semibold transition-colors">
             {children}
           </a>
         ),
         ul: ({ children }) => <ul className="list-disc pl-5 space-y-1 my-2">{children}</ul>,
         ol: ({ children }) => <ol className="list-decimal pl-5 space-y-1 my-2">{children}</ol>,
         li: ({ children }) => <li className="leading-relaxed text-[11px] text-[var(--text-normal)]">{children}</li>,
-        blockquote: ({ children }) => <blockquote className="border-l-4 border-violet-500/50 pl-3 py-1 my-2 bg-[var(--bg-sidebar)]/20 rounded-r text-[var(--text-muted)] italic">{children}</blockquote>,
+        blockquote: ({ children }) => <blockquote className="border-l-4 border-red-700/60 pl-3 py-1 my-2 bg-[var(--bg-sidebar)]/20 rounded-r text-[var(--text-muted)] italic">{children}</blockquote>,
         table: ({ children }) => <table className="w-full text-left border-collapse font-sans text-[11px]">{children}</table>,
         thead: ({ children }) => <thead className="bg-[var(--bg-sidebar)] border-b border-[var(--border-color)]">{children}</thead>,
         th: ({ children }) => <th className="px-3 py-2 font-semibold text-[var(--text-light)]">{children}</th>,
@@ -49,4 +49,3 @@ export const MarkdownRenderer = memo(({ content, className = "" }: MarkdownRende
     </ReactMarkdown>
   </div>
 ));
-

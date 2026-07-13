@@ -323,14 +323,14 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
       {!isMaximized && (
         <div
           onMouseDown={startResizing}
-          className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-violet-500/50 active:bg-violet-500 transition-colors z-50"
+          className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-red-700/50 active:bg-red-700 transition-colors z-50"
           style={{ transform: "translateX(-50%)" }}
         />
       )}
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-color)] bg-gradient-to-r from-violet-500/10 to-transparent flex-shrink-0">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-color)] bg-gradient-to-r from-red-950/35 to-transparent flex-shrink-0">
         <div className="flex flex-col">
-          <span className="font-mono text-xs text-violet-400 uppercase tracking-wider flex items-center space-x-1.5">
+          <span className="font-mono text-xs text-red-400 uppercase tracking-wider flex items-center space-x-1.5">
             <GitMerge size={12} />
             <span>Reconciliation Tool</span>
           </span>
@@ -375,7 +375,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
         <button
           onClick={() => setActiveTab("overview")}
           className={`flex items-center space-x-1.5 px-3 py-2 text-xs font-mono font-semibold transition-all border-b-2 hover:text-[var(--text-light)] cursor-pointer ${
-            activeTab === "overview" ? "border-violet-500 text-violet-400" : "border-transparent text-[var(--text-muted)]"
+            activeTab === "overview" ? "border-red-700 text-red-400" : "border-transparent text-[var(--text-muted)]"
           }`}
         >
           <GitMerge size={13} />
@@ -384,7 +384,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
         <button
           onClick={() => setActiveTab("chat")}
           className={`flex items-center space-x-1.5 px-3 py-2 text-xs font-mono font-semibold transition-all border-b-2 hover:text-[var(--text-light)] cursor-pointer ${
-            activeTab === "chat" ? "border-violet-500 text-violet-400" : "border-transparent text-[var(--text-muted)]"
+            activeTab === "chat" ? "border-red-700 text-red-400" : "border-transparent text-[var(--text-muted)]"
           }`}
         >
           <MessageSquare size={13} />
@@ -393,19 +393,19 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
         <button
           onClick={() => setActiveTab("console")}
           className={`flex items-center space-x-1.5 px-3 py-2 text-xs font-mono font-semibold transition-all border-b-2 hover:text-[var(--text-light)] cursor-pointer relative ${
-            activeTab === "console" ? "border-violet-500 text-violet-400" : "border-transparent text-[var(--text-muted)]"
+            activeTab === "console" ? "border-red-700 text-red-400" : "border-transparent text-[var(--text-muted)]"
           }`}
         >
           <Terminal size={13} />
           <span>Console Stream</span>
           {isReconciling && (
-            <span className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-violet-400 animate-ping" />
+            <span className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-red-400 animate-ping" />
           )}
         </button>
         <button
           onClick={() => setActiveTab("files")}
           className={`flex items-center space-x-1.5 px-3 py-2 text-xs font-mono font-semibold transition-all border-b-2 hover:text-[var(--text-light)] cursor-pointer ${
-            activeTab === "files" ? "border-violet-500 text-violet-400" : "border-transparent text-[var(--text-muted)]"
+            activeTab === "files" ? "border-red-700 text-red-400" : "border-transparent text-[var(--text-muted)]"
           }`}
         >
           <FileCode size={13} />
@@ -428,7 +428,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
               <div className="flex-1 overflow-y-auto space-y-3 select-none pr-1">
                 {duplicateFilesEntries.length === 0 ? (
                   <div className="text-[var(--text-muted)] h-full flex flex-col items-center justify-center text-center px-4">
-                    <GitMerge size={24} className="text-violet-500/25 mb-2" />
+                    <GitMerge size={24} className="text-red-700/30 mb-2" />
                     <span>No duplicate file modifications detected. Ensure multiple tasks write to the same files in VFS.</span>
                   </div>
                 ) : (
@@ -459,7 +459,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
                             return (
                               <span
                                 key={tid}
-                                className="bg-violet-500/10 text-violet-400 border border-violet-500/20 text-[9px] font-mono px-2 py-0.5 rounded-md"
+                                className="bg-red-950/30 text-red-400 border border-red-800/45 text-[9px] font-mono px-2 py-0.5 rounded-md"
                               >
                                 {taskName}
                               </span>
@@ -481,7 +481,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
             <div className="flex-1 p-4 space-y-3 overflow-y-auto text-xs">
               {chatMessages.length === 0 ? (
                 <div className="text-[var(--text-muted)] h-full flex flex-col items-center justify-center text-center px-4">
-                  <MessageSquare size={24} className="text-violet-500/35 mb-2" />
+                  <MessageSquare size={24} className="text-red-700/40 mb-2" />
                   <span>Interactive chat with the reconciler. Run Reconciliate first to generate proposals.</span>
                 </div>
               ) : (
@@ -490,7 +490,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
                     key={idx}
                     className={`flex flex-col rounded-xl p-3 w-full space-y-1 text-left ${
                       msg.role === "user"
-                        ? "bg-violet-500/10 border border-violet-500/20"
+                        ? "bg-red-950/30 border border-red-800/45"
                         : msg.role === "system"
                         ? "bg-[var(--bg-sidebar)]/30 border border-[var(--border-color)]/50 text-[var(--text-muted)] italic"
                         : "bg-[var(--bg-sidebar)] border border-[var(--border-color)]"
@@ -499,7 +499,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
                     <span
                       className={`font-mono text-[9px] uppercase font-bold ${
                         msg.role === "user"
-                          ? "text-violet-400"
+                          ? "text-red-400"
                           : msg.role === "system"
                           ? "text-[var(--text-muted)]"
                           : "text-emerald-400"
@@ -523,7 +523,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
                   e.preventDefault();
                   handleSendChat();
                 }}
-                className="flex items-center space-x-2 bg-[var(--bg-app)] border border-[var(--border-color)] p-1.5 rounded-lg focus-within:border-violet-500"
+                className="flex items-center space-x-2 bg-[var(--bg-app)] border border-[var(--border-color)] p-1.5 rounded-lg focus-within:border-red-700"
               >
                 <input
                   type="text"
@@ -536,7 +536,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
                 <button
                   type="submit"
                   disabled={isReconciling || !chatInput.trim() || duplicateFilesEntries.length === 0}
-                  className="bg-violet-600 hover:bg-violet-500 disabled:bg-[var(--bg-sidebar)] disabled:text-[var(--text-muted)] text-white text-xs font-mono font-bold px-3 py-1.5 rounded-md flex items-center space-x-1.5 transition-all cursor-pointer"
+                  className="bg-red-800 hover:bg-red-700 disabled:bg-[var(--bg-sidebar)] disabled:text-[var(--text-muted)] text-white text-xs font-mono font-bold px-3 py-1.5 rounded-md flex items-center space-x-1.5 transition-all cursor-pointer"
                 >
                   {isReconciling ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
                   <span>Send</span>
@@ -572,7 +572,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
           <button
             onClick={() => startReconciliation()}
             disabled={duplicateFilesEntries.length === 0}
-            className="bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer"
+            className="bg-red-800 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer"
           >
             <Play size={13} />
             <span>Run Reconciliate</span>

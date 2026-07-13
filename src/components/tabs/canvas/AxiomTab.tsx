@@ -608,7 +608,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
                     }}
                     className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
                   >
-                    <Square size={13} className="text-violet-400" />
+                    <Square size={13} className="text-red-400" />
                     <span>Create Boundary</span>
                   </button>
                   <div className="border-t border-[var(--border-color)] my-1" />
@@ -620,7 +620,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
                     }}
                     className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
                   >
-                    <Globe size={13} className="text-violet-400" />
+                    <Globe size={13} className="text-red-400" />
                     <span>Create Global Explorer</span>
                   </button>
                 </div>
@@ -638,7 +638,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
                 }}
                 className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] hover:bg-[var(--bg-header)] text-[var(--text-light)] text-xs font-mono font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition-all shadow-md hover:border-[var(--border-active)] cursor-pointer nodrag"
               >
-                <Settings size={14} className="text-violet-400" />
+                <Settings size={14} className="text-red-400" />
                 <span>Action</span>
                 <ChevronDown size={12} className="text-[var(--text-muted)]" />
               </button>
@@ -651,7 +651,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
                     }}
                     className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
                   >
-                    <GitMerge size={13} className="text-violet-400" />
+                    <GitMerge size={13} className="text-red-400" />
                     <span>Reconcile Changes</span>
                   </button>
                   <button
@@ -757,7 +757,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
                 onClick={() => handleAddNodeFromContextMenu("boundary")}
                 className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
               >
-                <Square size={13} className="text-violet-400" />
+                <Square size={13} className="text-red-400" />
                 <span>Add Boundary</span>
               </button>
               <div className="border-t border-[var(--border-color)] my-1" />
@@ -773,7 +773,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
                 }}
                 className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
               >
-                <Globe size={13} className="text-violet-400" />
+                <Globe size={13} className="text-red-400" />
                 <span>Add Global Explorer</span>
               </button>
             </div>

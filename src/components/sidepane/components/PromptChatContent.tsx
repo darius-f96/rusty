@@ -1,14 +1,21 @@
-import React, { useState } from "react";
+import React from "react";
 import { useWorkspaceStore } from "../../../store";
 import { CustomSelect } from "../../CustomSelect";
 import { Chat } from "../../ui/Chat";
-import { ChatInput } from "../../ui/ChatInput";
+import { AgentQuestion, ChatInput } from "../../ui/ChatInput";
+import type { SubagentActivity } from "../../ui/Chat";
 
 interface PromptChatContentProps {
   selectedNode: any;
   nodeStatus: string;
-  onExecuteNode: (nodeId: string, customPrompt?: string) => void;
-  onStopExecution: (nodeId: string) => void;
+  explorerInput: string;
+  setExplorerInput: (value: string) => void;
+  handleExplorerSendMessage: () => void;
+  handleStopExplorer: () => void;
+  streamingMessageId: string | null;
+  subagents: SubagentActivity[];
+  agentQuestion: AgentQuestion | null;
+  handleAgentQuestionAnswer: (answer: string) => void;
 }
 
 const EMPTY_ARRAY: any[] = [];
@@ -48,10 +55,15 @@ const SkillSelector: React.FC<{ nodeId: string }> = ({ nodeId }) => {
 export const PromptChatContent: React.FC<PromptChatContentProps> = ({
   selectedNode,
   nodeStatus,
-  onExecuteNode,
-  onStopExecution
+  explorerInput,
+  setExplorerInput,
+  handleExplorerSendMessage,
+  handleStopExplorer,
+  streamingMessageId,
+  subagents,
+  agentQuestion,
+  handleAgentQuestionAnswer,
 }) => {
-  const [chatMessage, setChatMessage] = useState("");
   const globalChatHistory = useWorkspaceStore(
     (state) => state.globalChatHistory[selectedNode?.id || ""] || EMPTY_ARRAY
   );
@@ -74,18 +86,6 @@ export const PromptChatContent: React.FC<PromptChatContentProps> = ({
       })),
   ];
 
-  const streamingMessageId = globalChatHistory.find((m: any) => m.role === "console" && m.content !== "")?.id || null;
-
-  const handleSend = () => {
-    if (!chatMessage.trim() || nodeStatus === "running") return;
-    onExecuteNode(selectedNode.id, chatMessage);
-    setChatMessage("");
-  };
-
-  const handleStop = () => {
-    onStopExecution(selectedNode.id);
-  };
-
   return (
     <div className="flex flex-col h-full bg-[var(--bg-app)]">
       {/* Reusable Chat History List */}
@@ -94,6 +94,8 @@ export const PromptChatContent: React.FC<PromptChatContentProps> = ({
         isStreaming={nodeStatus === "running"}
         streamingMessageId={streamingMessageId}
         compact
+        followLatest
+        subagents={subagents}
       />
 
       {/* Model & Skill selectors */}
@@ -109,12 +111,14 @@ export const PromptChatContent: React.FC<PromptChatContentProps> = ({
       {/* Reusable Chat Input area */}
       <div className="p-3 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/20 flex-shrink-0">
         <ChatInput
-          value={chatMessage}
-          onChange={setChatMessage}
-          onSend={handleSend}
+          value={explorerInput}
+          onChange={setExplorerInput}
+          onSend={handleExplorerSendMessage}
           disabled={nodeStatus === "running"}
           isStreaming={nodeStatus === "running"}
-          onStop={handleStop}
+          onStop={handleStopExplorer}
+          agentQuestion={agentQuestion}
+          onAgentQuestionAnswer={handleAgentQuestionAnswer}
           placeholder="Refine work, prompt modifications... (type @ to reference files)"
         />
       </div>

@@ -176,7 +176,7 @@ const FileDiffCard: React.FC<FileDiffCardProps> = ({
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center bg-[var(--bg-app)] text-[var(--text-muted)] text-[11px] font-mono">
-              <Loader2 className="animate-spin text-violet-500 mr-2" size={14} />
+              <Loader2 className="animate-spin text-red-700 mr-2" size={14} />
               <span>Preloading editor for {state.name}...</span>
             </div>
           )}
@@ -339,7 +339,7 @@ export const PRDiffView: React.FC<PRDiffViewProps> = ({ tabId, modifiedFiles }) 
   if (loading) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[var(--bg-app)] text-[var(--text-muted)] text-xs font-mono">
-        <Loader2 className="animate-spin text-violet-500 mb-2" size={24} />
+        <Loader2 className="animate-spin text-red-700 mb-2" size={24} />
         <span>Loading all code diffs...</span>
       </div>
     );

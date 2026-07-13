@@ -69,8 +69,8 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
   }, []);
 
   const statusBorder = {
-    idle: "border-[var(--border-color)] hover:border-violet-500/50",
-    running: "border-violet-500/70 shadow-[0_0_15px_rgba(139,92,246,0.2)] animate-pulse",
+    idle: "border-[var(--border-color)] hover:border-red-700/50",
+    running: "border-red-700/70 shadow-[0_0_15px_rgba(127,29,29,0.28)] animate-pulse",
     success: "border-emerald-500/60 shadow-[0_0_10px_rgba(16,185,129,0.15)]",
     error: "border-rose-500/60 shadow-[0_0_10px_rgba(244,63,94,0.15)]"
   };
@@ -151,7 +151,7 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
 
           {/* Status indicator */}
           <div className="flex-shrink-0 pl-1">
-            {nodeStatus === "running" && <Loader2 size={14} className="text-violet-400 animate-spin" />}
+            {nodeStatus === "running" && <Loader2 size={14} className="text-red-400 animate-spin" />}
             {nodeStatus === "success" && <Sparkles size={14} className="text-emerald-400" />}
             {nodeStatus === "error" && <X size={14} className="text-rose-400" />}
           </div>

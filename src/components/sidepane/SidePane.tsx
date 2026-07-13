@@ -128,7 +128,7 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
       {!isMaximized && (
         <div
           onMouseDown={startResizing}
-          className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-violet-500/50 active:bg-violet-500 transition-colors z-50"
+          className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-red-700/50 active:bg-red-700 transition-colors z-50"
           style={{ transform: "translateX(-50%)" }}
         />
       )}
@@ -191,8 +191,14 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
             <PromptChatContent
               selectedNode={selectedNode}
               nodeStatus={nodeStatus}
-              onExecuteNode={onExecuteNode}
-              onStopExecution={onStopExecution}
+              explorerInput={explorer.explorerInput}
+              setExplorerInput={explorer.setExplorerInput}
+              handleExplorerSendMessage={explorer.handleExplorerSendMessage}
+              handleStopExplorer={explorer.handleStopExplorer}
+              streamingMessageId={explorer.streamingMessageId}
+              subagents={explorer.subagents}
+              agentQuestion={explorer.agentQuestion}
+              handleAgentQuestionAnswer={explorer.handleAgentQuestionAnswer}
             />
           )
         )}

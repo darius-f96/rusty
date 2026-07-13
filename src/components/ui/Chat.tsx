@@ -211,7 +211,7 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
                             {failed ? (
                               <AlertCircle size={13} className="mt-0.5 text-rose-400 flex-shrink-0" />
                             ) : active ? (
-                              <Circle size={13} className="mt-0.5 animate-pulse text-violet-400 flex-shrink-0" />
+                              <Circle size={13} className="mt-0.5 animate-pulse text-red-400 flex-shrink-0" />
                             ) : subagent.isAggregation ? (
                               <Bot size={13} className="mt-0.5 text-emerald-400 flex-shrink-0" />
                             ) : (
@@ -219,7 +219,7 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
                             )}
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                                <span className={failed ? "text-rose-300" : active ? "text-violet-200" : "text-emerald-300"}>
+                                <span className={failed ? "text-rose-300" : active ? "text-red-200" : "text-emerald-300"}>
                                   {subagent.displayName || subagent.subagentType || "Agent"}
                                 </span>
                                 <span className="text-[9px] uppercase tracking-wider text-[var(--text-muted)]">{subagentStatusLabel(subagent.status)}</span>
@@ -227,10 +227,10 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
                               </div>
                               <div className="text-[var(--text-normal)] break-words">{subagent.description}</div>
                               {active && (
-                                <div className="mt-1.5 flex items-center gap-1.5 rounded bg-violet-500/10 border border-violet-500/20 px-2 py-1 text-[10px] text-violet-200">
-                                  <Circle size={7} className="animate-pulse text-violet-400 fill-violet-400 flex-shrink-0" />
+                                <div className="mt-1.5 flex items-center gap-1.5 rounded bg-red-950/30 border border-red-800/45 px-2 py-1 text-[10px] text-red-200">
+                                  <Circle size={7} className="animate-pulse text-red-400 fill-red-400 flex-shrink-0" />
                                   <span className="min-w-0 flex-1 break-words">{subagent.activity || "Working on delegated task…"}</span>
-                                  <span className="text-[9px] text-violet-300/70 whitespace-nowrap">{activeDuration(subagent)}</span>
+                                  <span className="text-[9px] text-red-300/70 whitespace-nowrap">{activeDuration(subagent)}</span>
                                 </div>
                               )}
                               {renderSubagentLogs(subagent)}
@@ -250,8 +250,8 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
 
     const isUser = msg.role === "user";
     const title = isUser ? "USER" : "AGENT";
-    const borderLeftClass = isUser ? "border-l-[var(--accent-color)]" : "border-l-violet-500/80";
-    const headerTextColor = isUser ? "text-[var(--accent-color)]" : "text-violet-400";
+    const borderLeftClass = isUser ? "border-l-[var(--accent-color)]" : "border-l-red-700/80";
+    const headerTextColor = isUser ? "text-[var(--accent-color)]" : "text-red-400";
     const bgClass = isUser ? "bg-[var(--accent-bg)]/5" : "bg-[var(--bg-sidebar)]/30";
 
     let formattedTime = "";

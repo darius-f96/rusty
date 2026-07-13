@@ -218,7 +218,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       const currentActiveProviderId = useWorkspaceStore.getState().activeCustomProviderId;
       const prov = currentProviders.find((p) => p.id === currentActiveProviderId);
       const currentActiveModel = useWorkspaceStore.getState().activeModel;
-      const currentExploreModel = selectedNode?.data?.exploreModel || currentActiveModel;
+      const currentExploreModel = selectedNode?.data?.exploreModel || selectedNode?.data?.model || currentActiveModel;
       const chatHistory = useWorkspaceStore.getState().globalChatHistory[selectedNodeId] || [];
 
       // Resolve skill: prefer the skill selected on the node, fall back to task-auditor.

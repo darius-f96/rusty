@@ -290,7 +290,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             >
               <span className="flex items-center space-x-2 min-w-0">
                 {item.isDir ? (
-                  <Folder size={12} className="text-violet-400 flex-shrink-0" />
+                  <Folder size={12} className="text-red-400 flex-shrink-0" />
                 ) : (
                   <FileText size={12} className="text-zinc-400 flex-shrink-0" />
                 )}
@@ -306,9 +306,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
       {/* 2. Attachments Preview Drawer */}
       {agentQuestion && (
-        <div className="mx-3 mt-3 rounded-lg border border-violet-500/35 bg-violet-500/10 overflow-hidden">
-          <div className="flex items-center gap-2 px-3 py-2 border-b border-violet-500/20 text-violet-200">
-            <CircleHelp size={14} className="text-violet-400 flex-shrink-0" />
+        <div className="mx-3 mt-3 rounded-lg border border-red-700/45 bg-red-950/25 overflow-hidden">
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-red-800/45 text-red-200">
+            <CircleHelp size={14} className="text-red-400 flex-shrink-0" />
             <span className="text-[10px] font-mono uppercase tracking-wider font-semibold">Agent needs your decision</span>
           </div>
           <div className="px-3 pt-2.5 pb-3">
@@ -320,7 +320,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     key={`${option.label}-${index}`}
                     type="button"
                     onClick={() => answerQuestion(option.label)}
-                    className="w-full text-left rounded border border-[var(--border-color)]/70 bg-[var(--bg-app)]/65 px-2.5 py-2 hover:border-violet-400/70 hover:bg-violet-500/10 transition-colors cursor-pointer"
+                    className="w-full text-left rounded border border-[var(--border-color)]/70 bg-[var(--bg-app)]/65 px-2.5 py-2 hover:border-red-400/70 hover:bg-red-950/30 transition-colors cursor-pointer"
                   >
                     <div className="text-[11px] text-[var(--text-light)] font-medium">{option.label}</div>
                     {option.description && <div className="mt-0.5 text-[10px] text-[var(--text-muted)]">{option.description}</div>}
@@ -399,7 +399,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 type="button"
                 onClick={() => answerQuestion(value)}
                 disabled={!value.trim()}
-                className="flex items-center space-x-1.5 px-3 py-1 rounded bg-violet-600 disabled:opacity-40 text-white hover:bg-violet-500 font-semibold transition-all cursor-pointer shadow-sm text-[10px]"
+                className="flex items-center space-x-1.5 px-3 py-1 rounded bg-red-800 disabled:opacity-40 text-white hover:bg-red-700 font-semibold transition-all cursor-pointer shadow-sm text-[10px]"
               >
                 <Send size={9} />
                 <span>ANSWER</span>
