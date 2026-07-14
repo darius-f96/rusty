@@ -58,6 +58,7 @@ import { reconciliateEdge } from "./capabilities/reconciliateEdge";
 import { reconciliateGraph } from "./capabilities/reconciliateGraph";
 import { agentChat } from "./capabilities/agentChat";
 import { generateSkill } from "./capabilities/generateSkill";
+import { inlineChat } from "./capabilities/inlineChat";
 
 dotenv.config();
 
@@ -275,6 +276,9 @@ wss.on("connection", (ws: WebSocket, req: http.IncomingMessage) => {
           tabId: data.tabId,
           stopped,
         });
+      } else if (data.type === "inline_chat_stop") {
+        const stopped = await stopPiAgentRun(data.sessionId, "Inline chat stopped by user.");
+        safeSend(ws, { type: "inline_chat_stopped", sessionId: data.sessionId, stopped });
       } else if (data.type === "execute_node") {
         await executeNode(ws, data);
       } else if (data.type === "global_explore") {
@@ -285,6 +289,8 @@ wss.on("connection", (ws: WebSocket, req: http.IncomingMessage) => {
         await reconciliateGraph(ws, data);
       } else if (data.type === "agent_chat") {
         await agentChat(ws, data);
+      } else if (data.type === "inline_chat") {
+        await inlineChat(ws, data);
       } else if (data.type === "generate_skill") {
         await generateSkill(ws, data);
       } else {

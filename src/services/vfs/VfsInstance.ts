@@ -55,7 +55,8 @@ export class VfsInstance {
    * If nodeId is provided, the file is tracked as belonging to that node.
    */
   async writeFile(path: string, content: string, nodeId?: string): Promise<void> {
-    return fileActions.writeFile(this.tabId, path, content, nodeId);
+    await fileActions.writeFile(this.tabId, path, content, nodeId);
+    notifyVfsChanged(this.tabId);
   }
 
   /**
@@ -63,7 +64,8 @@ export class VfsInstance {
    * Does NOT delete the file from physical disk.
    */
   async removeFile(path: string): Promise<void> {
-    return fileActions.removeFile(this.tabId, path);
+    await fileActions.removeFile(this.tabId, path);
+    notifyVfsChanged(this.tabId);
   }
 
   // ─── Node Operations ─────────────────────────────────────────────────────────
@@ -115,7 +117,8 @@ export class VfsInstance {
    * Used after execution completes to reconcile tracked files.
    */
   async setNodeTrackedFiles(nodeId: string, files: string[]): Promise<void> {
-    return trackerActions.importTracker(this.tabId, { [nodeId]: files });
+    await trackerActions.importTracker(this.tabId, { [nodeId]: files });
+    notifyVfsChanged(this.tabId);
   }
 
   // ─── Query Operations ────────────────────────────────────────────────────────

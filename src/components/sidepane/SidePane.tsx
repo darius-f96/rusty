@@ -16,6 +16,7 @@ import { ExplorerChatContent } from "./components/ExplorerChatContent";
 import { PromptChatContent } from "./components/PromptChatContent";
 import { VfsExplorer } from "./components/VfsExplorer";
 import { CustomSelect } from "../CustomSelect";
+import { VfsRegistry, VFS_CHANGED_EVENT } from "../../services/vfs";
 
 const EMPTY_ARRAY: any[] = [];
 
@@ -46,6 +47,42 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
 
   // Explorer WS hook
   const explorer = useExplorerWebSocket(selectedNode);
+
+  // The VFS tracker is the source of truth for files owned by a task. Chat tool
+  // writes update that tracker directly, so keep the node's UI cache in sync.
+  useEffect(() => {
+    if (!tabId || !selectedNodeId || selectedNode?.type !== "taskNode") return;
+
+    let cancelled = false;
+    const syncModifiedFiles = async () => {
+      try {
+        const trackedFiles = await VfsRegistry.getOrCreate(tabId).getNodeFiles(selectedNodeId);
+        if (cancelled) return;
+
+        const currentFiles = (selectedNode.data?.modifiedFiles as string[]) || [];
+        if (
+          trackedFiles.length !== currentFiles.length ||
+          trackedFiles.some((file, index) => file !== currentFiles[index])
+        ) {
+          useWorkspaceStore.getState().updateTaskNode(selectedNodeId, { modifiedFiles: trackedFiles });
+        }
+      } catch (err) {
+        console.error("[SidePane] Failed to sync task files from VFS:", err);
+      }
+    };
+
+    const handleVfsChanged = (event: Event) => {
+      const changedTabId = (event as CustomEvent<{ tabId: string }>).detail?.tabId;
+      if (changedTabId === tabId) void syncModifiedFiles();
+    };
+
+    void syncModifiedFiles();
+    window.addEventListener(VFS_CHANGED_EVENT, handleVfsChanged);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(VFS_CHANGED_EVENT, handleVfsChanged);
+    };
+  }, [tabId, selectedNodeId, selectedNode?.type, selectedNode?.data?.modifiedFiles]);
 
   // Diff content hook
   const { originalCode, modifiedCode, isLoading: isDiffLoading } = useDiffContent(selectedNodeId, activeDiffFile, nodeStatus, tabId);

@@ -10,11 +10,14 @@ import { LspStatus } from "../../services/lspService";
 import { MonacoLspBinding } from "../../services/monacoLspBinding";
 import { searchService, SearchMatch } from "../../services/searchService";
 import { MarkdownRenderer } from "../ui/MarkdownRenderer";
+import { InlineChat } from "../inline-chat/InlineChat";
+import { InlineChatEditorContext } from "../../services/inlineChatService";
 
 const LSP_EDITOR_ENABLED = false;
 const DEFINITION_MENU_WIDTH = 360;
 const DEFINITION_MENU_MAX_HEIGHT = 320;
 const DEFINITION_MENU_MARGIN = 12;
+const INLINE_CHAT_MARGIN = 12;
 
 type DefinitionCandidate = SearchMatch & { score: number; relativePath: string };
 
@@ -48,11 +51,17 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
     message?: string;
   } | null>(null);
   const [markdownPreview, setMarkdownPreview] = useState(false);
+  const [inlineChat, setInlineChat] = useState<{
+    context: InlineChatEditorContext;
+    position: { x: number; y: number };
+  } | null>(null);
   const saveTimeoutRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<any>(null);
   const lspBindingRef = useRef<MonacoLspBinding | null>(null);
   const definitionRequestRef = useRef(0);
+  const inlineChatCommandRef = useRef<{ dispose: () => void } | null>(null);
+  const inlineChatSessionIdRef = useRef(`inline-chat-${tab.id}-${Date.now()}`);
 
   const editorGroups = useWorkspaceStore((state) => state.editorGroups);
   const rootPath = useWorkspaceStore((state) => state.rootPath);
@@ -127,6 +136,8 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
       // was the last editor group showing the file.
       lspBindingRef.current?.detach();
       lspBindingRef.current = null;
+      inlineChatCommandRef.current?.dispose();
+      inlineChatCommandRef.current = null;
       // We render <Editor keepCurrentModel /> below, so @monaco-editor/react
       // never disposes the shared Monaco model on unmount. (Its keepCurrentModel
       // flag is captured at mount time inside a [] effect, which predates any
@@ -355,8 +366,51 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
     return true;
   };
 
-  const handleEditorMount = (editor: any) => {
+  const handleEditorMount = (editor: any, monaco: any) => {
     editorRef.current = editor;
+
+    if (monaco) {
+      inlineChatCommandRef.current?.dispose();
+      inlineChatCommandRef.current = editor.addAction({
+        id: `axiom.inlineChat.${groupId}.${tab.id}`,
+        label: "Open Inline Chat",
+        keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
+        run: () => {
+          const model = editor.getModel();
+          const selection = editor.getSelection();
+          const position = editor.getPosition();
+          if (!model || !selection || !position) return;
+
+          const selectedText = selection.isEmpty() ? "" : model.getValueInRange(selection);
+          const visiblePosition = editor.getScrolledVisiblePosition(position);
+          const editorRect = editor.getDomNode()?.getBoundingClientRect();
+          const containerRect = containerRef.current?.getBoundingClientRect();
+          const containerHeight = containerRect?.height ?? window.innerHeight;
+          const anchorY = (editorRect?.top ?? 0) + (visiblePosition?.top ?? 0) + (visiblePosition?.height ?? 18) - (containerRect?.top ?? 0);
+          // Inline chat belongs to the line, not the caret column. Anchor it to
+          // the editor's leading edge and let it consume all available width.
+          const x = INLINE_CHAT_MARGIN;
+          const y = Math.min(Math.max(INLINE_CHAT_MARGIN, anchorY + 8), Math.max(INLINE_CHAT_MARGIN, containerHeight - 360));
+
+          setDefinitionMenu(null);
+          setInlineChat({
+            position: { x, y },
+            context: {
+              filePath: tab.key,
+              language: getEditorLanguage(tab.key),
+              fileContent: model.getValue(),
+              selection: {
+                text: selectedText,
+                startLine: selection.startLineNumber,
+                startColumn: selection.startColumn,
+                endLine: selection.endLineNumber,
+                endColumn: selection.endColumn,
+              },
+            },
+          });
+        },
+      });
+    }
 
     if (LSP_EDITOR_ENABLED) {
       // Attach LSP intelligence: registers Monaco providers for the file's
@@ -530,6 +584,18 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
             ))}
           </div>
         </div>
+      )}
+
+      {inlineChat && (
+        <InlineChat
+          sessionId={inlineChatSessionIdRef.current}
+          context={inlineChat.context}
+          position={inlineChat.position}
+          onClose={() => {
+            setInlineChat(null);
+            window.setTimeout(() => editorRef.current?.focus(), 0);
+          }}
+        />
       )}
 
       {isMarkdown && markdownPreview ? (
