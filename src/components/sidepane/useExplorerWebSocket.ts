@@ -4,54 +4,7 @@ import { VfsRegistry } from "../../services/vfs";
 import { notify } from "../../notificationStore";
 import type { SubagentActivity } from "../ui/Chat";
 import type { AgentQuestion } from "../ui/ChatInput";
-const CONTEXT_NODE_CREATION_MARKER = "[CREATE_CONTEXT_NODES]";
 export interface GeneratedTaskDraft { title: string; description: string; selected: boolean }
-
-const parseAndCreateContextNodes = (response: string, nodePosition: { x: number; y: number }, tabId: string) => {
-  const markerIndex = response.indexOf(CONTEXT_NODE_CREATION_MARKER);
-  if (markerIndex === -1) return [];
-
-  const afterMarker = response.substring(markerIndex + CONTEXT_NODE_CREATION_MARKER.length);
-  const lines = afterMarker.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
-
-  const filePaths: string[] = [];
-  for (const line of lines) {
-    if (line.startsWith("[")) break;
-    if (line.startsWith("-")) {
-      const path = line.substring(1).trim();
-      if (path.startsWith("/") || path.includes(":")) {
-        filePaths.push(path);
-      }
-    } else if (line.startsWith("/") || line.includes(":\\")) {
-      filePaths.push(line);
-    }
-  }
-
-  if (filePaths.length === 0) return [];
-
-  const store = useWorkspaceStore.getState();
-  const created: string[] = [];
-  let offsetX = 0;
-  let offsetY = 0;
-
-  for (const filePath of filePaths) {
-    const fileName = filePath.split("/").pop() || filePath.split("\\").pop() || filePath;
-    store.addContextNode(
-      nodePosition.x + 220 + offsetX,
-      nodePosition.y + offsetY,
-      { path: filePath, name: fileName, isDir: false },
-      tabId
-    );
-    created.push(filePath);
-    offsetY += 80;
-    if (offsetY > 300) {
-      offsetY = 0;
-      offsetX += 200;
-    }
-  }
-
-  return created;
-};
 
 const activeExplorerSockets = new Map<string, WebSocket>();
 
@@ -112,22 +65,6 @@ export const useExplorerWebSocket = (selectedNode: any) => {
   const exploreModel = (selectedNode?.data?.exploreModel as string) || activeModel;
   const summarizeModel = (selectedNode?.data?.summarizeModel as string) || activeModel;
   const taskGenerationModel = (selectedNode?.data?.taskGenerationModel as string) || exploreModel || activeModel;
-
-  const getActiveCanvasTabId = () => {
-    const state = useWorkspaceStore.getState();
-    const activeGroup = state.editorGroups.find((g) => g.id === state.activeGroupId);
-    if (activeGroup && activeGroup.activeTabId) {
-      const activeTab = activeGroup.openTabs.find((t) => t.id === activeGroup.activeTabId);
-      if (activeTab && activeTab.type === "canvas") {
-        return activeTab.id;
-      }
-    }
-    for (const group of state.editorGroups) {
-      const canvasTab = group.openTabs.find((t) => t.type === "canvas");
-      if (canvasTab) return canvasTab.id;
-    }
-    return "canvas";
-  };
 
   useEffect(() => {
     if (selectedNodeId) {
@@ -366,14 +303,6 @@ export const useExplorerWebSocket = (selectedNode: any) => {
             updateGlobalChatMessage(selectedNodeId, consoleMessageIdRef.current, "");
           }
           setStreamingMessageId(null);
-
-          const nodePosition = selectedNode?.position || { x: 100, y: 100 };
-          const tabId = getActiveCanvasTabId();
-          const createdFiles = parseAndCreateContextNodes(responseText, nodePosition, tabId);
-          if (createdFiles.length > 0) {
-            addLog(selectedNodeId, `Created ${createdFiles.length} context node(s): ${createdFiles.join(", ")}`);
-            notify("Context Nodes Created", `Added ${createdFiles.length} file(s) as context nodes.`, "success");
-          }
 
           setNodeStatus(selectedNodeId, "success");
           addLog(selectedNodeId, "Global exploration completed successfully.");
