@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { History, Trash2, Plus, RefreshCw, PanelLeftClose, PanelLeft, Shield, CheckCircle2, FolderGit2, FileText } from "lucide-react";
 import { useWorkspaceStore, AgentMessage } from "../../store";
+import { resolveSkill, toSkillData, DEFAULT_SKILL_ID } from "../../config/skillDefinitions";
 import { CustomSelect } from "../CustomSelect";
 import { invoke } from "@tauri-apps/api/core";
 import { Chat, SubagentActivity } from "../ui/Chat";
@@ -38,7 +39,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
   const setActiveSkill = useWorkspaceStore((state) => state.setActiveSkill);
 
   const [selectedModel, setSelectedModel] = useState(activeModel);
-  const [selectedSkillId, setSelectedSkillId] = useState<string | null>(activeSkillId || "skill_task_auditor");
+  const [selectedSkillId, setSelectedSkillId] = useState<string>(activeSkillId || DEFAULT_SKILL_ID);
   const [message, setMessage] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [pendingPermission, setPendingPermission] = useState<any>(null);
@@ -81,14 +82,17 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
   }, [selectedModel]);
 
   useEffect(() => {
-    const activeSkillIsAvailable = activeSkillId && skills.some((skill) => skill.id === activeSkillId);
-    const fallbackSkillId = skills.find((skill) => skill.id === "skill_task_auditor" || skill.name === "task-auditor")?.id || skills[0]?.id || null;
-    const nextSkillId = activeSkillIsAvailable ? activeSkillId : fallbackSkillId;
-    if (nextSkillId && selectedSkillId !== nextSkillId) {
-      setSelectedSkillId(nextSkillId);
+    // Always ensure a skill is selected. Resolution order:
+    // 1. activeSkillId (if it exists in the list)
+    // 2. DEFAULT_SKILL_ID (build)
+    // 3. first available skill
+    const resolved = resolveSkill(skills, activeSkillId || selectedSkillId);
+    const nextId = resolved?.id ?? null;
+    if (nextId && selectedSkillId !== nextId) {
+      setSelectedSkillId(nextId);
     }
-    if (nextSkillId && activeSkillId !== nextSkillId) {
-      setActiveSkill(nextSkillId);
+    if (nextId && activeSkillId !== nextId) {
+      setActiveSkill(nextId);
     }
   }, [activeSkillId, selectedSkillId, setActiveSkill, skills]);
 
@@ -315,16 +319,12 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
       const prov = currentProviders.find((p) => p.id === currentActiveProviderId);
       const chatHistory = useWorkspaceStore.getState().agentChats[tab.id] || [];
       const currentSkills = useWorkspaceStore.getState().skills;
-      const selectedSkill = selectedSkillId ? currentSkills.find((s: any) => s.id === selectedSkillId) : null;
-      const skillData = selectedSkill ? {
-        systemPrompt: selectedSkill.systemPrompt,
-        enabledTools: selectedSkill.enabledTools,
-        preferredModel: selectedSkill.preferredModel,
-      } : null;
+      const resolved = resolveSkill(currentSkills, selectedSkillId);
+      const skillData = toSkillData(resolved);
 
       // Resolve MCP servers declared in the active skill.
       const mcpServersMap = useWorkspaceStore.getState().mcpServers;
-      const skillMcpNames: string[] = selectedSkill?.mcpServers || [];
+      const skillMcpNames: string[] = resolved?.mcpServers || [];
       const mcpServers = skillMcpNames
         .map((name: string) => mcpServersMap[name])
         .filter((srv: any): srv is NonNullable<typeof srv> => !!srv);
@@ -789,13 +789,13 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
               className="w-64"
             />
             <CustomSelect
-              value={selectedSkillId || "skill_task_auditor"}
+              value={selectedSkillId || DEFAULT_SKILL_ID}
               onChange={(val) => {
                 if (!val) return;
                 setSelectedSkillId(val);
                 setActiveSkill(val);
               }}
-              options={skills.map(s => ({ id: s.id, name: s.name }))}
+              options={skills.filter(s => !s.isInternal).map(s => ({ id: s.id, name: s.name }))}
               placeholder="Select skill"
               className="w-48"
             />

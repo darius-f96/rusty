@@ -99,11 +99,12 @@ ${duplicateFilesList || "No duplicate modifications detected."}
 
 Your instructions:
 1. Core Goal: Reconcile and merge conflicting or overlapping changes on files modified by multiple tasks. Read duplicate files using 'read_file' to understand their contents.
-2. Analyze the requirements, instructions, and history of all colliding tasks.
-3. Merge their implementations so that the reconciled file satisfies the requirements of all tasks that modified it.
-4. VFS Operations: You are fully authorized and encouraged to:
-   - Read and write existing files using 'read_file' and 'write_file'.
-   - Create new files, helper scripts, documentation, and markdown specifications in the VFS if needed to complete or document the reconciliation.
+2. Analyze the requirements, instructions, and conversation/chat history of all colliding tasks.
+3. Merge their implementations so that the reconciled file satisfies the overlapping requirements of all tasks that modified it. You must take into context not just the files themselves, but also the requirements of each task that overlap.
+4. VFS Constraints:
+   - You can read files from the project using 'read_file' to understand their structure and content.
+   - Any reconciliation, addition, modification, or deletion you make MUST be performed exclusively in the Virtual File System (VFS) using the 'write_file' tool.
+   - Do NOT touch or make changes to the real physical filesystem directly. Any new files, edits, or deletes must be confined to the VFS.
 5. CRITICAL: When writing, write complete files with all changes included. Never write partial snippets or placeholders.
 6. Finally, report which files were reconciled, which new files/documentation were generated (if any), and provide a clear explanation of how they were aligned (Stage 1).
 7. If the user provides chat feedback/messages (Stage 2), adjust the code, write/create files, or modify documents in the VFS based on their specific requests.
@@ -129,7 +130,7 @@ Workspace root: ${workspaceRoot || "unknown"}
     } catch (sdkError: any) {
       sendLog(`Pi agent runtime initialization skipped/failed: ${sdkError.message}. Falling back to standard LLM multi-round tool execution...`);
       console.warn("Reconciliation SDK fallback:", sdkError.message);
-      
+
       const { callLlmWithToolsMultiRoundStreaming } = await import("../services/llm");
       let provider = "anthropic";
       let modelName = "claude-3-5-sonnet-20241022";
@@ -169,7 +170,7 @@ Workspace root: ${workspaceRoot || "unknown"}
           [readVfsTool, writeVfsTool, createListFilesTool(workspaceRoot), createSearchCodebaseTool(workspaceRoot)],
           workspaceRoot,
           graphSendLog,
-          () => {}, // No token streaming for graph reconciliation
+          () => { }, // No token streaming for graph reconciliation
           15,
           chatHistory || [],
           () => ws.readyState !== WebSocket.OPEN

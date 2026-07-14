@@ -250,7 +250,7 @@ export const SkillsTab: React.FC = () => {
             </div>
 
             <div className="space-y-2">
-              {skills.map((skill) => {
+              {skills.filter((skill) => !skill.isInternal).map((skill) => {
                 const isSelected = skill.id === selectedSkillId;
                 return (
                   <div

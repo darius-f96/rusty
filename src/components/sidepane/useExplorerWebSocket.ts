@@ -3,6 +3,7 @@ import { useWorkspaceStore } from "../../store";
 import { VfsRegistry } from "../../services/vfs";
 import { notify } from "../../notificationStore";
 import type { SubagentActivity } from "../ui/Chat";
+import { resolveSkill, toSkillData, BUILT_IN_SKILL_IDS } from "../../config/skillDefinitions";
 import type { AgentQuestion } from "../ui/ChatInput";
 export interface GeneratedTaskDraft { title: string; description: string; selected: boolean }
 
@@ -162,17 +163,11 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       const currentExploreModel = selectedNode?.data?.exploreModel || selectedNode?.data?.model || currentActiveModel;
       const chatHistory = useWorkspaceStore.getState().globalChatHistory[selectedNodeId] || [];
 
-      // Resolve skill: prefer the skill selected on the node, fall back to task-auditor.
+      // Resolve skill: prefer the skill selected on the node, fall back to DEFAULT_SKILL_ID.
       const skills = useWorkspaceStore.getState().skills;
       const nodeSkillId = selectedNode?.data?.skillId as string | undefined;
-      const selectedCustomSkill = nodeSkillId ? skills.find((s: any) => s.id === nodeSkillId) : null;
-      const auditorSkill = skills.find((s: any) => s.id === "skill_task_auditor");
-      const activeSkill = selectedCustomSkill || auditorSkill;
-      const skillData = activeSkill ? {
-        systemPrompt: activeSkill.systemPrompt,
-        enabledTools: activeSkill.enabledTools,
-        preferredModel: activeSkill.preferredModel,
-      } : null;
+      const resolvedSkill = resolveSkill(skills, nodeSkillId || BUILT_IN_SKILL_IDS.TASK_AUDITOR);
+      const skillData = toSkillData(resolvedSkill);
 
       // Build MCP server list from:
       //  1. The active skill's mcpServers (by name → resolved from the store)
@@ -180,7 +175,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       const mcpServerName = selectedNode?.data?.mcpServerName as string | undefined;
       const mcpServersMap = useWorkspaceStore.getState().mcpServers;
       const mcpServerNames = Array.from(new Set([
-        ...(activeSkill?.mcpServers || []),
+        ...(resolvedSkill?.mcpServers || []),
         ...(mcpServerName ? [mcpServerName] : [])
       ]));
       const mcpServers = mcpServerNames
@@ -461,14 +456,10 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       const currentActiveModel = useWorkspaceStore.getState().activeModel;
       const currentSummarizeModel = selectedNode?.data?.summarizeModel || currentActiveModel;
 
-      // Always use task-auditor skill for this node type.
+      // Always use task-auditor skill for summarization on this node type.
       const skills = useWorkspaceStore.getState().skills;
-      const auditorSkill = skills.find((s: any) => s.id === "skill_task_auditor");
-      const skillData = auditorSkill ? {
-        systemPrompt: auditorSkill.systemPrompt,
-        enabledTools: auditorSkill.enabledTools,
-        preferredModel: auditorSkill.preferredModel,
-      } : null;
+      const auditorSkill = resolveSkill(skills, BUILT_IN_SKILL_IDS.TASK_AUDITOR);
+      const skillData = toSkillData(auditorSkill);
 
       const truncationNote = truncatedCount > 0
         ? `\n\nNote: This conversation had ${totalCount} total messages; only the last ${recentMessages.length} are included because the user iterates over many topics and the current focus is the most recent discussion.`

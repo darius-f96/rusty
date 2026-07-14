@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState } from "react";
 import { useWorkspaceStore } from "../store";
+import { resolveSkill, toSkillData, BUILT_IN_SKILL_IDS } from "../config/skillDefinitions";
 import { VfsRegistry, setExecutingNode } from "../services/vfs";
 import { notify } from "../notificationStore";
 import { TabBar } from "./TabBar";
@@ -145,14 +146,11 @@ export const Workspace: React.FC = () => {
       provider = customProviders.find((p) => p.id === activeCustomProviderId);
     }
 
-    // Resolve skill
+    // Resolve skill — fall back to BUILD so a TaskNode is
+    // never sent to the sidecar with a null skill.
     const nodeSkillId = (node.data as any).skillId;
-    const selectedSkill = nodeSkillId ? storeState.skills.find((s) => s.id === nodeSkillId) : null;
-    const skillData = selectedSkill ? {
-      systemPrompt: selectedSkill.systemPrompt,
-      enabledTools: selectedSkill.enabledTools,
-      preferredModel: selectedSkill.preferredModel,
-    } : null;
+    const selectedSkill = resolveSkill(storeState.skills, nodeSkillId || BUILT_IN_SKILL_IDS.BUILD);
+    const skillData = toSkillData(selectedSkill);
 
     const connectedEdges = currentEdges.filter((edge) => edge.target === nodeId);
     const inputFiles = connectedEdges

@@ -13,6 +13,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { themes, applyThemeProperties, defineMonacoTheme } from "./theme";
 import { loader } from "@monaco-editor/react";
 import { skillsService } from "./services/skillsService";
+import { BUILT_IN_SKILLS, DEFAULT_SKILL_ID, GLOBAL_CHAT_DEFAULT_SKILL_ID, BUILT_IN_SKILL_IDS } from "./config/skillDefinitions";
 import { VfsRegistry } from "./services/vfs";
 import { McpServerConfig } from "./components/mcp/types";
 
@@ -93,6 +94,8 @@ export interface Skill {
   preferredModel?: string;
   mcpServers: string[];
   isBuiltIn: boolean;
+  /** If true, this skill is for internal/system use and must not appear in user-facing dropdowns. */
+  isInternal?: boolean;
   icon?: string;
   createdAt: string;
   updatedAt: string;
@@ -524,57 +527,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   showDevConsole: false,
   terminalTabs: [],
   activeTerminalTabId: null,
-  skills: [
-    {
-      id: "skill_build",
-      name: "build",
-      description: "Focus on implementing features, writing clean code, and running tests. Be action-oriented.",
-      systemPrompt: "You are an AI coding agent specialized in building features and implementing code. Your focus is to take user requirements and turn them into working code as efficiently as possible.\n\nGuidelines:\n- Write clean, maintainable code\n- Follow the existing code style and patterns in the project\n- Break down complex tasks into manageable pieces\n- Test your changes when possible\n- Keep explanations concise but informative\n- When done, summarize what was implemented",
-      enabledTools: ["read_file", "write_file", "list_files", "search_codebase", "web_search"],
-      mcpServers: [],
-      isBuiltIn: true,
-      icon: "hammer",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    },
-    {
-      id: "skill_plan",
-      name: "plan",
-      description: "Analyze architecture, explore code, and propose plans. Read-only focus.",
-      systemPrompt: "You are an AI coding agent specialized in analysis, architecture planning, and code exploration. Your focus is to deeply understand the codebase and help users plan their approach.\n\nGuidelines:\n- Read and analyze existing code thoroughly before making suggestions\n- Ask clarifying questions to understand the full context\n- Provide structured plans with clear steps\n- Identify potential issues or risks in proposed approaches\n- Suggest trade-offs and alternatives\n- Do NOT write code unless explicitly requested\n- When exploring, provide detailed findings about the code structure",
-      enabledTools: ["read_file", "list_files", "search_codebase", "web_search"],
-      mcpServers: [],
-      isBuiltIn: true,
-      icon: "map",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    },
-    {
-      id: "skill_grind_me",
-      name: "grind-me",
-      description: "Ask many clarifying questions before doing anything. Thoroughly understand requirements first.",
-      systemPrompt: "You are an AI coding agent specialized in understanding requirements through dialogue. Before taking any action, you must thoroughly understand what the user wants to achieve.\n\nGuidelines:\n- Ask detailed clarifying questions about requirements\n- Break down the task into smaller, well-defined pieces\n- Understand the desired outcome before suggesting approaches\n- Explore the relevant parts of the codebase to ground your understanding\n- Confirm your understanding with the user before proceeding\n- Do not write any code until you have a thorough understanding\n- Use questions to uncover requirements, constraints, and priorities\n- Be thorough - it's better to ask more questions now than to misunderstand later\n- Once you fully understand the task, propose a clear action plan for user approval",
-      enabledTools: ["read_file", "write_file", "list_files", "search_codebase", "web_search"],
-      mcpServers: [],
-      isBuiltIn: true,
-      icon: "help",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    },
-    {
-      id: "skill_task_auditor",
-      name: "task-auditor",
-      description: "Analyze tasks and suggest changes, approaches, and execution plans. Do not write code.",
-      systemPrompt: "You are an AI task auditing agent specialized in analyzing requirements, suggesting changes, and planning task execution. You do NOT write code or make changes - you only discuss, analyze, and propose.\n\nGuidelines:\n- Grind the user and ask detailed clarifying questions to thoroughly understand the task/requirements before formulating plans.\n- If the task involves changes to any controller, prioritize asking questions first: inquire whether there are already integrated clients or dependent systems, so you can establish a strong background context and understand what changes are safe or compatible.\n- Break down tasks into clear, executable steps (make each task explicit).\n- For each task/step in your plan, display which files are affected by that specific task, providing the user with a clear starting point.\n- Analyze the codebase to understand the current state.\n- Identify what changes would be needed and where.\n- Suggest alternative approaches and trade-offs.\n- Estimate effort and complexity for each step.\n- Do NOT write, modify, or create any code.\n- Do NOT execute commands or make file changes.\n- Do NOT create canvas nodes or emit canvas-control markers.\n- Focus on planning, analysis, and recommendation.",
-      enabledTools: ["read_file", "list_files", "search_codebase", "web_search"],
-      mcpServers: [],
-      isBuiltIn: true,
-      icon: "lightbulb",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }
-  ],
-  activeSkillId: null,
+  // Built-in skills are defined in src/config/skillDefinitions.ts — edit them there.
+  skills: BUILT_IN_SKILLS,
+  activeSkillId: DEFAULT_SKILL_ID,
   mcpServers: (() => {
     try {
       const raw = localStorage.getItem("axiom_mcp_config");
@@ -1245,7 +1200,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         name: "AI Executor Node",
         prompt: "",
         model: state.activeModel,
-        status: "idle"
+        status: "idle",
+        skillId: BUILT_IN_SKILL_IDS.BUILD
       }
     };
     return updateContextAndSync(state, targetTabId, (ctx) => ({
@@ -1297,7 +1253,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
           id,
           type: "taskNode",
           position: { x: candidate.x, y: candidate.y },
-          data: { id, name: task.title, prompt: task.description, model: state.activeModel, status: "idle", sourceGlobalChatNodeId: anchorNodeId },
+          data: { 
+            id, 
+            name: task.title, 
+            prompt: task.description, 
+            model: state.activeModel, 
+            status: "idle", 
+            sourceGlobalChatNodeId: anchorNodeId,
+            skillId: BUILT_IN_SKILL_IDS.BUILD
+          },
         });
       });
       return updateContextAndSync(state, tabId, () => ({ nodes: [...ctx.nodes, ...newNodes] }), true);
@@ -1335,7 +1299,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         summary: "",
         width: 384,
         height: 220,
-        skillId: "skill_task_auditor"
+        skillId: GLOBAL_CHAT_DEFAULT_SKILL_ID
       }
     };
     return updateContextAndSync(state, targetTabId, (ctx) => ({

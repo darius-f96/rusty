@@ -1,6 +1,7 @@
 import React from "react";
 import { useWorkspaceStore } from "../../../store";
 import { CustomSelect } from "../../CustomSelect";
+import { DEFAULT_SKILL_ID } from "../../../config/skillDefinitions";
 import { Chat } from "../../ui/Chat";
 import { AgentQuestion, ChatInput } from "../../ui/ChatInput";
 import type { SubagentActivity } from "../../ui/Chat";
@@ -37,14 +38,16 @@ const ModelSelector: React.FC<{ nodeId: string; nodeData: any }> = ({ nodeId, no
   );
 };
 
-const SkillSelector: React.FC<{ nodeId: string }> = ({ nodeId }) => {
+const SkillSelector: React.FC<{ nodeId: string; skillId?: string }> = ({ nodeId, skillId }) => {
   const skills = useWorkspaceStore((s) => s.skills);
   const updateTaskNode = useWorkspaceStore((s) => s.updateTaskNode);
+  // Internal skills (e.g. vfs-agent) are not user-selectable and must be hidden.
+  const selectableSkills = skills.filter((s) => !s.isInternal);
   return (
     <CustomSelect
-      value={""}
-      onChange={(val) => updateTaskNode(nodeId, { skillId: val || undefined })}
-      options={[{ id: "", name: "—" }, ...skills.map((s) => ({ id: s.id, name: s.name }))]}
+      value={skillId || DEFAULT_SKILL_ID}
+      onChange={(val) => updateTaskNode(nodeId, { skillId: val })}
+      options={selectableSkills.map((s) => ({ id: s.id, name: s.name }))}
       placeholder="Skill"
       className="w-24 text-[10px]"
       direction="up"
@@ -104,7 +107,7 @@ export const PromptChatContent: React.FC<PromptChatContentProps> = ({
           <span className="text-[9px] text-[var(--text-muted)] font-sans uppercase font-semibold">M:</span>
           <ModelSelector nodeId={selectedNode.id} nodeData={selectedNode.data} />
           <span className="text-[9px] text-[var(--text-muted)] font-sans uppercase font-semibold">S:</span>
-          <SkillSelector nodeId={selectedNode.id} />
+          <SkillSelector nodeId={selectedNode.id} skillId={selectedNode.data?.skillId} />
         </div>
       )}
 
