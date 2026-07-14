@@ -59,6 +59,7 @@ import { reconciliateGraph } from "./capabilities/reconciliateGraph";
 import { agentChat } from "./capabilities/agentChat";
 import { generateSkill } from "./capabilities/generateSkill";
 import { inlineChat } from "./capabilities/inlineChat";
+import { generateTaskNodes } from "./capabilities/generateTaskNodes";
 
 dotenv.config();
 
@@ -293,6 +294,8 @@ wss.on("connection", (ws: WebSocket, req: http.IncomingMessage) => {
         await inlineChat(ws, data);
       } else if (data.type === "generate_skill") {
         await generateSkill(ws, data);
+      } else if (data.type === "generate_task_nodes") {
+        await generateTaskNodes(ws, data);
       } else {
         console.warn(`WebSocket [Server] Unknown message type: ${data.type}`);
       }

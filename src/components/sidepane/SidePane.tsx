@@ -17,6 +17,8 @@ import { PromptChatContent } from "./components/PromptChatContent";
 import { VfsExplorer } from "./components/VfsExplorer";
 import { CustomSelect } from "../CustomSelect";
 import { VfsRegistry, VFS_CHANGED_EVENT } from "../../services/vfs";
+import { canvasFileService } from "../tabs/canvas/services/canvasFileService";
+import { notify } from "../../notificationStore";
 
 const EMPTY_ARRAY: any[] = [];
 
@@ -31,6 +33,7 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
   const selectedNodeId = useWorkspaceStore((state) => state.selectedNodeId);
   const nodes = useWorkspaceStore((state) => state.nodes);
   const nodeStatus = useWorkspaceStore((state) => state.nodeStatus[selectedNodeId || ""] || "idle");
+  const selectedChatMessageCount = useWorkspaceStore((state) => state.globalChatHistory[selectedNodeId || ""]?.length || 0);
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
   const modifiedFiles = (selectedNode?.data?.modifiedFiles as string[]) || EMPTY_ARRAY;
@@ -176,6 +179,14 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
         onClose={onClose}
         isMaximized={isMaximized}
         onToggleMaximize={() => setIsMaximized(!isMaximized)}
+        onGenerateTasks={explorer.handleGenerateTaskDraft}
+        onSummarize={explorer.handleExplorerSummarize}
+        isGeneratingTasks={explorer.isGeneratingTasks}
+        isSummarizing={explorer.isSummarizing}
+        disableGlobalActions={nodeStatus === "running" || selectedChatMessageCount === 0}
+        taskGenerationModel={explorer.taskGenerationModel}
+        taskGenerationModels={explorer.allAvailableModels}
+        onTaskGenerationModelChange={(model) => useWorkspaceStore.getState().updateTaskNode(selectedNode.id, { taskGenerationModel: model })}
       />
 
       {/* Tabs Row */}
@@ -212,9 +223,17 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
               nodeStatus={nodeStatus}
               explorerInput={explorer.explorerInput}
               setExplorerInput={explorer.setExplorerInput}
-              isSummarizing={explorer.isSummarizing}
               handleExplorerSendMessage={explorer.handleExplorerSendMessage}
-              handleExplorerSummarize={explorer.handleExplorerSummarize}
+              generatedTaskDraft={explorer.generatedTaskDraft}
+              setGeneratedTaskDraft={explorer.setGeneratedTaskDraft}
+              onCreateTaskNodes={async (tasks) => {
+                if (!tabId) return;
+                const created = useWorkspaceStore.getState().addTaskNodesBatch(tabId, selectedNode.id, tasks);
+                if (created.length > 0) {
+                  await canvasFileService.autoSaveCanvas(tabId);
+                  notify("Task Nodes Created", `Added ${created.length} task node${created.length === 1 ? "" : "s"}.`, "success");
+                }
+              }}
               handleStopExplorer={explorer.handleStopExplorer}
               streamingMessageId={explorer.streamingMessageId}
               exploreModel={explorer.exploreModel}

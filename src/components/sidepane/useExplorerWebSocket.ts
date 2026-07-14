@@ -5,6 +5,7 @@ import { notify } from "../../notificationStore";
 import type { SubagentActivity } from "../ui/Chat";
 import type { AgentQuestion } from "../ui/ChatInput";
 const CONTEXT_NODE_CREATION_MARKER = "[CREATE_CONTEXT_NODES]";
+export interface GeneratedTaskDraft { title: string; description: string; selected: boolean }
 
 const parseAndCreateContextNodes = (response: string, nodePosition: { x: number; y: number }, tabId: string) => {
   const markerIndex = response.indexOf(CONTEXT_NODE_CREATION_MARKER);
@@ -71,6 +72,8 @@ export const useExplorerWebSocket = (selectedNode: any) => {
 
   const [explorerInput, setExplorerInput] = useState("");
   const [isSummarizing, setIsSummarizing] = useState(false);
+  const [isGeneratingTasks, setIsGeneratingTasks] = useState(false);
+  const [generatedTaskDraft, setGeneratedTaskDraft] = useState<GeneratedTaskDraft[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [subagents, setSubagents] = useState<SubagentActivity[]>([]);
@@ -108,6 +111,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
 
   const exploreModel = (selectedNode?.data?.exploreModel as string) || activeModel;
   const summarizeModel = (selectedNode?.data?.summarizeModel as string) || activeModel;
+  const taskGenerationModel = (selectedNode?.data?.taskGenerationModel as string) || exploreModel || activeModel;
 
   const getActiveCanvasTabId = () => {
     const state = useWorkspaceStore.getState();
@@ -644,14 +648,72 @@ export const useExplorerWebSocket = (selectedNode: any) => {
     };
   };
 
+  const handleGenerateTaskDraft = () => {
+    if (!selectedNodeId || isGeneratingTasks || nodeStatus === "running") return;
+    const history = useWorkspaceStore.getState().globalChatHistory[selectedNodeId] || [];
+    const chatHistory = history
+      .filter((message) => message.role === "user" || message.role === "assistant")
+      .map((message) => ({ role: message.role, content: message.content }));
+    if (!chatHistory.length) {
+      notify("Generate Tasks", "Discuss the story before generating task nodes.", "info");
+      return;
+    }
+
+    setIsGeneratingTasks(true);
+    setGeneratedTaskDraft([]);
+    const socket = new WebSocket("ws://localhost:4000");
+    const requestId = `tasks_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    socket.onopen = () => {
+      const state = useWorkspaceStore.getState();
+      const provider = state.customProviders.find((candidate) =>
+        candidate.models.some((candidateModel) => candidateModel.id === taskGenerationModel)
+      ) || state.customProviders.find((candidate) => candidate.id === state.activeCustomProviderId);
+      socket.send(JSON.stringify({
+        type: "generate_task_nodes",
+        requestId,
+        nodeId: selectedNodeId,
+        model: taskGenerationModel,
+        chatHistory,
+        customProvider: provider && (provider.id !== "anthropic" && provider.id !== "openai" || !!provider.apiKey) ? provider : null,
+      }));
+    };
+    socket.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        if (message.requestId !== requestId) return;
+        if (message.type === "generate_task_nodes_complete") {
+          setGeneratedTaskDraft(message.tasks.map((task: any) => ({ ...task, selected: true })));
+          setIsGeneratingTasks(false);
+          socket.close();
+        } else if (message.type === "generate_task_nodes_error") {
+          setIsGeneratingTasks(false);
+          notify("Task Generation Failed", message.error || "The model could not generate tasks.", "error");
+          socket.close();
+        }
+      } catch (error: any) {
+        setIsGeneratingTasks(false);
+        notify("Task Generation Failed", error.message || String(error), "error");
+      }
+    };
+    socket.onerror = () => {
+      setIsGeneratingTasks(false);
+      notify("Sidecar Connection Failed", "Could not connect to the agent sidecar.", "error");
+    };
+    socket.onclose = () => setIsGeneratingTasks(false);
+  };
+
   return {
     explorerInput,
     setExplorerInput,
     isSummarizing,
+    isGeneratingTasks,
+    generatedTaskDraft,
+    setGeneratedTaskDraft,
     showSettings,
     setShowSettings,
     handleExplorerSendMessage,
     handleExplorerSummarize,
+    handleGenerateTaskDraft,
     handleStopExplorer,
     handleAgentQuestionAnswer,
     streamingMessageId,
@@ -659,6 +721,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
     agentQuestion,
     exploreModel,
     summarizeModel,
+    taskGenerationModel,
     providers: filteredProviders,
     activeCustomProviderId,
     availableModels,

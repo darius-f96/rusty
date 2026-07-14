@@ -25,6 +25,11 @@ export interface CustomProvider {
   models: { id: string; name: string }[];
 }
 
+export interface GeneratedTaskNodeSpec {
+  title: string;
+  description: string;
+}
+
 export interface DevLog {
   id: string;
   type: "log" | "error" | "warn" | "system";
@@ -216,6 +221,7 @@ export interface WorkspaceState {
   
   addContextNode: (x: number, y: number, fileContext?: { path: string; name: string; isDir: boolean }, tabId?: string) => void;
   addTaskNode: (x: number, y: number, tabId?: string) => void;
+  addTaskNodesBatch: (tabId: string, anchorNodeId: string, tasks: GeneratedTaskNodeSpec[]) => string[];
   addGlobalChatNode: (x: number, y: number, tabId?: string) => void;
   addMcpNode: (x: number, y: number, tabId?: string) => void;
   addStickyNode: (x: number, y: number, tabId?: string, color?: string) => void;
@@ -1246,6 +1252,58 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       nodes: [...ctx.nodes, newNode]
     }), true);
   }),
+
+  addTaskNodesBatch: (tabId, anchorNodeId, tasks) => {
+    const createdIds: string[] = [];
+    set((state) => {
+      const ctx = getOrCreateContext(state, tabId);
+      const anchor = ctx.nodes.find((node) => node.id === anchorNodeId);
+      if (!anchor || tasks.length === 0) return {};
+
+      const TASK_WIDTH = 320;
+      const TASK_HEIGHT = 190;
+      const GAP_X = 56;
+      const GAP_Y = 40;
+      const anchorWidth = Number(anchor.data?.width) || 384;
+      const occupied = ctx.nodes.map((node) => ({
+        x: node.position.x,
+        y: node.position.y,
+        width: Number(node.measured?.width || node.width || node.data?.width) || (node.type === "taskNode" ? TASK_WIDTH : 260),
+        height: Number(node.measured?.height || node.height || node.data?.height) || (node.type === "taskNode" ? TASK_HEIGHT : 160),
+      }));
+      const intersects = (candidate: { x: number; y: number; width: number; height: number }) =>
+        occupied.some((box) => candidate.x < box.x + box.width + GAP_X && candidate.x + candidate.width + GAP_X > box.x && candidate.y < box.y + box.height + GAP_Y && candidate.y + candidate.height + GAP_Y > box.y);
+
+      const newNodes: Node[] = [];
+      tasks.slice(0, 20).forEach((task, index) => {
+        let slot = index;
+        let candidate = { x: 0, y: 0, width: TASK_WIDTH, height: TASK_HEIGHT };
+        do {
+          const column = Math.floor(slot / 4);
+          const row = slot % 4;
+          candidate = {
+            x: anchor.position.x + anchorWidth + GAP_X + column * (TASK_WIDTH + GAP_X),
+            y: anchor.position.y + row * (TASK_HEIGHT + GAP_Y),
+            width: TASK_WIDTH,
+            height: TASK_HEIGHT,
+          };
+          slot++;
+        } while (intersects(candidate) && slot < 500);
+
+        const id = `task_${crypto.randomUUID()}`;
+        createdIds.push(id);
+        occupied.push(candidate);
+        newNodes.push({
+          id,
+          type: "taskNode",
+          position: { x: candidate.x, y: candidate.y },
+          data: { id, name: task.title, prompt: task.description, model: state.activeModel, status: "idle", sourceGlobalChatNodeId: anchorNodeId },
+        });
+      });
+      return updateContextAndSync(state, tabId, () => ({ nodes: [...ctx.nodes, ...newNodes] }), true);
+    });
+    return createdIds;
+  },
 
   addGlobalChatNode: (x, y, tabId) => set((state) => {
     const targetTabId = tabId || getActiveCanvasTabId(state);
