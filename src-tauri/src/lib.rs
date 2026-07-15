@@ -7,8 +7,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
+use tauri_plugin_window_state::{StateFlags, WindowExt};
 use tauri::Manager;
 use tauri::Emitter;
+use tauri::webview::PageLoadEvent;
 use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem, MasterPty};
 use std::io::{Write, Read};
 use std::sync::mpsc;
@@ -977,17 +979,46 @@ fn spawn_sidecar(app: &tauri::App) {
 }
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Keep visibility outside the persisted state. The main window starts
+    // hidden, restores its geometry exactly once in setup, and is shown only
+    // after restoration. This avoids the default-size window flashing before
+    // the restored window and prevents a closed/hidden state from persisting.
+    let window_state_flags = StateFlags::SIZE
+        | StateFlags::POSITION
+        | StateFlags::MAXIMIZED
+        | StateFlags::FULLSCREEN;
+
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(window_state_flags)
+                .skip_initial_state("main")
+                .build(),
+        )
+        .on_page_load(|webview, payload| {
+            if webview.label() == "main" && payload.event() == PageLoadEvent::Finished {
+                let window = webview.window();
+                if !window.is_visible().unwrap_or_default() {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+        })
         .manage(VfsState(Arc::new(Mutex::new(HashMap::new()))))
         .manage(NodeFileTracker(Arc::new(Mutex::new(HashMap::new()))))
         .manage(CurrentExecutingNode(Arc::new(Mutex::new(None))))
         .manage(SidecarState(Arc::new(Mutex::new(None))))
         .manage(TerminalState(Arc::new(Mutex::new(HashMap::new()))))
-        .setup(|app| {
+        .setup(move |app| {
+            let main_window = app
+                .get_webview_window("main")
+                .ok_or_else(|| "main window was not created".to_string())?;
+
+            main_window.restore_state(window_state_flags)?;
+
             // Spawn the bundled Node sidecar on startup (both dev and release).
             // The Node binary is bundled via `externalBin` and server.js via `resources`,
             // so the user never needs to install Node or run the sidecar manually.
