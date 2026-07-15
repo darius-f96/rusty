@@ -180,6 +180,7 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
         isMaximized={isMaximized}
         onToggleMaximize={() => setIsMaximized(!isMaximized)}
         onGenerateTasks={explorer.handleGenerateTaskDraft}
+        onStopGenerateTasks={explorer.handleStopTaskGeneration}
         onSummarize={explorer.handleExplorerSummarize}
         isGeneratingTasks={explorer.isGeneratingTasks}
         isSummarizing={explorer.isSummarizing}

@@ -13,6 +13,7 @@ import { createListFilesTool, createSearchCodebaseTool } from "../services/tools
 import { createMcpTools, McpServerConfig } from "../services/mcpClient";
 import { createLspTools } from "../services/lspTools";
 import { importEsm } from "../services/esmImport";
+import { runPiAgentChat } from "../services/piAgentChat";
 
 export async function executeNode(ws: WebSocket, data: any): Promise<void> {
   const { nodeId, instructions, model, workspaceRoot, inputFiles, customProvider, globalContext, contextDescriptions, chatHistory, skill, mcpContext, upstreamTaskContext, lspSettings } = data;
@@ -260,7 +261,29 @@ CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
     let runResult;
     let useMultiRound = !!(chatHistory && chatHistory.length > 1);
 
-    if (!useMultiRound) {
+    (ws as any).__activeAgentTabId = nodeId;
+    const delegationPrompt = `${systemPrompt}\n\nDelegation:\n- When two or more investigation or implementation steps are independent, delegate them concurrently using Agent subagents.\n- Keep dependent work sequential and retrieve every delegated result before finishing.\n- Give each subagent a narrow scope and concrete deliverable.`;
+    const piModel = model?.includes("/")
+      ? model
+      : customProvider ? `${customProvider.id}/${model || customProvider.models?.[0]?.id || ""}` : model || "";
+    const piResponse = await runPiAgentChat({
+      tabId: nodeId,
+      model: piModel,
+      workspaceRoot,
+      systemPrompt: delegationPrompt,
+      conversationHistory: chatHistory || [],
+      message: instructions,
+      tools,
+      customProvider,
+      sendLog,
+      sendToken: (token) => safeSend(ws, { type: "token", nodeId, content: token }),
+      sendSubagentUpdate: (subagent) => safeSend(ws, { type: "subagent_update", tabId: nodeId, nodeId, subagent }),
+    });
+    if (piResponse !== undefined) {
+      runResult = { status: "success", modified: Array.from(modifiedFiles), response: piResponse };
+    }
+
+    if (!runResult && !useMultiRound) {
       try {
         const { createAgentSession } = await importEsm("@earendil-works/pi-coding-agent");
         const { getModel } = await importEsm("@earendil-works/pi-ai");
@@ -306,7 +329,7 @@ CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
       }
     }
 
-    if (useMultiRound) {
+    if (!runResult && useMultiRound) {
       const { callLlmWithToolsMultiRoundStreaming } = await import("../services/llm");
       let provider = "anthropic";
       let modelName = "claude-3-5-sonnet-20241022";

@@ -3,6 +3,15 @@ import { safeSend } from "../services/websocket";
 import type { LlmConfig } from "../services/llm";
 
 type ChatEntry = { role: "user" | "assistant"; content: string };
+const activeTaskGenerations = new Map<string, AbortController>();
+
+export function stopTaskNodeGeneration(requestId: string): boolean {
+  const controller = activeTaskGenerations.get(requestId);
+  if (!controller) return false;
+  controller.abort();
+  activeTaskGenerations.delete(requestId);
+  return true;
+}
 
 function resolveConfig(model: string, customProvider: any): LlmConfig & { apiType?: string } {
   if (customProvider?.baseUrl && customProvider?.apiKey) {
@@ -22,6 +31,8 @@ function resolveConfig(model: string, customProvider: any): LlmConfig & { apiTyp
 
 export async function generateTaskNodes(ws: WebSocket, data: any): Promise<void> {
   const { requestId, nodeId, model, customProvider } = data;
+  const abortController = new AbortController();
+  activeTaskGenerations.set(requestId, abortController);
   try {
     const history: ChatEntry[] = Array.isArray(data.chatHistory)
       ? data.chatHistory.filter((entry: any) => (entry?.role === "user" || entry?.role === "assistant") && typeof entry.content === "string")
@@ -36,6 +47,7 @@ export async function generateTaskNodes(ws: WebSocket, data: any): Promise<void>
     const conversation = history.slice(-30).map((entry) => `${entry.role.toUpperCase()}: ${entry.content}`).join("\n\n");
     const isAnthropic = config.apiType === "anthropic";
     const response = await fetch(isAnthropic ? `${config.baseUrl}/messages` : `${config.baseUrl}/chat/completions`, {
+      signal: abortController.signal,
       method: "POST",
       headers: isAnthropic
         ? { "Content-Type": "application/json", "x-api-key": config.apiKey, "anthropic-version": "2023-06-01" }
@@ -68,6 +80,13 @@ export async function generateTaskNodes(ws: WebSocket, data: any): Promise<void>
     if (!tasks.length) throw new Error("The model did not return any valid tasks.");
     safeSend(ws, { type: "generate_task_nodes_complete", requestId, nodeId, tasks });
   } catch (error: any) {
-    safeSend(ws, { type: "generate_task_nodes_error", requestId, nodeId, error: error?.message || String(error) });
+    safeSend(ws, {
+      type: abortController.signal.aborted ? "generate_task_nodes_stopped" : "generate_task_nodes_error",
+      requestId,
+      nodeId,
+      error: abortController.signal.aborted ? "Task generation stopped." : error?.message || String(error),
+    });
+  } finally {
+    activeTaskGenerations.delete(requestId);
   }
 }

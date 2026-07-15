@@ -1,5 +1,5 @@
 import React from "react";
-import { X, Maximize2, Minimize2, Sparkles, ListPlus } from "lucide-react";
+import { X, Maximize2, Minimize2, Sparkles, ListPlus, Octagon } from "lucide-react";
 import { CustomSelect } from "../../CustomSelect";
 
 interface SidePaneHeaderProps {
@@ -8,6 +8,7 @@ interface SidePaneHeaderProps {
   isMaximized: boolean;
   onToggleMaximize: () => void;
   onGenerateTasks?: () => void;
+  onStopGenerateTasks?: () => void;
   onSummarize?: () => void;
   isGeneratingTasks?: boolean;
   isSummarizing?: boolean;
@@ -23,6 +24,7 @@ export const SidePaneHeader: React.FC<SidePaneHeaderProps> = ({
   isMaximized,
   onToggleMaximize,
   onGenerateTasks,
+  onStopGenerateTasks,
   onSummarize,
   isGeneratingTasks,
   isSummarizing,
@@ -55,13 +57,13 @@ export const SidePaneHeader: React.FC<SidePaneHeaderProps> = ({
               direction="down"
             />
             <button
-              onClick={onGenerateTasks}
-              disabled={disableGlobalActions || isGeneratingTasks}
-              className="text-emerald-400 hover:text-emerald-300 disabled:text-[var(--text-muted)] disabled:opacity-50 transition-colors px-2 py-1 rounded-lg hover:bg-emerald-500/10 cursor-pointer flex items-center gap-1 text-[10px] font-mono"
-              title="Generate editable TaskNode drafts from this conversation"
+              onClick={isGeneratingTasks ? onStopGenerateTasks : onGenerateTasks}
+              disabled={!isGeneratingTasks && disableGlobalActions}
+              className={`${isGeneratingTasks ? "text-rose-400 hover:text-rose-300 hover:bg-rose-500/10" : "text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"} disabled:text-[var(--text-muted)] disabled:opacity-50 transition-colors px-2 py-1 rounded-lg cursor-pointer flex items-center gap-1 text-[10px] font-mono`}
+              title={isGeneratingTasks ? "Stop task generation" : "Generate editable TaskNode drafts from this conversation"}
             >
-              <ListPlus size={14} className={isGeneratingTasks ? "animate-pulse" : ""} />
-              <span>{isGeneratingTasks ? "Generating" : "Generate Tasks"}</span>
+              {isGeneratingTasks ? <Octagon size={14} /> : <ListPlus size={14} />}
+              <span>{isGeneratingTasks ? "Stop" : "Generate Tasks"}</span>
             </button>
             <button
               onClick={onSummarize}

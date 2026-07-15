@@ -33,6 +33,8 @@ export const useExplorerWebSocket = (selectedNode: any) => {
   const [subagents, setSubagents] = useState<SubagentActivity[]>([]);
   const [agentQuestion, setAgentQuestion] = useState<AgentQuestion | null>(null);
   const explorerSocketRef = useRef<WebSocket | null>(null);
+  const taskGenerationSocketRef = useRef<WebSocket | null>(null);
+  const taskGenerationRequestIdRef = useRef<string | null>(null);
   const consoleMessageIdRef = useRef<string | null>(null);
   const consoleBufferRef = useRef<string>("");
   const consoleFlushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -76,6 +78,32 @@ export const useExplorerWebSocket = (selectedNode: any) => {
     }
     setSubagents([]);
     setAgentQuestion(null);
+  }, [selectedNodeId]);
+
+  useEffect(() => {
+    const handleSubagentUpdate = (event: Event) => {
+      const detail = (event as CustomEvent<{ nodeId: string; subagent: SubagentActivity }>).detail;
+      if (detail?.nodeId !== selectedNodeId || !detail.subagent?.id) return;
+      const incoming = detail.subagent as SubagentActivity & { previousId?: string; appendLog?: string };
+      setSubagents((current) => {
+        const index = current.findIndex((agent) => agent.id === incoming.id || (!!incoming.previousId && agent.id === incoming.previousId));
+        const incomingLogs = [...(incoming.logs || []), ...(incoming.appendLog ? [incoming.appendLog] : [])];
+        if (index < 0) return [...current, { ...incoming, logs: incomingLogs }];
+        const next = [...current];
+        next[index] = { ...next[index], ...incoming, logs: [...(next[index].logs || []), ...incomingLogs].slice(-4) };
+        return next;
+      });
+    };
+    window.addEventListener("axiom-subagent-update", handleSubagentUpdate);
+    const handleSubagentsReset = (event: Event) => {
+      const detail = (event as CustomEvent<{ nodeId: string }>).detail;
+      if (detail?.nodeId === selectedNodeId) setSubagents([]);
+    };
+    window.addEventListener("axiom-subagents-reset", handleSubagentsReset);
+    return () => {
+      window.removeEventListener("axiom-subagent-update", handleSubagentUpdate);
+      window.removeEventListener("axiom-subagents-reset", handleSubagentsReset);
+    };
   }, [selectedNodeId]);
 
   useEffect(() => {
@@ -583,6 +611,8 @@ export const useExplorerWebSocket = (selectedNode: any) => {
     setGeneratedTaskDraft([]);
     const socket = new WebSocket("ws://localhost:4000");
     const requestId = `tasks_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    taskGenerationSocketRef.current = socket;
+    taskGenerationRequestIdRef.current = requestId;
     socket.onopen = () => {
       const state = useWorkspaceStore.getState();
       const provider = state.customProviders.find((candidate) =>
@@ -605,6 +635,9 @@ export const useExplorerWebSocket = (selectedNode: any) => {
           setGeneratedTaskDraft(message.tasks.map((task: any) => ({ ...task, selected: true })));
           setIsGeneratingTasks(false);
           socket.close();
+        } else if (message.type === "generate_task_nodes_stopped") {
+          setIsGeneratingTasks(false);
+          socket.close();
         } else if (message.type === "generate_task_nodes_error") {
           setIsGeneratingTasks(false);
           notify("Task Generation Failed", message.error || "The model could not generate tasks.", "error");
@@ -619,7 +652,23 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       setIsGeneratingTasks(false);
       notify("Sidecar Connection Failed", "Could not connect to the agent sidecar.", "error");
     };
-    socket.onclose = () => setIsGeneratingTasks(false);
+    socket.onclose = () => {
+      setIsGeneratingTasks(false);
+      if (taskGenerationSocketRef.current === socket) taskGenerationSocketRef.current = null;
+      if (taskGenerationRequestIdRef.current === requestId) taskGenerationRequestIdRef.current = null;
+    };
+  };
+
+  const handleStopTaskGeneration = () => {
+    const socket = taskGenerationSocketRef.current;
+    const requestId = taskGenerationRequestIdRef.current;
+    if (socket?.readyState === WebSocket.OPEN && requestId) {
+      socket.send(JSON.stringify({ type: "generate_task_nodes_stop", requestId, nodeId: selectedNodeId }));
+    }
+    window.setTimeout(() => socket?.close(), 100);
+    taskGenerationSocketRef.current = null;
+    taskGenerationRequestIdRef.current = null;
+    setIsGeneratingTasks(false);
   };
 
   return {
@@ -634,6 +683,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
     handleExplorerSendMessage,
     handleExplorerSummarize,
     handleGenerateTaskDraft,
+    handleStopTaskGeneration,
     handleStopExplorer,
     handleAgentQuestionAnswer,
     streamingMessageId,

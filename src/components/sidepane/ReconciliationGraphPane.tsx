@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { GitMerge, Play, Loader2, FileCode, MessageSquare, X, Send, AlertTriangle, Maximize2, Minimize2, Terminal } from "lucide-react";
+import { GitMerge, Play, Loader2, FileCode, MessageSquare, X, Send, AlertTriangle, Maximize2, Minimize2, Terminal, Octagon } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
 import { VfsRegistry } from "../../services/vfs";
 import { notify } from "../../notificationStore";
@@ -121,6 +121,9 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
     addConsoleLog("Stop requested by user.");
     setConsoleStatus("idle");
     if (socketRef.current) {
+      if (socketRef.current.readyState === WebSocket.OPEN) {
+        socketRef.current.send(JSON.stringify({ type: "agent_chat_stop", tabId: reconciliationStreamId }));
+      }
       socketRef.current.close(1000, "User requested stop");
       socketRef.current = null;
     }
@@ -513,6 +516,12 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
                   </div>
                 ))
               )}
+              {isReconciling && (
+                <div className="flex items-center gap-2 px-3 py-2 text-[11px] font-mono text-[var(--text-muted)]" aria-live="polite">
+                  <Loader2 size={14} className="animate-spin text-red-400" />
+                  <span>Reconciliation model is thinking…</span>
+                </div>
+              )}
               <div ref={chatEndRef} />
             </div>
 
@@ -565,7 +574,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
             onClick={() => handleStopReconciliation()}
             className="bg-rose-600 hover:bg-rose-500 text-white text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer animate-pulse"
           >
-            <Loader2 size={13} className="animate-spin" />
+            <Octagon size={13} />
             <span>Stop Execution</span>
           </button>
         ) : (

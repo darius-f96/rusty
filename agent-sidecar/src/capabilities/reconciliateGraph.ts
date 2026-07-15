@@ -2,6 +2,7 @@ import { WebSocket } from "ws";
 import path from "path";
 import { safeSend, getNextId, registerPendingRequest } from "../services/websocket";
 import { createListFilesTool, createSearchCodebaseTool } from "../services/tools";
+import { runPiAgentChat } from "../services/piAgentChat";
 
 export async function reconciliateGraph(ws: WebSocket, data: any): Promise<void> {
   const { tabId, model, nodes, workspaceRoot, customProvider, duplicateFiles, chatHistory, userMessage } = data;
@@ -35,6 +36,7 @@ export async function reconciliateGraph(ws: WebSocket, data: any): Promise<void>
     const readVfsTool = {
       name: "read_file",
       description: "Read a file from the workspace VFS.",
+      inputSchema: { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
       execute: async ({ path: filePath }: { path: string }) => {
         const resolvedPath = path.isAbsolute(filePath) ? filePath : path.join(workspaceRoot, filePath);
         sendLog(`AI reading VFS file: ${filePath}`);
@@ -60,6 +62,7 @@ export async function reconciliateGraph(ws: WebSocket, data: any): Promise<void>
     const writeVfsTool = {
       name: "write_file",
       description: "Write file content to the virtual workspace VFS.",
+      inputSchema: { type: "object", properties: { path: { type: "string" }, content: { type: "string" } }, required: ["path", "content"] },
       execute: async ({ path: filePath, content }: { path: string; content: string }) => {
         const resolvedPath = path.isAbsolute(filePath) ? filePath : path.join(workspaceRoot, filePath);
         sendLog(`AI modifying VFS file: ${filePath}`);
@@ -114,8 +117,23 @@ Workspace root: ${workspaceRoot || "unknown"}
 
     const promptText = userMessage || "Perform automatic reconciliation of the duplicate files across tasks.";
 
-    let response;
-    try {
+    const reconciliationTools = [readVfsTool, writeVfsTool, createListFilesTool(workspaceRoot), createSearchCodebaseTool(workspaceRoot)];
+    (ws as any).__activeAgentTabId = reconciliationStreamId;
+    const piModel = model?.includes("/") ? model : customProvider ? `${customProvider.id}/${model || customProvider.models?.[0]?.id || ""}` : model || "";
+    let response = await runPiAgentChat({
+      tabId: reconciliationStreamId,
+      model: piModel,
+      workspaceRoot,
+      systemPrompt: `${systemPrompt}\n\nUse Agent subagents when independent reconciliation investigations can run concurrently. Retrieve all delegated results before writing the final reconciled files.`,
+      conversationHistory: chatHistory || [],
+      message: promptText,
+      tools: reconciliationTools,
+      customProvider,
+      sendLog,
+      sendToken: () => {},
+      sendSubagentUpdate: (subagent) => safeSend(ws, { type: "subagent_update", tabId: reconciliationStreamId, nodeId: reconciliationStreamId, subagent }),
+    });
+    if (response === undefined) try {
       sendLog("Initializing Pi agent session runtime...");
       const { createAgentSessionRuntime } = require("@earendil-works/pi-agent-core");
       const runtime = await createAgentSessionRuntime({
@@ -167,7 +185,7 @@ Workspace root: ${workspaceRoot || "unknown"}
           { baseUrl, apiKey, model: modelName },
           systemPrompt,
           promptText,
-          [readVfsTool, writeVfsTool, createListFilesTool(workspaceRoot), createSearchCodebaseTool(workspaceRoot)],
+          reconciliationTools,
           workspaceRoot,
           graphSendLog,
           () => { }, // No token streaming for graph reconciliation

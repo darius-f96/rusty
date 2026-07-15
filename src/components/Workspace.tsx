@@ -331,6 +331,7 @@ export const Workspace: React.FC = () => {
     }
 
     const consoleMessageId = `console_${nodeId}_${Date.now()}`;
+    window.dispatchEvent(new CustomEvent("axiom-subagents-reset", { detail: { nodeId } }));
     store.addGlobalChatMessage(nodeId, {
       id: consoleMessageId,
       role: "console",
@@ -417,6 +418,11 @@ export const Workspace: React.FC = () => {
         if (data.type === "token" && data.nodeId === nodeId) {
           consoleBuffer += data.content;
           flushConsole();
+          return;
+        }
+
+        if (data.type === "subagent_update" && (data.nodeId === nodeId || data.tabId === nodeId) && data.subagent) {
+          window.dispatchEvent(new CustomEvent("axiom-subagent-update", { detail: { nodeId, subagent: data.subagent } }));
           return;
         }
 
@@ -576,6 +582,9 @@ export const Workspace: React.FC = () => {
   const stopExecution = (nodeId: string) => {
     console.log(`[Workspace] Stopping execution for node: ${nodeId}`);
     const socket = socketsRef.current.get(nodeId);
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: "agent_chat_stop", tabId: nodeId }));
+    }
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.close(1000, "User requested stop");
     }

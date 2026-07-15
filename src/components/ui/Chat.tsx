@@ -332,6 +332,12 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
       ) : (
         messages.filter((message) => message.role !== "console" || message.content.trim()).map(renderMessage)
       )}
+      {isStreaming && (
+        <div className="flex items-center gap-2 px-3 py-2 text-[11px] font-mono text-[var(--text-muted)]" aria-live="polite">
+          <Loader2 size={14} className="animate-spin text-[var(--accent-color)]" />
+          <span>Model is thinking…</span>
+        </div>
+      )}
     </div>
   );
 };
