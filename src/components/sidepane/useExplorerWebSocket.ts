@@ -5,6 +5,8 @@ import { notify } from "../../notificationStore";
 import type { SubagentActivity } from "../ui/Chat";
 import { resolveSkill, toSkillData, BUILT_IN_SKILL_IDS } from "../../config/skillDefinitions";
 import type { AgentQuestion } from "../ui/ChatInput";
+import { commandPermissionService, handleCommandPermissionMessage } from "../../services/commandPermissionService";
+import { refreshTree } from "../filetree/FileTreePresenter";
 export interface GeneratedTaskDraft { title: string; description: string; selected: boolean }
 
 const activeExplorerSockets = new Map<string, WebSocket>();
@@ -272,6 +274,16 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       console.log(`[SidePane] Received message:`, event.data);
       try {
         const msg = JSON.parse(event.data);
+        if (handleCommandPermissionMessage(msg, socket)) return;
+        if (msg.type === "command_output" && msg.sessionId === selectedNodeId) {
+          consoleBufferRef.current += msg.content;
+          scheduleConsoleFlush();
+          return;
+        }
+        if (msg.type === "command_complete" && msg.sessionId === selectedNodeId) {
+          void refreshTree();
+          return;
+        }
         if (msg.type === "log" && msg.tabId === selectedNodeId) {
           addLog(selectedNodeId, msg.message);
           consoleBufferRef.current += msg.message + "\n";
@@ -405,6 +417,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
     };
 
     socket.onclose = (event) => {
+      commandPermissionService.removeForSocket(socket);
       console.log(`[SidePane] Explorer WebSocket closed (code: ${event.code}, reason: "${event.reason}", clean: ${event.wasClean})`);
       addLog(selectedNodeId, `Explorer WebSocket closed (code: ${event.code}, reason: "${event.reason || "none"}", clean: ${event.wasClean})`);
       

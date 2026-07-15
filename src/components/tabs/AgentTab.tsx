@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { History, Trash2, Plus, RefreshCw, PanelLeftClose, PanelLeft, Shield, CheckCircle2, FolderGit2, FileText } from "lucide-react";
+import { History, Trash2, Plus, RefreshCw, PanelLeftClose, PanelLeft, CheckCircle2, FolderGit2, FileText } from "lucide-react";
 import { useWorkspaceStore, AgentMessage } from "../../store";
 import { resolveSkill, toSkillData, DEFAULT_SKILL_ID } from "../../config/skillDefinitions";
 import { CustomSelect } from "../CustomSelect";
@@ -7,6 +7,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { Chat, SubagentActivity } from "../ui/Chat";
 import { AgentQuestion, ChatInput } from "../ui/ChatInput";
 import { notify } from "../../notificationStore";
+import { commandPermissionService, handleCommandPermissionMessage } from "../../services/commandPermissionService";
+import { refreshTree } from "../filetree/FileTreePresenter";
 
 interface AgentTabProps {
   tab: any;
@@ -42,7 +44,6 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
   const [selectedSkillId, setSelectedSkillId] = useState<string>(activeSkillId || DEFAULT_SKILL_ID);
   const [message, setMessage] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
-  const [pendingPermission, setPendingPermission] = useState<any>(null);
   const [modifiedFiles, setModifiedFiles] = useState<string[]>([]);
   const [subagents, setSubagents] = useState<SubagentActivity[]>([]);
   const [agentQuestions, setAgentQuestions] = useState<AgentQuestion[]>([]);
@@ -98,11 +99,16 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
 
   useEffect(() => {
     return () => {
-      if (agentSocketRef.current) {
-        agentSocketRef.current.close();
+      const socket = agentSocketRef.current;
+      if (socket) {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: "command_session_close", sessionId: tab.id }));
+        }
+        commandPermissionService.removeForSocket(socket);
+        socket.close();
       }
     };
-  }, []);
+  }, [tab.id]);
 
   // ── Chat History ──────────────────────────────────────────────
   const loadChatHistory = useCallback(async () => {
@@ -353,6 +359,18 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
       try {
         const msg = JSON.parse(event.data);
 
+        if (handleCommandPermissionMessage(msg, socket)) return;
+
+        if (msg.type === "command_output" && msg.sessionId === tab.id) {
+          consoleBufferRef.current += msg.content;
+          if (consoleMessageIdRef.current) updateAgentMessage(tab.id, consoleMessageIdRef.current, consoleBufferRef.current);
+          return;
+        }
+        if (msg.type === "command_complete" && msg.sessionId === tab.id) {
+          void refreshTree();
+          return;
+        }
+
         if (msg.type === "log" && msg.tabId === tab.id) {
           consoleBufferRef.current += msg.message + "\n";
           if (consoleMessageIdRef.current) {
@@ -564,6 +582,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
     };
 
     socket.onclose = (event) => {
+      commandPermissionService.removeForSocket(socket);
       console.log(`[AgentTab] WebSocket closed (code: ${event.code})`);
 
       if (isStreamingRef.current) {
@@ -598,18 +617,6 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
     });
   };
 
-  const handlePermissionResolve = (approved: boolean) => {
-    if (!pendingPermission || !agentSocketRef.current) return;
-
-    agentSocketRef.current.send(JSON.stringify({
-      type: "permission_response",
-      requestId: pendingPermission.id,
-      approved: approved,
-    }));
-
-    setPendingPermission(null);
-  };
-
   const saveChatHistory = async () => {
     if (chatSaveTimeoutRef.current) {
       clearTimeout(chatSaveTimeoutRef.current);
@@ -634,51 +641,6 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
         console.error("Failed to save chat history:", e);
       }
     }, 300);
-  };
-
-  const renderPermissionModal = () => {
-    if (!pendingPermission) return null;
-
-    return (
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-xl w-full max-w-md shadow-2xl overflow-hidden">
-          <div className="px-4 py-3 bg-[var(--bg-header)] border-b border-[var(--border-color)] flex items-center space-x-2">
-            <Shield size={16} className="text-amber-400" />
-            <span className="text-[var(--text-light)] text-sm font-semibold">Permission Required</span>
-          </div>
-          <div className="p-4 space-y-3">
-            <p className="text-xs text-[var(--text-normal)]">
-              The agent wants to execute the following action:
-            </p>
-            <div className="bg-[var(--bg-app)] border border-[var(--border-color)] rounded-lg p-3 font-mono text-xs">
-              <div className="text-[var(--accent-color)] font-semibold mb-1">
-                Tool: {pendingPermission.toolCall?.name}
-              </div>
-              <div className="text-[var(--text-muted)]">
-                {JSON.stringify(pendingPermission.toolCall?.arguments || {}, null, 2)}
-              </div>
-            </div>
-            <p className="text-[10px] text-[var(--text-muted)]">
-              {pendingPermission.description || "Do you want to allow this action?"}
-            </p>
-          </div>
-          <div className="px-4 py-3 bg-[var(--bg-header)] border-t border-[var(--border-color)] flex items-center justify-end space-x-2">
-            <button
-              onClick={() => handlePermissionResolve(false)}
-              className="px-3 py-1.5 border border-[var(--border-color)] hover:bg-[var(--bg-canvas)] text-[var(--text-muted)] hover:text-[var(--text-light)] rounded-lg text-xs font-semibold cursor-pointer transition-colors"
-            >
-              Deny
-            </button>
-            <button
-              onClick={() => handlePermissionResolve(true)}
-              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors"
-            >
-              Allow
-            </button>
-          </div>
-        </div>
-      </div>
-    );
   };
 
   return (
@@ -858,8 +820,6 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
           </div>
         </div>
 
-        {/* Permission modal */}
-        {renderPermissionModal()}
       </div>
     </div>
   );

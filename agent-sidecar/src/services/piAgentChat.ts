@@ -1,6 +1,7 @@
 import * as fs from "node:fs/promises";
 import { getPiResourceLoader } from "./piMcp";
 import { importEsm } from "./esmImport";
+import { installPiCommandPolicy } from "./piCommandPolicy";
 
 interface ActivePiRun {
   stop: (reason: string) => Promise<void>;
@@ -235,6 +236,9 @@ function getLiveSubagentRecord(id: string): any | undefined {
  * are first-class model tools rather than hand-written adapters.
  */
 export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<string | undefined> {
+  // Install before runtime-version fallback: executeNode may create a lower-level
+  // Pi session afterwards, and it must inherit the same no-bypass policy.
+  await installPiCommandPolicy();
   if (!supportsPiRuntime()) {
     options.sendLog(`Pi delegation requires Node 22.19+; current runtime is Node ${process.versions.node} at ${process.execPath}. Using the compatibility agent runtime.`);
     return undefined;

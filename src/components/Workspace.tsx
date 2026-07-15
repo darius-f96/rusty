@@ -18,6 +18,9 @@ import { McpIntegrationTab } from "./mcp/McpIntegrationTab";
 import { createPortal } from "react-dom";
 import { AlertTriangle, X, Save, HelpCircle } from "lucide-react";
 import { canvasFileService } from "./tabs/canvas/services/canvasFileService";
+import { CommandPermissionPresenter } from "./permissions/CommandPermissionPresenter";
+import { commandPermissionService, handleCommandPermissionMessage } from "../services/commandPermissionService";
+import { refreshTree } from "./filetree/FileTreePresenter";
 
 export const Workspace: React.FC = () => {
   const rootPath = useWorkspaceStore((state) => state.rootPath);
@@ -400,6 +403,17 @@ export const Workspace: React.FC = () => {
         const data = JSON.parse(event.data);
         console.log("WebSocket received message:", data);
 
+        if (handleCommandPermissionMessage(data, socket)) return;
+        if (data.type === "command_output" && data.sessionId === nodeId) {
+          consoleBuffer += data.content;
+          flushConsole();
+          return;
+        }
+        if (data.type === "command_complete" && data.sessionId === nodeId) {
+          void refreshTree();
+          return;
+        }
+
         if (data.type === "node_status_change") {
           setNodeStatus(data.targetNodeId, data.status);
           if (data.status === "error" && data.message) {
@@ -559,6 +573,7 @@ export const Workspace: React.FC = () => {
     };
 
     socket.onclose = (event) => {
+      commandPermissionService.removeForSocket(socket);
       console.log(`[Workspace] WebSocket closed (code: ${event.code}, reason: "${event.reason}", clean: ${event.wasClean})`);
       addLog(nodeId, `WebSocket connection closed (code: ${event.code}, reason: "${event.reason || "none"}", clean: ${event.wasClean})`);
       socketsRef.current.delete(nodeId);
@@ -766,6 +781,7 @@ export const Workspace: React.FC = () => {
 
   return (
     <div ref={containerRef} className="flex-1 flex h-full min-w-0 overflow-hidden relative bg-[var(--bg-editor)] workspace-container">
+      <CommandPermissionPresenter />
       {editorGroups.map((group, idx) => {
         const widthPercent = (groupSizes[idx] || (1 / editorGroups.length)) * 100;
         const isLast = idx === editorGroups.length - 1;

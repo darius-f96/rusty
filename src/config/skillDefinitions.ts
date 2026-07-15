@@ -59,7 +59,7 @@ SEO & Structural Best Practices:
 - Use proper HTML5 semantic tags (<header>, <nav>, <main>, <section>, <footer>) instead of nesting generic <div> containers.
 - Every interactive element (inputs, buttons, tabs) must have a unique, descriptive "id" attribute for ease of browser automated testing.
 - Write meaningful descriptions and title tags when designing pages.`,
-    enabledTools: ["read_file", "write_file", "list_files", "search_codebase", "web_search"],
+    enabledTools: ["read_file", "write_file", "list_files", "search_codebase", "web_search", "run_command"],
     mcpServers: [],
     isBuiltIn: true,
     icon: "hammer",

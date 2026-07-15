@@ -60,6 +60,8 @@ import { agentChat } from "./capabilities/agentChat";
 import { generateSkill } from "./capabilities/generateSkill";
 import { inlineChat } from "./capabilities/inlineChat";
 import { generateTaskNodes, stopTaskNodeGeneration } from "./capabilities/generateTaskNodes";
+import { stopCommandsForSession } from "./services/commandExecution";
+import { clearCommandSession } from "./services/commandPermissions";
 
 dotenv.config();
 
@@ -257,13 +259,15 @@ wss.on("connection", (ws: WebSocket, req: http.IncomingMessage) => {
 
     console.log(`WebSocket [Server] Received message type: ${data.type}`);
 
-    // Pair request callbacks returning from frontend VFS
-    if (data.type === "read_file_response" || data.type === "write_file_response" || data.type === "agent_question_response") {
+    // Pair interactive tool responses with the originating Sidecar request.
+    if (data.type === "read_file_response" || data.type === "write_file_response" || data.type === "agent_question_response" || data.type === "command_permission_response") {
       console.log(`WebSocket [Server] Resolving pending request: ${data.requestId}`, { hasError: !!data.error });
       const pending = pendingRequests.get(data.requestId);
-      if (pending) {
+      if (pending && (data.type !== "command_permission_response" || pending.ws === ws)) {
         pending.resolver(data);
         pendingRequests.delete(data.requestId);
+      } else if (pending) {
+        console.warn(`WebSocket [Server] Ignored command permission response from a different client: ${data.requestId}`);
       }
       return;
     }
@@ -272,10 +276,12 @@ wss.on("connection", (ws: WebSocket, req: http.IncomingMessage) => {
     try {
       if (data.type === "agent_chat_stop") {
         const stopped = await stopPiAgentRun(data.tabId, "Stop requested by user; cancelling all agent tasks.");
+        const stoppedCommands = stopCommandsForSession(data.tabId);
         safeSend(ws, {
           type: "agent_chat_stopped",
           tabId: data.tabId,
           stopped,
+          stoppedCommands,
         });
       } else if (data.type === "inline_chat_stop") {
         const stopped = await stopPiAgentRun(data.sessionId, "Inline chat stopped by user.");
@@ -299,6 +305,9 @@ wss.on("connection", (ws: WebSocket, req: http.IncomingMessage) => {
       } else if (data.type === "generate_task_nodes_stop") {
         const stopped = stopTaskNodeGeneration(data.requestId);
         safeSend(ws, { type: "generate_task_nodes_stopped", requestId: data.requestId, nodeId: data.nodeId, stopped });
+      } else if (data.type === "command_session_close") {
+        stopCommandsForSession(data.sessionId);
+        clearCommandSession(data.sessionId);
       } else {
         console.warn(`WebSocket [Server] Unknown message type: ${data.type}`);
       }
@@ -313,6 +322,7 @@ wss.on("connection", (ws: WebSocket, req: http.IncomingMessage) => {
     const tabId = (ws as any).__activeAgentTabId;
     if (typeof tabId === "string") {
       void stopPiAgentRun(tabId, "Client disconnected; cancelling all agent tasks.");
+      stopCommandsForSession(tabId);
     }
   });
 });

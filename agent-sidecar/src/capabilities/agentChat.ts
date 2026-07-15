@@ -15,6 +15,7 @@ import { createLspTools } from "../services/lspTools";
 import { createMcpTools, McpServerConfig } from "../services/mcpClient";
 import { createWebSearchTool } from "../services/webSearchTool";
 import { DeferredUserQuestion, hasActiveBackgroundSubagents, runPiAgentChat } from "../services/piAgentChat";
+import { createRunCommandTool } from "./tools/runCommandTool";
 
 type AgentTool = {
   name: string;
@@ -180,6 +181,7 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
       createListFilesTool(workspaceRoot),
       createSearchCodebaseTool(workspaceRoot),
       createWebSearchTool(sendLog),
+      createRunCommandTool({ ws, sessionId: tabId, workspaceRoot, sendLog }),
       ...lspTools
     ];
 
@@ -189,6 +191,7 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
       "list_files",
       "search_codebase",
       "web_search",
+      "run_command",
       ...(lspSettings?.enabled ? ["lsp_get_definition", "lsp_get_references", "lsp_get_diagnostics"] : [])
     ];
     const tools: AgentTool[] = allTools.filter((t) => enabledToolNames.includes(t.name));
@@ -219,6 +222,7 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
       list_files: "- 'list_files': List all files in the workspace (no input needed).",
       search_codebase: "- 'search_codebase': Search for text patterns across the codebase (input: {\"pattern\": \"search text\"}).",
       web_search: "- 'web_search': Search the public web for current information and cited sources (input: {\"query\": \"search query\"}).",
+      run_command: "- 'run_command': Run an approved non-interactive command in the physical workspace (input: {\"program\": \"npm\", \"args\": [\"test\"], \"cwd\": \".\"}).",
       ask_user_question: "- 'ask_user_question': Pause for a focused user decision, optionally with selectable suggestions.",
       lsp_get_definition: "- 'lsp_get_definition': Find definition of a symbol (input: {\"path\": \"file/path\", \"line\": lineNum, \"character\": colNum}).",
       lsp_get_references: "- 'lsp_get_references': Find all references of a symbol (input: {\"path\": \"file/path\", \"line\": lineNum, \"character\": colNum}).",
