@@ -6,6 +6,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { DiffViewToggle } from "../../ui/DiffViewToggle";
 import { notify } from "../../../notificationStore";
 import { CustomSelect } from "../../CustomSelect";
+import { getMonacoLanguageId } from "../../../services/lspLanguage";
 
 interface PRDiffViewProps {
   tabId: string;
@@ -23,26 +24,6 @@ interface FileDiffState {
   isCollapsed: boolean;
   isSaving: boolean;
 }
-
-const getEditorLanguage = (filePath: string): string => {
-  const ext = filePath.split(".").pop()?.toLowerCase();
-  switch (ext) {
-    case "ts":
-    case "tsx":
-      return "typescript";
-    case "js":
-    case "jsx":
-      return "javascript";
-    case "json":
-      return "json";
-    case "rs":
-      return "rust";
-    case "css":
-      return "css";
-    default:
-      return "plaintext";
-  }
-};
 
 interface FileDiffCardProps {
   file: string;
@@ -148,7 +129,7 @@ const FileDiffCard: React.FC<FileDiffCardProps> = ({
           {hasRendered ? (
             <DiffEditor
               height="100%"
-              language={getEditorLanguage(file)}
+              language={getMonacoLanguageId(file)}
               theme="axiom-custom-theme"
               original={state.original}
               modified={state.edited}

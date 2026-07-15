@@ -360,17 +360,23 @@ export function defineMonacoTheme(monaco: any, t: AppTheme) {
   monaco.editor.defineTheme("axiom-custom-theme", {
     base: "vs-dark",
     inherit: true,
+    semanticHighlighting: true,
     rules: [
       { token: "", foreground: t.textNormal.replace("#", "") },
       { token: "comment", foreground: t.syntax.comments.replace("#", ""), fontStyle: "italic" },
       { token: "keyword", foreground: t.syntax.keywords.replace("#", "") },
+      { token: "keyword.control", foreground: t.syntax.keywords.replace("#", "") },
+      { token: "operator", foreground: t.syntax.keywords.replace("#", "") },
       { token: "string", foreground: t.syntax.strings.replace("#", "") },
+      { token: "string.escape", foreground: t.syntax.numbers.replace("#", "") },
       { token: "number", foreground: t.syntax.numbers.replace("#", "") },
       { token: "regexp", foreground: t.syntax.strings.replace("#", "") },
       { token: "type", foreground: t.syntax.types.replace("#", "") },
       { token: "class", foreground: t.syntax.types.replace("#", "") },
       { token: "function", foreground: t.syntax.functions.replace("#", "") },
+      { token: "function.declaration", foreground: t.syntax.functions.replace("#", "") },
       { token: "variable", foreground: t.syntax.variables.replace("#", "") },
+      { token: "identifier", foreground: t.syntax.variables.replace("#", "") },
     ],
     colors: {
       "editor.background": t.bgEditor,
@@ -380,6 +386,12 @@ export function defineMonacoTheme(monaco: any, t: AppTheme) {
       "editor.lineHighlightBackground": t.bgSidebar + "33",
       "editor.selectionBackground": t.accent + "44",
       "editorCursor.foreground": t.accent,
+      "diffEditor.insertedTextBackground": "#1f9d5538",
+      "diffEditor.removedTextBackground": "#e5484d38",
+      "diffEditor.insertedLineBackground": "#1f9d551c",
+      "diffEditor.removedLineBackground": "#e5484d1c",
+      "diffEditorGutter.insertedLineBackground": "#1f9d5560",
+      "diffEditorGutter.removedLineBackground": "#e5484d60",
     },
   });
 }

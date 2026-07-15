@@ -6,6 +6,7 @@ import { Save, RotateCcw, Trash2 } from "lucide-react";
 import { useDiffViewMode } from "../../../hooks/useDiffViewMode";
 import { DiffViewToggle } from "../../ui/DiffViewToggle";
 import { useWorkspaceStore } from "../../../store";
+import { getMonacoLanguageId } from "../../../services/lspLanguage";
 
 interface DiffTabContentProps {
   selectedNode: any;
@@ -17,30 +18,6 @@ interface DiffTabContentProps {
   isDiffLoading?: boolean;
   tabId?: string;
 }
-
-const getEditorLanguage = (filePath: string): string => {
-  const ext = filePath.split(".").pop()?.toLowerCase();
-  switch (ext) {
-    case "ts":
-    case "tsx":
-      return "typescript";
-    case "js":
-    case "jsx":
-      return "javascript";
-    case "json":
-      return "json";
-    case "rs":
-      return "rust";
-    case "css":
-      return "css";
-    case "html":
-      return "html";
-    case "md":
-      return "markdown";
-    default:
-      return "plaintext";
-  }
-};
 
 export const DiffTabContent: React.FC<DiffTabContentProps> = ({
   selectedNode,
@@ -234,7 +211,7 @@ export const DiffTabContent: React.FC<DiffTabContentProps> = ({
           <div className="w-full h-full">
             <DiffEditor
               height="100%"
-              language={getEditorLanguage(activeDiffFile)}
+              language={getMonacoLanguageId(activeDiffFile)}
               theme="axiom-custom-theme"
               original={originalCode}
               modified={displayCode}

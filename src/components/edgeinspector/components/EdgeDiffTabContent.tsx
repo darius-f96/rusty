@@ -12,6 +12,7 @@ import { VfsRegistry } from "../../../services/vfs";
 import { Save, RotateCcw } from "lucide-react";
 import { useDiffViewMode } from "../../../hooks/useDiffViewMode";
 import { DiffViewToggle } from "../../ui/DiffViewToggle";
+import { getMonacoLanguageId } from "../../../services/lspLanguage";
 
 interface EdgeDiffTabContentProps {
   sourceModifiedFiles: string[];
@@ -22,26 +23,6 @@ interface EdgeDiffTabContentProps {
   modifiedCode: string;
   tabId?: string;
 }
-
-const getEditorLanguage = (filePath: string): string => {
-  const ext = filePath.split(".").pop()?.toLowerCase();
-  switch (ext) {
-    case "ts":
-    case "tsx":
-      return "typescript";
-    case "js":
-    case "jsx":
-      return "javascript";
-    case "json":
-      return "json";
-    case "rs":
-      return "rust";
-    case "css":
-      return "css";
-    default:
-      return "plaintext";
-  }
-};
 
 export const EdgeDiffTabContent: React.FC<EdgeDiffTabContentProps> = ({
   sourceModifiedFiles,
@@ -160,7 +141,7 @@ export const EdgeDiffTabContent: React.FC<EdgeDiffTabContentProps> = ({
           <div className="w-full h-full">
             <DiffEditor
               height="100%"
-              language={getEditorLanguage(diffFile)}
+              language={getMonacoLanguageId(diffFile)}
               theme="axiom-custom-theme"
               original={originalCode}
               modified={displayCode}
