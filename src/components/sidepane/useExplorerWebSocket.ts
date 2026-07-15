@@ -8,6 +8,34 @@ import type { AgentQuestion } from "../ui/ChatInput";
 export interface GeneratedTaskDraft { title: string; description: string; selected: boolean }
 
 const activeExplorerSockets = new Map<string, WebSocket>();
+const activeExplorerSubagents = new Map<string, SubagentActivity[]>();
+
+type IncomingSubagent = SubagentActivity & { previousId?: string; appendLog?: string };
+
+const mergeSubagentUpdate = (nodeId: string, incoming: IncomingSubagent): SubagentActivity[] => {
+  const current = activeExplorerSubagents.get(nodeId) || [];
+  const index = current.findIndex((agent) =>
+    agent.id === incoming.id || (!!incoming.previousId && agent.id === incoming.previousId)
+  );
+  const incomingLogs = [...(incoming.logs || []), ...(incoming.appendLog ? [incoming.appendLog] : [])];
+  const cleanIncoming = { ...incoming, result: undefined, error: undefined };
+  delete cleanIncoming.previousId;
+  delete cleanIncoming.appendLog;
+
+  let next: SubagentActivity[];
+  if (index < 0) {
+    next = [...current, { ...cleanIncoming, logs: incomingLogs }];
+  } else {
+    next = [...current];
+    const mergedLogs = [...(next[index].logs || [])];
+    for (const line of incomingLogs) {
+      if (line && mergedLogs[mergedLogs.length - 1] !== line) mergedLogs.push(line);
+    }
+    next[index] = { ...next[index], ...cleanIncoming, logs: mergedLogs.slice(-4) };
+  }
+  activeExplorerSubagents.set(nodeId, next);
+  return next;
+};
 
 export const useExplorerWebSocket = (selectedNode: any) => {
   const selectedNodeId = selectedNode?.id || null;
@@ -75,8 +103,13 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       if (existing && existing.readyState === WebSocket.OPEN) {
         explorerSocketRef.current = existing;
       }
+      const history = useWorkspaceStore.getState().globalChatHistory[selectedNodeId] || [];
+      const activeConsole = [...history].reverse().find((message) => message.role === "console");
+      setStreamingMessageId(useWorkspaceStore.getState().nodeStatus[selectedNodeId] === "running" ? activeConsole?.id || null : null);
+      setSubagents(activeExplorerSubagents.get(selectedNodeId) || []);
+    } else {
+      setSubagents([]);
     }
-    setSubagents([]);
     setAgentQuestion(null);
   }, [selectedNodeId]);
 
@@ -84,24 +117,27 @@ export const useExplorerWebSocket = (selectedNode: any) => {
     const handleSubagentUpdate = (event: Event) => {
       const detail = (event as CustomEvent<{ nodeId: string; subagent: SubagentActivity }>).detail;
       if (detail?.nodeId !== selectedNodeId || !detail.subagent?.id) return;
-      const incoming = detail.subagent as SubagentActivity & { previousId?: string; appendLog?: string };
-      setSubagents((current) => {
-        const index = current.findIndex((agent) => agent.id === incoming.id || (!!incoming.previousId && agent.id === incoming.previousId));
-        const incomingLogs = [...(incoming.logs || []), ...(incoming.appendLog ? [incoming.appendLog] : [])];
-        if (index < 0) return [...current, { ...incoming, logs: incomingLogs }];
-        const next = [...current];
-        next[index] = { ...next[index], ...incoming, logs: [...(next[index].logs || []), ...incomingLogs].slice(-4) };
-        return next;
-      });
+      setSubagents(mergeSubagentUpdate(selectedNodeId, detail.subagent as IncomingSubagent));
     };
     window.addEventListener("axiom-subagent-update", handleSubagentUpdate);
+    const handleExplorerSubagentsChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ nodeId: string }>).detail;
+      if (detail?.nodeId === selectedNodeId) {
+        setSubagents(activeExplorerSubagents.get(selectedNodeId) || []);
+      }
+    };
+    window.addEventListener("axiom-explorer-subagents-changed", handleExplorerSubagentsChanged);
     const handleSubagentsReset = (event: Event) => {
       const detail = (event as CustomEvent<{ nodeId: string }>).detail;
-      if (detail?.nodeId === selectedNodeId) setSubagents([]);
+      if (detail?.nodeId === selectedNodeId) {
+        activeExplorerSubagents.set(selectedNodeId, []);
+        setSubagents([]);
+      }
     };
     window.addEventListener("axiom-subagents-reset", handleSubagentsReset);
     return () => {
       window.removeEventListener("axiom-subagent-update", handleSubagentUpdate);
+      window.removeEventListener("axiom-explorer-subagents-changed", handleExplorerSubagentsChanged);
       window.removeEventListener("axiom-subagents-reset", handleSubagentsReset);
     };
   }, [selectedNodeId]);
@@ -148,6 +184,8 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       timestamp: new Date().toLocaleTimeString(),
     });
     setStreamingMessageId(consoleMessageId);
+    activeExplorerSubagents.set(selectedNodeId, []);
+    setSubagents([]);
 
     setExplorerInput("");
     setNodeStatus(selectedNodeId, "running");
@@ -242,20 +280,8 @@ export const useExplorerWebSocket = (selectedNode: any) => {
         }
 
         if (msg.type === "subagent_update" && msg.tabId === selectedNodeId && msg.subagent?.id) {
-          const incoming = msg.subagent as SubagentActivity & { previousId?: string; appendLog?: string };
-          setSubagents((current) => {
-            const index = current.findIndex((agent) => agent.id === incoming.id || (!!incoming.previousId && agent.id === incoming.previousId));
-            const incomingLogs = [...(incoming.logs || []), ...(incoming.appendLog ? [incoming.appendLog] : [])];
-            const cleanIncoming = { ...incoming, result: undefined, error: undefined };
-            delete cleanIncoming.previousId;
-            delete cleanIncoming.appendLog;
-            if (index < 0) return [...current, { ...cleanIncoming, logs: incomingLogs }];
-            const next = [...current];
-            const mergedLogs = [...(next[index].logs || [])];
-            for (const line of incomingLogs) if (line && mergedLogs[mergedLogs.length - 1] !== line) mergedLogs.push(line);
-            next[index] = { ...next[index], ...cleanIncoming, logs: mergedLogs.slice(-4) };
-            return next;
-          });
+          setSubagents(mergeSubagentUpdate(selectedNodeId, msg.subagent as IncomingSubagent));
+          window.dispatchEvent(new CustomEvent("axiom-explorer-subagents-changed", { detail: { nodeId: selectedNodeId } }));
           return;
         }
 

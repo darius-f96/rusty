@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from "react";
 import { DiffEditor } from "@monaco-editor/react";
 import { CustomSelect } from "../../CustomSelect";
 import { VfsRegistry } from "../../../services/vfs";
-import { Save, RotateCcw, Trash2 } from "lucide-react";
+import { Save, RotateCcw, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { useDiffViewMode } from "../../../hooks/useDiffViewMode";
 import { DiffViewToggle } from "../../ui/DiffViewToggle";
 import { useWorkspaceStore } from "../../../store";
@@ -110,6 +110,20 @@ export const DiffTabContent: React.FC<DiffTabContentProps> = ({
     }
   };
 
+  const currentIndex = activeDiffFile ? modifiedFiles.indexOf(activeDiffFile) : -1;
+
+  const handlePrev = () => {
+    if (currentIndex > 0) {
+      setActiveDiffFile(modifiedFiles[currentIndex - 1]);
+    }
+  };
+
+  const handleNext = () => {
+    if (currentIndex < modifiedFiles.length - 1) {
+      setActiveDiffFile(modifiedFiles[currentIndex + 1]);
+    }
+  };
+
   const displayCode = isDirty ? editedCode : modifiedCode;
 
   return (
@@ -117,8 +131,24 @@ export const DiffTabContent: React.FC<DiffTabContentProps> = ({
       {/* File Diff Dropdown Selector (only for TaskNode when files are edited) */}
       {selectedNode.type === "taskNode" && modifiedFiles.length > 0 && (
         <div className="px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)] flex items-center justify-between text-xs font-mono flex-shrink-0">
-          <div className="flex items-center space-x-3">
-            <span className="text-[var(--text-muted)] mr-4">File Diff:</span>
+          <div className="flex items-center space-x-1">
+            <span className="text-[var(--text-muted)] mr-3 flex-shrink-0">File Diff:</span>
+            <button
+              onClick={handlePrev}
+              disabled={currentIndex <= 0}
+              className="p-1 rounded hover:bg-[var(--accent-bg)] text-[var(--text-muted)] hover:text-[var(--text-light)] disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[var(--text-muted)] transition-colors cursor-pointer disabled:cursor-not-allowed border border-[var(--border-color)] flex items-center justify-center flex-shrink-0"
+              title="Previous file"
+            >
+              <ChevronLeft size={13} />
+            </button>
+            <button
+              onClick={handleNext}
+              disabled={currentIndex >= modifiedFiles.length - 1}
+              className="p-1 rounded hover:bg-[var(--accent-bg)] text-[var(--text-muted)] hover:text-[var(--text-light)] disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[var(--text-muted)] transition-colors cursor-pointer disabled:cursor-not-allowed border border-[var(--border-color)] flex items-center justify-center flex-shrink-0 mr-3"
+              title="Next file"
+            >
+              <ChevronRight size={13} />
+            </button>
             <CustomSelect
               value={activeDiffFile}
               onChange={setActiveDiffFile}
