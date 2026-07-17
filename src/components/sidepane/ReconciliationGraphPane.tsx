@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { GitMerge, Play, Loader2, FileCode, MessageSquare, X, Send, AlertTriangle, Maximize2, Minimize2, Terminal, Octagon } from "lucide-react";
+import { GitMerge, Play, Loader2, FileCode, MessageSquare, X, Send, AlertTriangle, Maximize2, Minimize2, Terminal, Octagon, RotateCcw } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
 import { VfsRegistry } from "../../services/vfs";
 import { notify } from "../../notificationStore";
@@ -10,6 +10,13 @@ import { queryDuplicateTrackedFiles } from "../../services/vfs/orchestrators/que
 import { processResponse } from "../../services/responseProcessingService";
 import { ConsoleTabContent } from "./components/ConsoleTabContent";
 import { commandPermissionService, handleCommandPermissionMessage } from "../../services/commandPermissionService";
+import { AgentActivityCard } from "../ui/SubagentActivityPanel";
+import type { SubagentActivity } from "../ui/Chat";
+import { useConfirm } from "../useConfirm";
+import {
+  reconciliationOverlayService,
+  RECONCILIATION_OVERLAY_CHANGED_EVENT,
+} from "../../services/reconciliationOverlayService";
 
 interface ReconciliationGraphPaneProps {
   onClose: () => void;
@@ -18,6 +25,34 @@ interface ReconciliationGraphPaneProps {
 }
 
 const getReconciliationStreamId = (tabId: string) => `__reconciliation__:${tabId}`;
+const EMPTY_RECONCILIATION_LOGS: string[] = [];
+
+type IncomingSubagent = SubagentActivity & { previousId?: string; appendLog?: string };
+
+const mergeSubagentUpdate = (current: SubagentActivity[], incoming: IncomingSubagent): SubagentActivity[] => {
+  const index = current.findIndex((subagent) =>
+    subagent.id === incoming.id || (!!incoming.previousId && subagent.id === incoming.previousId)
+  );
+  const incomingLogs = [
+    ...(Array.isArray(incoming.logs) ? incoming.logs : []),
+    ...(incoming.appendLog ? [incoming.appendLog] : []),
+  ];
+  const cleanIncoming = { ...incoming, result: undefined, error: undefined };
+  delete cleanIncoming.previousId;
+  delete cleanIncoming.appendLog;
+
+  if (index < 0) {
+    return [...current, { ...cleanIncoming, logs: incomingLogs }];
+  }
+
+  const next = [...current];
+  const mergedLogs = [...(next[index].logs || [])];
+  for (const log of incomingLogs) {
+    if (log && mergedLogs[mergedLogs.length - 1] !== log) mergedLogs.push(log);
+  }
+  next[index] = { ...next[index], ...cleanIncoming, id: incoming.id, logs: mergedLogs.slice(-200) };
+  return next;
+};
 
 export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = ({ onClose, tabId, isOpen = true }) => {
   const rootPath = useWorkspaceStore((state) => state.rootPath);
@@ -36,10 +71,19 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
   const [chatInput, setChatInput] = useState("");
   const [isMaximized, setIsMaximized] = useState(false);
   const [duplicateFiles, setDuplicateFiles] = useState<Record<string, string[]>>({});
+  const [subagents, setSubagents] = useState<SubagentActivity[]>([]);
+  const [rollbackAvailable, setRollbackAvailable] = useState(false);
+  const [isRollingBack, setIsRollingBack] = useState(false);
+  const [reconciledFiles, setReconciledFiles] = useState<string[]>([]);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<WebSocket | null>(null);
+  const { confirm, ConfirmModalComponent } = useConfirm();
   const reconciliationStreamId = getReconciliationStreamId(tabId);
+  const reconciliationVfsId = reconciliationOverlayService.getOverlayTabId(tabId);
+  const reconciliationLogs = useWorkspaceStore(
+    (state) => state.canvasContexts[tabId]?.nodeLogs[reconciliationStreamId] ?? EMPTY_RECONCILIATION_LOGS
+  );
   const addConsoleLog = (message: string) => useWorkspaceStore.getState().addLog(reconciliationStreamId, message);
   const clearConsoleLog = () => useWorkspaceStore.getState().clearLogs(reconciliationStreamId);
   const setConsoleStatus = (status: "idle" | "running" | "success" | "error") => {
@@ -66,8 +110,9 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
     formattedNodes.forEach((n) => {
       n.modifiedFiles.forEach((f) => files.add(f));
     });
+    reconciledFiles.forEach((filePath) => files.add(filePath));
     return Array.from(files);
-  }, [formattedNodes]);
+  }, [formattedNodes, reconciledFiles]);
 
   // Load duplicates from VFS
   const loadDuplicates = async () => {
@@ -86,7 +131,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
   // Sync scroll on chat messages update
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatMessages]);
+  }, [chatMessages, subagents]);
 
   const saveChatHistory = (messages: { role: string; content: string }[]) => {
     const canvasContext = useWorkspaceStore.getState().canvasContexts[tabId];
@@ -118,6 +163,64 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
     });
   };
 
+  const ensureReconciliationOverlay = async (): Promise<boolean> => {
+    try {
+      await reconciliationOverlayService.ensureSession(
+        tabId,
+        !!useWorkspaceStore.getState().canvasContexts[tabId]?.isPipelineApplied
+      );
+      const changedPaths = reconciliationOverlayService.getChangedPaths(tabId);
+      setReconciledFiles(changedPaths);
+      setRollbackAvailable(changedPaths.length > 0);
+      return true;
+    } catch (err: any) {
+      console.error("[ReconciliationGraph] Failed to create reconciliation overlay:", err);
+      notify(
+        "Reconciliation Not Started",
+        `Could not create an isolated reconciliation version: ${err.message || String(err)}`,
+        "error"
+      );
+      return false;
+    }
+  };
+
+  const handleRollbackReconciliation = async () => {
+    const changedPaths = reconciliationOverlayService.getChangedPaths(tabId);
+    if (changedPaths.length === 0 || isReconciling || isRollingBack) return;
+
+    const confirmed = await confirm({
+      title: "Rollback reconciliation?",
+      message: `Discard the reconciled version of ${changedPaths.length} file${changedPaths.length === 1 ? "" : "s"}? All task-owned code will remain intact.`,
+      confirmLabel: "Rollback",
+      kind: "warning",
+    });
+    if (!confirmed) return;
+
+    setIsRollingBack(true);
+    try {
+      const wasPipelineApplied = reconciliationOverlayService.wasPipelineApplied(tabId);
+      await reconciliationOverlayService.discard(tabId);
+      useWorkspaceStore.getState().updateCanvasContext(tabId, { isPipelineApplied: wasPipelineApplied });
+      setReconciledFiles([]);
+      setRollbackAvailable(false);
+      addConsoleLog(`Discarded the reconciled version of ${changedPaths.length} file${changedPaths.length === 1 ? "" : "s"}. Task code was not changed.`);
+      appendChatMessage({
+        role: "system",
+        content: `Reconciliation rolled back. Discarded ${changedPaths.length} reconciled file version${changedPaths.length === 1 ? "" : "s"}; task-owned code remains unchanged.`,
+      });
+      await loadDuplicates();
+
+      const { canvasFileService } = await import("../tabs/canvas/services/canvasFileService");
+      await canvasFileService.autoSaveCanvas(tabId);
+      notify("Reconciliation Rolled Back", "The isolated reconciled version was discarded. Task code was preserved.", "success");
+    } catch (err: any) {
+      console.error("[ReconciliationGraph] Rollback failed:", err);
+      notify("Rollback Failed", err.message || String(err), "error");
+    } finally {
+      setIsRollingBack(false);
+    }
+  };
+
   const handleStopReconciliation = () => {
     addConsoleLog("Stop requested by user.");
     setConsoleStatus("idle");
@@ -131,6 +234,11 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
       socketRef.current = null;
     }
     setIsReconciling(false);
+    setSubagents((current) => current.map((subagent) =>
+      subagent.status === "queued" || subagent.status === "running" || subagent.status === "background"
+        ? { ...subagent, status: "stopped", updatedAt: new Date().toISOString() }
+        : subagent
+    ));
     appendChatMessage({ role: "system", content: "Reconciliation stopped by user." });
   };
 
@@ -138,6 +246,10 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
     const globalChat = useWorkspaceStore.getState().canvasContexts[tabId]?.globalChatHistory || {};
     const storedMessages = globalChat["__reconciliation__"] || [];
     setChatMessages(storedMessages.map(m => ({ role: m.role, content: m.content })));
+    setSubagents([]);
+    const changedPaths = reconciliationOverlayService.getChangedPaths(tabId);
+    setReconciledFiles(changedPaths);
+    setRollbackAvailable(changedPaths.length > 0);
 
     return () => {
       if (socketRef.current) {
@@ -148,9 +260,22 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
     };
   }, [tabId]);
 
-  const startReconciliation = (userMsgText?: string) => {
-    if (isReconciling) return;
+  useEffect(() => {
+    const handleOverlayChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ tabId: string; changedPaths: string[] }>).detail;
+      if (detail?.tabId !== tabId) return;
+      setReconciledFiles(detail.changedPaths || []);
+      setRollbackAvailable((detail.changedPaths || []).length > 0);
+    };
+    window.addEventListener(RECONCILIATION_OVERLAY_CHANGED_EVENT, handleOverlayChanged);
+    return () => window.removeEventListener(RECONCILIATION_OVERLAY_CHANGED_EVENT, handleOverlayChanged);
+  }, [tabId]);
+
+  const startReconciliation = async (userMsgText?: string) => {
+    if (isReconciling || isRollingBack) return;
+    if (!(await ensureReconciliationOverlay())) return;
     setIsReconciling(true);
+    setSubagents([]);
     if (!userMsgText) {
       clearConsoleLog();
     }
@@ -223,9 +348,17 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
           return;
         }
 
+        if (msg.type === "subagent_update" && msg.tabId === reconciliationStreamId && msg.subagent?.id) {
+          setSubagents((current) => mergeSubagentUpdate(current, {
+            ...msg.subagent,
+            updatedAt: msg.subagent.updatedAt || new Date().toISOString(),
+          } as IncomingSubagent));
+          return;
+        }
+
         if (msg.type === "read_file") {
           console.log(`[ReconciliateGraph] Sidecar reading file: ${msg.path}`);
-          VfsRegistry.getOrCreate(tabId).readFile(msg.path)
+          VfsRegistry.getOrCreate(reconciliationVfsId).readFile(msg.path)
             .then((content) => {
               if (socket.readyState === WebSocket.OPEN) {
                 socket.send(JSON.stringify({ type: "read_file_response", requestId: msg.requestId, content }));
@@ -241,19 +374,10 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
 
         if (msg.type === "write_file") {
           console.log(`[ReconciliateGraph] Sidecar writing file: ${msg.path}`);
-          const firstNode = taskNodes[0];
-          const nodeId = firstNode?.id;
-
-          VfsRegistry.getOrCreate(tabId).writeFile(msg.path, msg.content, nodeId)
+          VfsRegistry.getOrCreate(reconciliationVfsId).writeFile(msg.path, msg.content)
             .then(() => {
-              if (nodeId) {
-                const currentModified = (firstNode.data?.modifiedFiles as string[]) || [];
-                if (!currentModified.includes(msg.path)) {
-                  useWorkspaceStore.getState().updateTaskNode(nodeId, {
-                    modifiedFiles: [...currentModified, msg.path]
-                  });
-                }
-              }
+              reconciliationOverlayService.markChanged(tabId, msg.path);
+              useWorkspaceStore.getState().updateCanvasContext(tabId, { isPipelineApplied: false });
               if (socket.readyState === WebSocket.OPEN) {
                 socket.send(JSON.stringify({ type: "write_file_response", requestId: msg.requestId }));
               }
@@ -296,6 +420,11 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
           setConsoleStatus("error");
           appendChatMessage({ role: "assistant", content: `Error: ${msg.error}` });
           setIsReconciling(false);
+          setSubagents((current) => current.map((subagent) =>
+            subagent.status === "queued" || subagent.status === "running" || subagent.status === "background"
+              ? { ...subagent, status: "error", updatedAt: new Date().toISOString() }
+              : subagent
+          ));
           notify("Reconciliation Failed", `Error aligning: ${msg.error}`, "error");
           socket.close();
         }
@@ -328,7 +457,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
     if (!chatInput.trim() || isReconciling) return;
     const text = chatInput.trim();
     setChatInput("");
-    startReconciliation(text);
+    void startReconciliation(text);
   };
 
   // Compile list of available models
@@ -550,6 +679,13 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
                   </div>
                 ))
               )}
+              {(isReconciling || reconciliationLogs.length > 0 || subagents.length > 0) && (
+                <AgentActivityCard
+                  content={reconciliationLogs.join("\n")}
+                  isStreaming={isReconciling}
+                  subagents={subagents}
+                />
+              )}
               {isReconciling && (
                 <div className="flex items-center gap-2 px-3 py-2 text-[11px] font-mono text-[var(--text-muted)]" aria-live="polite">
                   <Loader2 size={14} className="animate-spin text-red-400" />
@@ -595,14 +731,23 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
 
         {activeTab === "files" && (
           <PRDiffView
-            tabId={tabId}
+            tabId={reconciliationOverlayService.hasSession(tabId) ? reconciliationVfsId : tabId}
             modifiedFiles={allModifiedFiles}
           />
         )}
       </div>
 
       {/* Footer Actions */}
-      <div className="p-3 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/20 flex items-center justify-end flex-shrink-0">
+      <div className="p-3 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/20 flex items-center justify-between gap-3 flex-shrink-0">
+        <button
+          onClick={() => void handleRollbackReconciliation()}
+          disabled={!rollbackAvailable || isReconciling || isRollingBack}
+          title={rollbackAvailable ? "Discard the isolated reconciled version" : "No reconciliation changes to roll back"}
+          className="border border-amber-700/50 bg-amber-950/25 hover:bg-amber-900/35 disabled:opacity-40 disabled:cursor-not-allowed text-amber-300 text-xs font-mono font-bold px-3 py-2 rounded-lg flex items-center space-x-1.5 transition-all cursor-pointer"
+        >
+          {isRollingBack ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
+          <span>{isRollingBack ? "Rolling Back" : "Rollback"}</span>
+        </button>
         {isReconciling ? (
           <button
             onClick={() => handleStopReconciliation()}
@@ -613,8 +758,8 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
           </button>
         ) : (
           <button
-            onClick={() => startReconciliation()}
-            disabled={duplicateFilesEntries.length === 0}
+            onClick={() => void startReconciliation()}
+            disabled={duplicateFilesEntries.length === 0 || isRollingBack}
             className="bg-red-800 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer"
           >
             <Play size={13} />
@@ -622,6 +767,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
           </button>
         )}
       </div>
+      {ConfirmModalComponent}
     </div>
   );
 };

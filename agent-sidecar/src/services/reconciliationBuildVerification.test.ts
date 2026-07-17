@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import {
   detectBuildCommand,
   executeBuildWithTemporaryReconciliation,
+  prepareReconciliationVerificationFiles,
   type ReconciliationVerificationFile,
 } from "./reconciliationBuildVerification";
 
@@ -39,6 +40,66 @@ test("detectBuildCommand reads a reconciled package.json overlay", async () => {
     cwd: workspace,
     timeoutMs: 15 * 60_000,
   });
+});
+
+test("preparation rebases a stale absolute VFS path with the same workspace directory", async () => {
+  const workspace = await createWorkspace();
+  const relativePath = path.join("src", "migration.sql");
+  const stalePath = path.join(
+    path.parse(workspace).root,
+    "Users",
+    "misspelled-user",
+    path.basename(workspace),
+    relativePath,
+  );
+  const requestedPaths: string[] = [];
+
+  const prepared = await prepareReconciliationVerificationFiles(workspace, [stalePath], async (vfsPath) => {
+    requestedPaths.push(vfsPath);
+    if (vfsPath === stalePath) return "reconciled";
+    throw new Error(`Unexpected VFS path: ${vfsPath}`);
+  });
+
+  assert.deepEqual(requestedPaths, [stalePath]);
+  assert.deepEqual(prepared.files, [{
+    vfsPath: stalePath,
+    physicalPath: path.join(prepared.workspaceRoot, relativePath),
+    content: "reconciled",
+  }]);
+});
+
+test("preparation falls back to the rebased VFS key when the stale key is unavailable", async () => {
+  const workspace = await createWorkspace();
+  const relativePath = path.join("src", "migration.sql");
+  const rebasedPath = path.join(workspace, relativePath);
+  const stalePath = path.join(
+    path.parse(workspace).root,
+    "Users",
+    "misspelled-user",
+    path.basename(workspace),
+    relativePath,
+  );
+  const requestedPaths: string[] = [];
+
+  const prepared = await prepareReconciliationVerificationFiles(workspace, [stalePath], async (vfsPath) => {
+    requestedPaths.push(vfsPath);
+    if (vfsPath === rebasedPath) return "reconciled";
+    throw new Error(`Missing VFS path: ${vfsPath}`);
+  });
+
+  assert.deepEqual(requestedPaths, [stalePath, rebasedPath]);
+  assert.equal(prepared.files[0].vfsPath, rebasedPath);
+  assert.equal(prepared.files[0].content, "reconciled");
+});
+
+test("preparation still rejects an absolute path from a different workspace", async () => {
+  const workspace = await createWorkspace();
+  const externalPath = path.join(tmpdir(), "different-workspace", "outside.ts");
+
+  await assert.rejects(
+    prepareReconciliationVerificationFiles(workspace, [externalPath], async () => "external"),
+    /Verification file must remain inside the workspace/,
+  );
 });
 
 test("temporary verification restores existing files and removes newly overlaid files", async () => {

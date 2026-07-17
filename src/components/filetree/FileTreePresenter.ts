@@ -4,7 +4,11 @@ import { useWorkspaceStore } from "../../store";
 import { notify } from "../../notificationStore";
 import { FileTreeActions, FileActionParams } from "./FileTreeActions";
 
-export async function refreshTree() {
+let activeRefresh: Promise<void> | null = null;
+let refreshRequestedWhileActive = false;
+let scheduledRefresh: ReturnType<typeof setTimeout> | null = null;
+
+async function performTreeRefresh(): Promise<void> {
   const state = useWorkspaceStore.getState();
   if (state.rootPath) {
     try {
@@ -15,6 +19,35 @@ export async function refreshTree() {
       console.error("Failed to refresh file tree structure:", err);
     }
   }
+}
+
+export async function refreshTree(): Promise<void> {
+  if (scheduledRefresh) {
+    clearTimeout(scheduledRefresh);
+    scheduledRefresh = null;
+  }
+  if (activeRefresh) {
+    refreshRequestedWhileActive = true;
+    return activeRefresh;
+  }
+
+  activeRefresh = performTreeRefresh().finally(() => {
+    activeRefresh = null;
+    if (refreshRequestedWhileActive) {
+      refreshRequestedWhileActive = false;
+      scheduleTreeRefresh();
+    }
+  });
+  return activeRefresh;
+}
+
+/** Coalesce command completions into one explorer/Git refresh. */
+export function scheduleTreeRefresh(delayMs = 750): void {
+  if (scheduledRefresh) clearTimeout(scheduledRefresh);
+  scheduledRefresh = setTimeout(() => {
+    scheduledRefresh = null;
+    void refreshTree();
+  }, delayMs);
 }
 
 export const fileTreePresenter: FileTreeActions = {

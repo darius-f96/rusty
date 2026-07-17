@@ -8,7 +8,8 @@ import { Chat, SubagentActivity } from "../ui/Chat";
 import { AgentQuestion, ChatInput } from "../ui/ChatInput";
 import { notify } from "../../notificationStore";
 import { commandPermissionService, handleCommandPermissionMessage } from "../../services/commandPermissionService";
-import { refreshTree } from "../filetree/FileTreePresenter";
+import { scheduleTreeRefresh } from "../filetree/FileTreePresenter";
+import { appendBoundedText } from "../../services/boundedTextBuffer";
 
 interface AgentTabProps {
   tab: any;
@@ -67,6 +68,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
   const streamingResponseBufferRef = useRef<string>("");
   const savedChatPathRef = useRef<string | null>(null);
   const chatSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const consoleFlushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isStreamingRef = useRef(false);
   const lastUserMessageIdRef = useRef<string | null>(null);
   const lastConsoleMessageIdRef = useRef<string | null>(null);
@@ -99,6 +101,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
 
   useEffect(() => {
     return () => {
+      if (consoleFlushTimeoutRef.current) clearTimeout(consoleFlushTimeoutRef.current);
       const socket = agentSocketRef.current;
       if (socket) {
         if (socket.readyState === WebSocket.OPEN) {
@@ -199,6 +202,20 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
     }
   };
 
+  const flushConsoleBuffer = () => {
+    if (consoleMessageIdRef.current) {
+      updateAgentMessage(tab.id, consoleMessageIdRef.current, consoleBufferRef.current);
+    }
+  };
+
+  const scheduleConsoleFlush = () => {
+    if (consoleFlushTimeoutRef.current) return;
+    consoleFlushTimeoutRef.current = setTimeout(() => {
+      consoleFlushTimeoutRef.current = null;
+      flushConsoleBuffer();
+    }, 150);
+  };
+
   const handleStopExecution = () => {
     if (agentSocketRef.current) {
       if (agentSocketRef.current.readyState === WebSocket.OPEN) {
@@ -244,7 +261,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
       requestId: currentQuestion.requestId,
       answer,
     }));
-    consoleBufferRef.current += `User answer: ${answer}\n`;
+    consoleBufferRef.current = appendBoundedText(consoleBufferRef.current, `User answer: ${answer}\n`);
     if (consoleMessageIdRef.current) {
       updateAgentMessage(tab.id, consoleMessageIdRef.current, consoleBufferRef.current);
     }
@@ -362,26 +379,27 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
         if (handleCommandPermissionMessage(msg, socket)) return;
 
         if (msg.type === "command_output" && msg.sessionId === tab.id) {
-          consoleBufferRef.current += msg.content;
-          if (consoleMessageIdRef.current) updateAgentMessage(tab.id, consoleMessageIdRef.current, consoleBufferRef.current);
+          consoleBufferRef.current = appendBoundedText(consoleBufferRef.current, msg.content);
+          scheduleConsoleFlush();
           return;
         }
         if (msg.type === "command_complete" && msg.sessionId === tab.id) {
-          void refreshTree();
+          scheduleTreeRefresh();
           return;
         }
 
         if (msg.type === "log" && msg.tabId === tab.id) {
-          consoleBufferRef.current += msg.message + "\n";
-          if (consoleMessageIdRef.current) {
-            updateAgentMessage(tab.id, consoleMessageIdRef.current, consoleBufferRef.current);
-          }
-          saveChatHistory();
+          consoleBufferRef.current = appendBoundedText(consoleBufferRef.current, `${msg.message}\n`);
+          scheduleConsoleFlush();
           return;
         }
 
         if (msg.type === "token" && msg.tabId === tab.id) {
-          streamingResponseBufferRef.current += msg.content;
+          streamingResponseBufferRef.current = appendBoundedText(
+            streamingResponseBufferRef.current,
+            msg.content,
+            500_000,
+          );
           return;
         }
 
@@ -475,6 +493,11 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
         }
 
         if (msg.type === "agent_chat_complete" && msg.tabId === tab.id) {
+          if (consoleFlushTimeoutRef.current) {
+            clearTimeout(consoleFlushTimeoutRef.current);
+            consoleFlushTimeoutRef.current = null;
+          }
+          flushConsoleBuffer();
           const files = msg.modifiedFiles || [];
           setModifiedFiles(files);
 
@@ -530,10 +553,10 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
         }
 
         if (msg.type === "agent_chat_error" && msg.tabId === tab.id) {
-          consoleBufferRef.current += `Error: ${msg.error}\n`;
-          if (consoleMessageIdRef.current) {
-            updateAgentMessage(tab.id, consoleMessageIdRef.current, consoleBufferRef.current);
-          }
+          consoleBufferRef.current = appendBoundedText(consoleBufferRef.current, `Error: ${msg.error}\n`);
+          if (consoleFlushTimeoutRef.current) clearTimeout(consoleFlushTimeoutRef.current);
+          consoleFlushTimeoutRef.current = null;
+          flushConsoleBuffer();
           addAgentMessage(tab.id, {
             id: `msg_${Date.now()}`,
             role: "assistant" as const,
@@ -559,7 +582,10 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
     };
 
     socket.onerror = () => {
-      consoleBufferRef.current += "Connection to agent sidecar failed. Ensure sidecar is running on port 4000.\n";
+      consoleBufferRef.current = appendBoundedText(
+        consoleBufferRef.current,
+        "Connection to agent sidecar failed. Ensure sidecar is running on port 4000.\n",
+      );
       if (consoleMessageIdRef.current) {
         updateAgentMessage(tab.id, consoleMessageIdRef.current, consoleBufferRef.current);
       }

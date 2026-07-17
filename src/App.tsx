@@ -7,6 +7,44 @@ import { SearchPalette } from "./components/SearchPalette";
 import { AlertModal } from "./components/AlertModal";
 import { TerminalPanel } from "./components/TerminalPanel";
 
+const MAX_CONSOLE_ARGUMENT_LENGTH = 2_000;
+const MAX_CONSOLE_ENTRY_LENGTH = 8_000;
+const MAX_CONSOLE_OBJECT_ENTRIES = 80;
+
+function truncateConsoleText(value: string, limit = MAX_CONSOLE_ARGUMENT_LENGTH): string {
+  return value.length <= limit ? value : `${value.slice(0, limit)}… [${value.length - limit} chars omitted]`;
+}
+
+function formatConsoleArgument(value: unknown): string {
+  if (typeof value === "string") return truncateConsoleText(value);
+  if (value instanceof Error) return truncateConsoleText(value.stack || value.message);
+  if (value === null || typeof value !== "object") return String(value);
+
+  const seen = new WeakSet<object>();
+  let visitedEntries = 0;
+  try {
+    const serialized = JSON.stringify(value, (key, nestedValue) => {
+      if (key) visitedEntries += 1;
+      if (visitedEntries > MAX_CONSOLE_OBJECT_ENTRIES) return "[Entry truncated]";
+      if (typeof nestedValue === "string") return truncateConsoleText(nestedValue, 500);
+      if (!nestedValue || typeof nestedValue !== "object") return nestedValue;
+      if (seen.has(nestedValue)) return "[Circular]";
+      seen.add(nestedValue);
+      if (Array.isArray(nestedValue) && nestedValue.length > 30) {
+        return [...nestedValue.slice(0, 30), `[${nestedValue.length - 30} items omitted]`];
+      }
+      return nestedValue;
+    });
+    return truncateConsoleText(serialized || String(value));
+  } catch {
+    return `[Unserializable ${value.constructor?.name || "object"}]`;
+  }
+}
+
+function formatConsoleEntry(args: unknown[]): string {
+  return truncateConsoleText(args.map(formatConsoleArgument).join(" "), MAX_CONSOLE_ENTRY_LENGTH);
+}
+
 function App() {
   const addDevLog = useWorkspaceStore((state) => state.addDevLog);
   const initTerminalState = useWorkspaceStore((state) => state.initTerminalState);
@@ -140,20 +178,20 @@ function App() {
     const originalWarn = console.warn;
 
     console.log = (...args: any[]) => {
-      originalLog(...args);
-      const text = args.map((a) => (typeof a === "object" ? JSON.stringify(a) : String(a))).join(" ");
+      const text = formatConsoleEntry(args);
+      originalLog(text);
       addDevLog("log", text);
     };
 
     console.error = (...args: any[]) => {
-      originalError(...args);
-      const text = args.map((a) => (typeof a === "object" ? JSON.stringify(a) : String(a))).join(" ");
+      const text = formatConsoleEntry(args);
+      originalError(text);
       addDevLog("error", text);
     };
 
     console.warn = (...args: any[]) => {
-      originalWarn(...args);
-      const text = args.map((a) => (typeof a === "object" ? JSON.stringify(a) : String(a))).join(" ");
+      const text = formatConsoleEntry(args);
+      originalWarn(text);
       addDevLog("warn", text);
     };
 

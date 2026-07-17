@@ -14,6 +14,11 @@ import { createMcpTools, McpServerConfig } from "../services/mcpClient";
 import { createLspTools } from "../services/lspTools";
 import { importEsm } from "../services/esmImport";
 import { runPiAgentChat } from "../services/piAgentChat";
+import {
+  acquireTaskExecutionSlot,
+  getTaskExecutionLimit,
+  taskExecutionWouldQueue,
+} from "../services/taskExecutionLimiter";
 
 export async function executeNode(ws: WebSocket, data: any): Promise<void> {
   const { nodeId, instructions, model, workspaceRoot, inputFiles, customProvider, globalContext, contextDescriptions, chatHistory, skill, mcpContext, upstreamTaskContext, lspSettings } = data;
@@ -35,6 +40,17 @@ export async function executeNode(ws: WebSocket, data: any): Promise<void> {
   const sendLog = (message: string) => {
     safeSend(ws, { type: "log", nodeId, message });
   };
+
+  const wasQueued = taskExecutionWouldQueue();
+  if (wasQueued) {
+    sendLog(`Queued until an agent slot is available (${getTaskExecutionLimit()} task nodes may run concurrently).`);
+  }
+  const releaseExecutionSlot = await acquireTaskExecutionSlot();
+  if (ws.readyState !== WebSocket.OPEN) {
+    releaseExecutionSlot();
+    return;
+  }
+  if (wasQueued) sendLog("Agent slot acquired; starting task execution.");
 
   try {
     if (customProvider) {
@@ -265,7 +281,6 @@ CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
     let useMultiRound = !!(chatHistory && chatHistory.length > 1);
 
     (ws as any).__activeAgentTabId = nodeId;
-    const delegationPrompt = `${systemPrompt}\n\nDelegation:\n- When two or more investigation or implementation steps are independent, delegate them concurrently using Agent subagents.\n- Keep dependent work sequential and retrieve every delegated result before finishing.\n- Give each subagent a narrow scope and concrete deliverable.`;
     const piModel = model?.includes("/")
       ? model
       : customProvider ? `${customProvider.id}/${model || customProvider.models?.[0]?.id || ""}` : model || "";
@@ -273,7 +288,7 @@ CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
       tabId: nodeId,
       model: piModel,
       workspaceRoot,
-      systemPrompt: delegationPrompt,
+      systemPrompt,
       conversationHistory: chatHistory || [],
       message: instructions,
       tools,
@@ -281,6 +296,7 @@ CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
       sendLog,
       sendToken: (token) => safeSend(ws, { type: "token", nodeId, content: token }),
       sendSubagentUpdate: (subagent) => safeSend(ws, { type: "subagent_update", tabId: nodeId, nodeId, subagent }),
+      enableSubagents: false,
     });
     if (piResponse !== undefined) {
       runResult = { status: "success", modified: Array.from(modifiedFiles), response: piResponse };
@@ -404,6 +420,8 @@ CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
       nodeId,
       error: err.message
     });
+  } finally {
+    releaseExecutionSlot();
   }
 }
 

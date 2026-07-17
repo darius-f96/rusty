@@ -30,6 +30,13 @@ export async function normalizeCommand(input: any, workspaceRoot: string): Promi
   const program = String(input?.program || "").trim();
   if (!program || program.includes("\0")) throw new Error("A valid command program is required.");
   const args: string[] = Array.isArray(input?.args) ? input.args.map((arg: any) => String(arg)) : [];
+  const programName = path.basename(program);
+  if (args[0] === program || args[0] === programName) {
+    // Models occasionally repeat the structured `program` as argv[0], producing
+    // commands such as `ls ls -la` and `grep grep -r`. Normalize before asking
+    // for permission so the dialog always shows the command that will execute.
+    args.shift();
+  }
   if (args.length > 256 || args.some((arg: string) => arg.length > 16_384 || arg.includes("\0"))) {
     throw new Error("Command arguments exceed the allowed limits.");
   }

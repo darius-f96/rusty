@@ -20,7 +20,8 @@ import { AlertTriangle, X, Save, HelpCircle } from "lucide-react";
 import { canvasFileService } from "./tabs/canvas/services/canvasFileService";
 import { CommandPermissionPresenter } from "./permissions/CommandPermissionPresenter";
 import { commandPermissionService, handleCommandPermissionMessage } from "../services/commandPermissionService";
-import { refreshTree } from "./filetree/FileTreePresenter";
+import { scheduleTreeRefresh } from "./filetree/FileTreePresenter";
+import { appendBoundedText } from "../services/boundedTextBuffer";
 
 export const Workspace: React.FC = () => {
   const rootPath = useWorkspaceStore((state) => state.rootPath);
@@ -401,16 +402,15 @@ export const Workspace: React.FC = () => {
     socket.onmessage = async (event) => {
       try {
         const data = JSON.parse(event.data);
-        console.log("WebSocket received message:", data);
 
         if (handleCommandPermissionMessage(data, socket)) return;
         if (data.type === "command_output" && data.sessionId === nodeId) {
-          consoleBuffer += data.content;
+          consoleBuffer = appendBoundedText(consoleBuffer, data.content);
           flushConsole();
           return;
         }
         if (data.type === "command_complete" && data.sessionId === nodeId) {
-          void refreshTree();
+          scheduleTreeRefresh();
           return;
         }
 
@@ -424,13 +424,13 @@ export const Workspace: React.FC = () => {
 
         if (data.type === "log" && data.nodeId === nodeId) {
           addLog(nodeId, data.message);
-          consoleBuffer += data.message + "\n";
+          consoleBuffer = appendBoundedText(consoleBuffer, `${data.message}\n`);
           flushConsole();
           return;
         }
 
         if (data.type === "token" && data.nodeId === nodeId) {
-          consoleBuffer += data.content;
+          consoleBuffer = appendBoundedText(consoleBuffer, data.content);
           flushConsole();
           return;
         }
@@ -730,9 +730,14 @@ export const Workspace: React.FC = () => {
     return tabsList.map((tab) => {
       const isActive = tab.id === activeId;
       const isCanvas = tab.type === "canvas";
+      const canvasContext = isCanvas ? useWorkspaceStore.getState().canvasContexts[tab.id] : undefined;
+      const canvasHasRunningWork = !!canvasContext && Object.values(canvasContext.nodeStatus || {})
+        .some((status) => status === "running");
 
-      // Optimize rendering: unmount non-active file/task tabs (but keep canvas, git-history, git-diff, and agent tabs mounted to preserve state and WebSocket connections)
-      const keepMounted = isCanvas || tab.type === "git-history" || tab.type === "git-diff" || tab.type === "agent";
+      // Canvas data lives in the workspace store, so inactive idle canvases can
+      // release their ReactFlow/DOM allocation. Keep a canvas mounted only while
+      // work is running; task sockets themselves are owned by Workspace.
+      const keepMounted = (isCanvas && canvasHasRunningWork) || tab.type === "git-history" || tab.type === "git-diff" || tab.type === "agent";
       if (!isActive && !keepMounted) return null;
 
       const bgClass = isCanvas ? "bg-[var(--bg-canvas)]" : "bg-[var(--bg-editor)]";

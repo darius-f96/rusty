@@ -1556,10 +1556,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     const newLog: DevLog = {
       id: `dev_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       type,
-      text,
+      text: text.length <= 8_000 ? text : `${text.slice(0, 8_000)}… [truncated]`,
       timestamp: new Date().toLocaleTimeString()
     };
-    const slicedLogs = state.devLogs.slice(-499);
+    const slicedLogs = state.devLogs.slice(-299);
     return { devLogs: [...slicedLogs, newLog] };
   }),
   clearDevLogs: () => set({ devLogs: [] }),

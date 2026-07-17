@@ -73,6 +73,44 @@ function assertInsideWorkspace(workspaceRoot: string, candidate: string): void {
   }
 }
 
+interface NormalizedVerificationPath {
+  relativePath: string;
+  vfsPaths: string[];
+}
+
+/**
+ * Rebase stale absolute VFS keys whose parent path changed while retaining the
+ * exact workspace directory component and workspace-relative suffix. This is
+ * intentionally narrower than accepting arbitrary external absolute paths.
+ */
+function normalizeVerificationPath(
+  workspaceRoot: string,
+  filePath: string,
+): NormalizedVerificationPath {
+  const originalPath = path.resolve(workspaceRoot, filePath);
+  const originalRelative = path.relative(workspaceRoot, originalPath);
+  if (originalRelative && !originalRelative.startsWith("..") && !path.isAbsolute(originalRelative)) {
+    return { relativePath: originalRelative, vfsPaths: [originalPath] };
+  }
+
+  if (path.isAbsolute(filePath)) {
+    const workspaceDirectory = path.basename(workspaceRoot);
+    const pathRoot = path.parse(originalPath).root;
+    const components = path.relative(pathRoot, originalPath).split(path.sep).filter(Boolean);
+    const workspaceIndex = components.lastIndexOf(workspaceDirectory);
+
+    if (workspaceIndex >= 0 && workspaceIndex < components.length - 1) {
+      const relativePath = path.join(...components.slice(workspaceIndex + 1));
+      const rebasedPath = path.resolve(workspaceRoot, relativePath);
+      assertInsideWorkspace(workspaceRoot, rebasedPath);
+      return { relativePath, vfsPaths: [originalPath, rebasedPath] };
+    }
+  }
+
+  assertInsideWorkspace(workspaceRoot, originalPath);
+  throw new Error(`Verification file must remain inside the workspace: ${originalPath}`);
+}
+
 /** Resolve existing symlinks while also supporting VFS files that do not exist yet. */
 async function resolveWorkspaceFile(workspaceRoot: string, filePath: string): Promise<string> {
   const requestedPath = path.resolve(workspaceRoot, filePath);
@@ -112,21 +150,34 @@ export async function prepareReconciliationVerificationFiles(
 ): Promise<{ workspaceRoot: string; files: ReconciliationVerificationFile[] }> {
   const requestedRoot = path.resolve(workspaceRoot);
   const canonicalRoot = await realpath(workspaceRoot);
-  const resolved = new Map<string, { vfsPath: string; physicalPath: string }>();
+  const resolved = new Map<string, { vfsPaths: string[]; physicalPath: string }>();
 
   for (const filePath of filePaths) {
     if (typeof filePath !== "string" || !filePath.trim() || filePath.includes("\0")) continue;
-    const vfsPath = path.resolve(requestedRoot, filePath);
-    assertInsideWorkspace(requestedRoot, vfsPath);
-    const physicalCandidate = path.resolve(canonicalRoot, path.relative(requestedRoot, vfsPath));
+    const normalized = normalizeVerificationPath(requestedRoot, filePath.trim());
+    const physicalCandidate = path.resolve(canonicalRoot, normalized.relativePath);
     const physicalPath = await resolveWorkspaceFile(canonicalRoot, physicalCandidate);
-    if (!resolved.has(physicalPath)) resolved.set(physicalPath, { vfsPath, physicalPath });
+    const existing = resolved.get(physicalPath);
+    if (existing) {
+      for (const vfsPath of normalized.vfsPaths) {
+        if (!existing.vfsPaths.includes(vfsPath)) existing.vfsPaths.push(vfsPath);
+      }
+    } else {
+      resolved.set(physicalPath, { vfsPaths: normalized.vfsPaths, physicalPath });
+    }
   }
 
-  const files = await Promise.all(Array.from(resolved.values()).map(async (file) => ({
-    ...file,
-    content: await readVfsFile(file.vfsPath),
-  })));
+  const files = await Promise.all(Array.from(resolved.values()).map(async (file) => {
+    let lastError: unknown;
+    for (const vfsPath of file.vfsPaths) {
+      try {
+        return { vfsPath, physicalPath: file.physicalPath, content: await readVfsFile(vfsPath) };
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError;
+  }));
 
   return { workspaceRoot: canonicalRoot, files };
 }

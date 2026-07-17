@@ -32,6 +32,7 @@ import { VfsRegistry } from "../../../services/vfs";
 import { CanvasTabContext } from "./CanvasTabContext";
 import { canvasFileService } from "./services/canvasFileService";
 import { getNodeConfig } from "../../nodes/AxiomNodeConfig";
+import { reconciliationOverlayService } from "../../../services/reconciliationOverlayService";
 
 const nodeTypes = {
   contextNode: ContextNode,
@@ -73,6 +74,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
   const nodes = context.nodes || [];
   const edges = context.edges || [];
   const isPipelineApplied = !!context.isPipelineApplied;
+  const isReconciliationRunning = context.nodeStatus?.[`__reconciliation__:${tab.id}`] === "running";
 
   const flowNodes = useMemo(() => {
     return nodes.map((n) => {
@@ -451,11 +453,28 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
   }, [rfInstance, addTaskNode, tab.id]);
 
   const handleApplyChanges = async () => {
+    if (isReconciliationRunning) {
+      notify("Reconciliation Running", "Wait for reconciliation to finish or stop it before applying Axiom.", "info");
+      return;
+    }
     try {
+      const hasReconciliation = reconciliationOverlayService.hasSession(tab.id);
+      const reconciledFiles = hasReconciliation
+        ? await reconciliationOverlayService.stageIntoMainVfs(tab.id)
+        : [];
       await VfsRegistry.getOrCreate(tab.id).flushToDisk();
+      if (hasReconciliation) {
+        await reconciliationOverlayService.discard(tab.id);
+      }
       // Set applied status to true
       useWorkspaceStore.getState().updateCanvasContext(tab.id, { isPipelineApplied: true });
-      notify("Applied", "In-memory shadow VFS layout flushed to local storage disk.", "success");
+      notify(
+        "Applied",
+        reconciledFiles.length > 0
+          ? `Applied the reconciled version of ${reconciledFiles.length} file${reconciledFiles.length === 1 ? "" : "s"} to disk.`
+          : "In-memory shadow VFS layout flushed to local storage disk.",
+        "success"
+      );
       if (rootPath) {
         const tree: any[] = await invoke("get_directory_structure", { rootDir: rootPath });
         useWorkspaceStore.getState().setFileTree(tree);
@@ -667,15 +686,17 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
                   <div className="border-t border-[var(--border-color)] my-1" />
                   <button
                     onClick={() => {
-                      if (!isPipelineApplied) {
+                      if (!isPipelineApplied && !isReconciliationRunning) {
                         handleApplyChanges();
                         setActionMenuOpen(false);
                       }
                     }}
-                    disabled={isPipelineApplied}
+                    disabled={isPipelineApplied || isReconciliationRunning}
                     className={`w-full text-left px-3 py-2 flex items-center space-x-2 transition-colors ${
                       isPipelineApplied
                         ? "text-emerald-400 cursor-not-allowed opacity-90"
+                        : isReconciliationRunning
+                        ? "text-amber-400 cursor-not-allowed opacity-75"
                         : "hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] cursor-pointer"
                     }`}
                   >
@@ -683,6 +704,11 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
                       <>
                         <CheckSquare size={13} className="text-emerald-400" />
                         <span>Axiom Applied</span>
+                      </>
+                    ) : isReconciliationRunning ? (
+                      <>
+                        <GitMerge size={13} className="text-amber-400 animate-pulse" />
+                        <span>Reconciliation Running</span>
                       </>
                     ) : (
                       <>

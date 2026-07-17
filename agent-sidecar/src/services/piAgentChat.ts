@@ -111,6 +111,8 @@ interface RunPiAgentChatOptions {
   sendLog: (message: string) => void;
   sendToken: (token: string) => void;
   sendSubagentUpdate: (subagent: SubagentUpdate) => void;
+  /** Task nodes disable delegation to avoid multiplying one canvas run into many agents. */
+  enableSubagents?: boolean;
   consumeDeferredQuestion?: () => DeferredUserQuestion | undefined;
   requestUserQuestion?: (question: DeferredUserQuestion) => Promise<string>;
 }
@@ -315,7 +317,8 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
   if (!hasWebAccessExtension) {
     options.sendLog("Pi web extension is unavailable with this Pi version; using Agent Tab's compatible web-search tool.");
   }
-  if (!hasSubagentsExtension) {
+  const enableSubagents = options.enableSubagents !== false;
+  if (enableSubagents && !hasSubagentsExtension) {
     options.sendLog("Pi subagent extension did not load; using the compatibility agent runtime.");
     return undefined;
   }
@@ -330,12 +333,12 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
     "web_search",
     "fetch_content",
     "get_search_content",
-    "Agent",
-    "get_subagent_result",
-    "steer_subagent"
+    ...(enableSubagents ? ["Agent", "get_subagent_result", "steer_subagent"] : [])
   ]));
 
-  options.sendLog("Starting Pi agent session with web access and subagent delegation.");
+  options.sendLog(enableSubagents
+    ? "Starting Pi agent session with web access and subagent delegation."
+    : "Starting bounded Pi task session with web access.");
   const { session } = await createAgentSession({
     cwd: options.workspaceRoot,
     model: selectedModel,
@@ -346,6 +349,20 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
   });
 
   let latestText = "";
+  let pendingTokenText = "";
+  let tokenFlushTimer: NodeJS.Timeout | undefined;
+  const flushPendingTokens = () => {
+    if (tokenFlushTimer) clearTimeout(tokenFlushTimer);
+    tokenFlushTimer = undefined;
+    if (!pendingTokenText) return;
+    const text = pendingTokenText;
+    pendingTokenText = "";
+    options.sendToken(text);
+  };
+  const queueToken = (token: string) => {
+    pendingTokenText += token;
+    if (!tokenFlushTimer) tokenFlushTimer = setTimeout(flushPendingTokens, 75);
+  };
   let syntheticSubagentCounter = 0;
   const pendingSubagentIds = new Map<string, string>();
   const subagentDescriptions = new Map<string, string>();
@@ -558,7 +575,7 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
   const unsubscribe = session.subscribe((event: any) => {
     if (event.type === "message_update" && event.assistantMessageEvent?.type === "text_delta") {
       latestText += event.assistantMessageEvent.delta;
-      options.sendToken(event.assistantMessageEvent.delta);
+      queueToken(event.assistantMessageEvent.delta);
       if (aggregationStarted && !aggregationWritingLogged) {
         aggregationWritingLogged = true;
         sendAggregationUpdate("running", "Writing the final synthesized response.", "Writing final response from aggregated results.");
@@ -764,8 +781,10 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
       sendAggregationUpdate("completed", "Final synthesized response is ready.", "Aggregation complete.");
     }
     const lastAssistant = [...session.messages].reverse().find((entry: any) => entry?.role === "assistant");
+    flushPendingTokens();
     return textFromAssistantMessage(lastAssistant) || latestText || "Agent complete.";
   } finally {
+    flushPendingTokens();
     unsubscribe();
     if (keepSessionForBackgroundAgents && backgroundAgents.size > 0 && !disposed) {
       options.sendLog("Main agent is standing by while background subagents continue. Stop remains available.");
