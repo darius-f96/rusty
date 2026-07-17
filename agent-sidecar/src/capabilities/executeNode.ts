@@ -14,7 +14,6 @@ import { createMcpTools, McpServerConfig } from "../services/mcpClient";
 import { createLspTools } from "../services/lspTools";
 import { importEsm } from "../services/esmImport";
 import { runPiAgentChat } from "../services/piAgentChat";
-import { createRunCommandTool } from "./tools/runCommandTool";
 
 export async function executeNode(ws: WebSocket, data: any): Promise<void> {
   const { nodeId, instructions, model, workspaceRoot, inputFiles, customProvider, globalContext, contextDescriptions, chatHistory, skill, mcpContext, upstreamTaskContext, lspSettings } = data;
@@ -135,7 +134,6 @@ export async function executeNode(ws: WebSocket, data: any): Promise<void> {
       writeVfsTool,
       createListFilesTool(workspaceRoot),
       createSearchCodebaseTool(workspaceRoot),
-      createRunCommandTool({ ws, sessionId: nodeId, workspaceRoot, sendLog }),
       ...lspTools
     ];
 
@@ -189,15 +187,17 @@ export async function executeNode(ws: WebSocket, data: any): Promise<void> {
       }
     }
 
-    const enabledToolNames = skill?.enabledTools || [
+    // Task Nodes are VFS code generators. Even if a selected skill advertises
+    // run_command, physical command execution is reserved for interactive
+    // agent surfaces and the controlled reconciliation verifier.
+    const enabledToolNames = (skill?.enabledTools || [
       "read_file",
       "write_file",
       "list_files",
       "search_codebase",
       "web_search",
-      "run_command",
       ...(lspSettings?.enabled ? ["lsp_get_definition", "lsp_get_references", "lsp_get_diagnostics"] : [])
-    ];
+    ]).filter((name: string) => name !== "run_command");
     // Built-in tools are filtered by the skill; MCP tools are always available.
     const tools = [
       ...allTools.filter((t: any) => enabledToolNames.includes(t.name)),
@@ -210,7 +210,6 @@ export async function executeNode(ws: WebSocket, data: any): Promise<void> {
       list_files: "- 'list_files': Discover files in the workspace.",
       search_codebase: "- 'search_codebase': Find specific code patterns.",
       web_search: "- 'web_search': Search the public web for current information and return cited sources (input: {\"query\": \"search query\"}).",
-      run_command: "- 'run_command': Run an approved non-interactive command against physical workspace files.",
       lsp_get_definition: "- 'lsp_get_definition': Find definition of a symbol (input: {\"path\": \"file/path\", \"line\": lineNum, \"character\": colNum}).",
       lsp_get_references: "- 'lsp_get_references': Find all references of a symbol (input: {\"path\": \"file/path\", \"line\": lineNum, \"character\": colNum}).",
       lsp_get_diagnostics: "- 'lsp_get_diagnostics': Get compile errors/warnings for a file (input: {\"path\": \"file/path\"})."

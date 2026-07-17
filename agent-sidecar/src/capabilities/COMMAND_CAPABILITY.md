@@ -1,9 +1,10 @@
 # Pi command capability
 
 `run_command` lets a Pi agent run a non-interactive process in the physical
-workspace. It is available to Agent Tab, Task Node, and Global Chat executions
-when their selected skill enables it. Reconciliation intentionally remains a
-VFS-only workflow and does not receive this capability.
+workspace. It is available to interactive Agent Tab and Global Chat executions
+when their selected skill enables it. Task Nodes never receive command tools;
+they only generate VFS code changes. Graph reconciliation also keeps the model
+VFS-only, then invokes a sidecar-controlled build verifier after reconciliation.
 
 ## Architecture
 
@@ -11,6 +12,9 @@ VFS-only workflow and does not receive this capability.
 - `../services/commandPermissions.ts` owns authorization and memory-only grants.
 - `../services/commandExecution.ts` validates paths, spawns processes, captures
   output, applies timeouts, and stops all processes associated with a session.
+- `../services/reconciliationBuildVerification.ts` temporarily overlays
+  reconciled VFS files, invokes the approved detected build through the same
+  process runner, and restores physical files in a `finally` block.
 - The frontend `commandPermissionService.ts` queues requests from every Sidecar
   WebSocket. `CommandPermissionPresenter.tsx` connects that service to the
   app-level `CommandPermissionDialog.tsx` view.
@@ -56,3 +60,8 @@ grant signature because changing it cannot change what process is executed.
 `run_command` always targets physical workspace state. Task and Global Chat
 `write_file` operations still target their Axiom-tab VFS, so terminal commands
 must never be described as VFS writes.
+
+Task Nodes structurally filter `run_command` from skill-provided tool lists.
+Graph reconciliation never gives `run_command` to the model: its deterministic
+Stage 2 verifier requests permission for a detected build command before any
+temporary physical file overlay is created.

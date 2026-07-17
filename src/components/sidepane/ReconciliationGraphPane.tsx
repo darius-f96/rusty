@@ -9,6 +9,7 @@ import { CustomSelect } from "../CustomSelect";
 import { queryDuplicateTrackedFiles } from "../../services/vfs/orchestrators/queryOrchestrator";
 import { processResponse } from "../../services/responseProcessingService";
 import { ConsoleTabContent } from "./components/ConsoleTabContent";
+import { commandPermissionService, handleCommandPermissionMessage } from "../../services/commandPermissionService";
 
 interface ReconciliationGraphPaneProps {
   onClose: () => void;
@@ -121,10 +122,12 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
     addConsoleLog("Stop requested by user.");
     setConsoleStatus("idle");
     if (socketRef.current) {
+      const socket = socketRef.current;
       if (socketRef.current.readyState === WebSocket.OPEN) {
         socketRef.current.send(JSON.stringify({ type: "agent_chat_stop", tabId: reconciliationStreamId }));
       }
       socketRef.current.close(1000, "User requested stop");
+      commandPermissionService.removeForSocket(socket);
       socketRef.current = null;
     }
     setIsReconciling(false);
@@ -138,7 +141,9 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
 
     return () => {
       if (socketRef.current) {
-        socketRef.current.close(1000, "Pane unmounted");
+        const socket = socketRef.current;
+        socket.close(1000, "Pane unmounted");
+        commandPermissionService.removeForSocket(socket);
       }
     };
   }, [tabId]);
@@ -200,6 +205,19 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
       try {
         const msg = JSON.parse(event.data);
 
+        if (handleCommandPermissionMessage(msg, socket)) return;
+
+        if (msg.type === "command_output" && msg.sessionId === reconciliationStreamId) {
+          const output = String(msg.content || "").trimEnd();
+          if (output) addConsoleLog(output);
+          return;
+        }
+
+        if (msg.type === "command_complete" && msg.sessionId === reconciliationStreamId) {
+          if (msg.error) addConsoleLog(`Build command error: ${msg.error}`);
+          return;
+        }
+
         if (msg.type === "log") {
           addConsoleLog(msg.message);
           return;
@@ -249,11 +267,26 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
         }
 
         if (msg.type === "reconciliation_graph_complete") {
-          addConsoleLog("Reconciliation completed successfully.");
-          setConsoleStatus("success");
+          const verificationStatus = msg.verification?.status;
+          if (verificationStatus === "failed") {
+            addConsoleLog(`Reconciliation completed, but build verification failed: ${msg.verification?.reason || "unknown failure"}`);
+            setConsoleStatus("error");
+          } else if (verificationStatus === "skipped") {
+            addConsoleLog(`Reconciliation completed; build verification skipped: ${msg.verification?.reason || "no reason provided"}`);
+            setConsoleStatus("success");
+          } else {
+            addConsoleLog("Reconciliation and build verification completed successfully.");
+            setConsoleStatus("success");
+          }
           appendChatMessage({ role: "assistant", content: msg.response || "Reconciliation complete." });
           setIsReconciling(false);
-          notify("Reconciliation Complete", "Code alignment completed successfully.", "success");
+          if (verificationStatus === "failed") {
+            notify("Build Verification Failed", msg.verification?.reason || "The reconciled code did not build.", "error");
+          } else if (verificationStatus === "skipped") {
+            notify("Reconciliation Complete", "Code alignment completed; build verification was skipped.", "info");
+          } else {
+            notify("Reconciliation Complete", "Code alignment and temporary build verification passed.", "success");
+          }
           loadDuplicates();
           socket.close();
         }
@@ -281,6 +314,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
     };
 
     socket.onclose = () => {
+      commandPermissionService.removeForSocket(socket);
       const currentStatus = useWorkspaceStore.getState().canvasContexts[tabId]?.nodeStatus[reconciliationStreamId];
       if (currentStatus === "running") {
         addConsoleLog("Connection closed before reconciliation completed.");
