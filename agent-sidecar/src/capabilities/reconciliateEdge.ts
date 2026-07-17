@@ -10,30 +10,21 @@ import { WebSocket } from "ws";
 import path from "path";
 import { safeSend, getNextId, registerPendingRequest } from "../services/websocket";
 import { createListFilesTool, createSearchCodebaseTool } from "../services/tools";
+import { callLlmWithToolsPiStreaming } from "../services/llmRuntime";
 
 export async function reconciliateEdge(ws: WebSocket, data: any): Promise<void> {
   const { edgeId, sourceTaskId, targetTaskId, modifiedFiles, userMessage, chatHistory, workspaceRoot, model, sourcePrompt, targetPrompt, customProvider } = data;
   console.log(`WebSocket [Server] reconciliate_edge starting`, { edgeId, sourceTaskId, targetTaskId });
 
   try {
-    if (customProvider) {
-      try {
-        const { registerProvider } = require("@earendil-works/pi-agent-core");
-        registerProvider(customProvider.id, {
-          name: customProvider.name,
-          baseUrl: customProvider.baseUrl,
-          apiKey: customProvider.apiKey || "not-needed",
-          api: customProvider.apiType || "openai-completions",
-          models: customProvider.models
-        });
-      } catch (err: any) {
-        console.warn("Provider registration warning:", err.message);
-      }
-    }
-
     const readVfsTool = {
       name: "read_file",
       description: "Read a file from the workspace.",
+      inputSchema: {
+        type: "object",
+        properties: { path: { type: "string", description: "Workspace-relative file path" } },
+        required: ["path"],
+      },
       execute: async ({ path: filePath }: { path: string }) => {
         const resolvedPath = path.isAbsolute(filePath) ? filePath : path.join(workspaceRoot, filePath);
         return new Promise((resolve, reject) => {
@@ -59,6 +50,14 @@ export async function reconciliateEdge(ws: WebSocket, data: any): Promise<void> 
     const writeVfsTool = {
       name: "write_file",
       description: "Write file content to the virtual workspace.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          path: { type: "string", description: "Workspace-relative file path" },
+          content: { type: "string", description: "Complete replacement file content" },
+        },
+        required: ["path", "content"],
+      },
       execute: async ({ path: filePath, content }: { path: string; content: string }) => {
         const resolvedPath = path.isAbsolute(filePath) ? filePath : path.join(workspaceRoot, filePath);
         return new Promise((resolve, reject) => {
@@ -96,69 +95,20 @@ Your job:
 Workspace root: ${workspaceRoot || "unknown"}
 `;
 
-    let response;
-    try {
-      const { createAgentSessionRuntime } = require("@earendil-works/pi-agent-core");
-      const runtime = await createAgentSessionRuntime({
-        tools: [readVfsTool, writeVfsTool, createListFilesTool(workspaceRoot), createSearchCodebaseTool(workspaceRoot)],
-        modelName: model || "anthropic/claude-3-5-sonnet",
-        systemPrompt,
-        messages: chatHistory || []
-      });
-      const result = await runtime.run();
-      response = result?.response || result?.output || "Reconciliation analysis complete.";
-    } catch (sdkError: any) {
-      console.warn("Reconciliation SDK fallback:", sdkError.message);
-      
-      const { callLlmWithToolsMultiRoundStreaming } = await import("../services/llm");
-      let provider = "anthropic";
-      let modelName = "claude-3-5-sonnet-20241022";
-      if (model && model.includes("/")) {
-        [provider, modelName] = model.split("/");
-      }
-
-      let baseUrl = "";
-      let apiKey = "";
-
-      if (customProvider && customProvider.baseUrl && customProvider.apiKey) {
-        baseUrl = customProvider.baseUrl.replace(/\/$/, "");
-        apiKey = customProvider.apiKey;
-        if (modelName === "claude-3-5-sonnet-20241022" && customProvider.models?.[0]?.id) {
-          const firstModel = customProvider.models[0].id;
-          modelName = firstModel.includes("/") ? firstModel.split("/")[1] : firstModel;
-        }
-      } else if (provider === "anthropic") {
-        baseUrl = "https://api.anthropic.com/v1";
-        apiKey = process.env.ANTHROPIC_API_KEY || "";
-      } else if (provider === "openai") {
-        baseUrl = "https://api.openai.com/v1";
-        apiKey = process.env.OPENAI_API_KEY || "";
-      }
-
-      if (!apiKey && provider === "anthropic") {
-        console.warn("WebSocket [Server] Missing API key for edge reconciliation fallback. Using mock response.");
-        await new Promise(r => setTimeout(r, 800));
-        if (modifiedFiles?.length > 0) {
-          response = `I've reviewed the changes in ${modifiedFiles.join(", ")}. Based on the source and target task specifications, the modifications appear compatible. The changes follow the same patterns and do not introduce breaking conflicts.\n\nIf you're satisfied, click "Approve Reconciliation" to mark this connection as aligned.`;
-        } else {
-          response = "No modified files to reconcile. The connection appears clean.";
-        }
-      } else {
-        const edgeSendLog = (msg: string) => console.log(`[ReconciliateEdge] ${msg}`);
-        response = await callLlmWithToolsMultiRoundStreaming(
-          { baseUrl, apiKey, model: modelName },
-          systemPrompt,
-          userMessage || "Check for code conflicts between the tasks and reconcile if needed.",
-          [readVfsTool, writeVfsTool, createListFilesTool(workspaceRoot), createSearchCodebaseTool(workspaceRoot)],
-          workspaceRoot,
-          edgeSendLog,
-          () => {}, // No token streaming for edge reconciliation
-          15,
-          chatHistory || [],
-          () => ws.readyState !== WebSocket.OPEN
-        );
-      }
-    }
+    const modelReference = model || customProvider?.models?.find((item: any) => item.supported !== false)?.id || "";
+    if (!modelReference) throw new Error("No model is selected. Configure one in LLM Setup.");
+    const response = await callLlmWithToolsPiStreaming({
+      modelReference,
+      customProvider,
+      systemPrompt,
+      userMessage: userMessage || "Check for code conflicts between the tasks and reconcile if needed.",
+      tools: [readVfsTool, writeVfsTool, createListFilesTool(workspaceRoot), createSearchCodebaseTool(workspaceRoot)],
+      sendLog: (message) => console.log(`[ReconciliateEdge] ${message}`),
+      sendToken: () => {},
+      maxRounds: 15,
+      history: chatHistory || [],
+      shouldAbort: () => ws.readyState !== WebSocket.OPEN,
+    });
 
     safeSend(ws, {
       type: "reconciliation_complete",

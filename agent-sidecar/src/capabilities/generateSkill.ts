@@ -7,7 +7,7 @@
 
 import { WebSocket } from "ws";
 import { safeSend } from "../services/websocket";
-import { LlmConfig } from "../services/llm";
+import { completeLlmText } from "../services/llmRuntime";
 
 const AVAILABLE_TOOLS = ["read_file", "write_file", "list_files", "search_codebase", "web_search", "run_command"];
 
@@ -20,50 +20,9 @@ export async function generateSkill(ws: WebSocket, data: any): Promise<void> {
   };
 
   try {
-    let llmConfig: LlmConfig;
-    let modelId = model || "claude-3-5-sonnet";
-
-    if (customProvider && customProvider.baseUrl && customProvider.apiKey) {
-      let selectedModel = modelId;
-      if (selectedModel.includes("/")) {
-        selectedModel = selectedModel.split("/")[1];
-      }
-      if (!selectedModel || selectedModel === "claude-3-5-sonnet") {
-        const firstModel = customProvider.models?.[0]?.id || "";
-        selectedModel = firstModel.includes("/") ? firstModel.split("/")[1] : firstModel;
-      }
-      llmConfig = {
-        baseUrl: customProvider.baseUrl.replace(/\/$/, ""),
-        apiKey: customProvider.apiKey,
-        model: selectedModel
-      };
-      sendLog(`Using custom provider: ${customProvider.name}`);
-    } else if (model && model.includes("/")) {
-      const [provider] = model.split("/");
-      if (provider === "anthropic") {
-        llmConfig = {
-          baseUrl: "https://api.anthropic.com/v1",
-          apiKey: process.env.ANTHROPIC_API_KEY || "",
-          model: model.split("/")[1]
-        };
-      } else if (provider === "openai") {
-        llmConfig = {
-          baseUrl: "https://api.openai.com/v1",
-          apiKey: process.env.OPENAI_API_KEY || "",
-          model: model.split("/")[1]
-        };
-      } else {
-        throw new Error(`Unknown provider: ${provider}.`);
-      }
-    } else {
-      throw new Error("No LLM configuration available.");
-    }
-
-    if (!llmConfig.apiKey) {
-      throw new Error("No API key available.");
-    }
-
-    sendLog(`Generating skill with ${llmConfig.model}...`);
+    const modelReference = model || customProvider?.models?.find((item: any) => item.supported !== false)?.id || "";
+    if (!modelReference) throw new Error("Select a model before generating a skill.");
+    sendLog(`Generating skill with ${modelReference}...`);
 
     const metaPrompt = `You are a skill designer for an AI coding agent. Based on the following description, generate a skill specification as a JSON object.
 
@@ -88,30 +47,13 @@ For a coding/building skill, enable all tools.
 For a read-only analysis/planning skill, only enable: read_file, list_files, search_codebase
 For a question-heavy skill (like 'grind-me'), enable all tools but emphasize asking questions in the systemPrompt.`;
 
-    const response = await fetch(`${llmConfig.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${llmConfig.apiKey}`
-      },
-      body: JSON.stringify({
-        model: llmConfig.model,
-        messages: [
-          { role: "system", content: metaPrompt },
-          { role: "user", content: `Generate a skill for: ${description}` }
-        ],
-        max_tokens: 4000,
-        temperature: 0.7
-      })
+    const content = await completeLlmText({
+      modelReference,
+      customProvider,
+      systemPrompt: metaPrompt,
+      userMessage: `Generate a skill for: ${description}`,
+      maxTokens: 4000,
     });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`LLM error: ${response.status} - ${errorText}`);
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || "";
 
     let spec: any;
     try {

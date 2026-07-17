@@ -76,7 +76,10 @@ export const useEdgeWebSocket = (
       const rootPath = useWorkspaceStore.getState().rootPath;
       const providers = useWorkspaceStore.getState().customProviders;
       const activeProviderId = useWorkspaceStore.getState().activeCustomProviderId;
-      const provider = providers.find((p) => p.id === activeProviderId);
+      const activeModel = useWorkspaceStore.getState().activeModel;
+      const provider = providers.find((candidate) =>
+        candidate.models.some((candidateModel) => candidateModel.id === activeModel)
+      ) || providers.find((candidate) => candidate.id === activeProviderId);
 
       socket.send(
         JSON.stringify({
@@ -88,14 +91,10 @@ export const useEdgeWebSocket = (
           userMessage: userMsg.content,
           chatHistory: chatMessages.map((m) => ({ role: m.role, content: m.content })),
           workspaceRoot: rootPath,
-          model: useWorkspaceStore.getState().activeModel,
+          model: activeModel,
           sourcePrompt: (sourceNode?.data as any)?.prompt || "",
           targetPrompt: (targetNode?.data as any)?.prompt || "",
-          customProvider:
-            provider &&
-            (provider.id !== "anthropic" && provider.id !== "openai" || !!provider.apiKey)
-              ? provider
-              : null,
+          customProvider: provider || null,
         })
       );
     };

@@ -17,13 +17,71 @@ import { BUILT_IN_SKILLS, DEFAULT_SKILL_ID, GLOBAL_CHAT_DEFAULT_SKILL_ID, BUILT_
 import { VfsRegistry } from "./services/vfs";
 import { McpServerConfig } from "./components/mcp/types";
 
+export interface ProviderModel {
+  id: string;
+  name: string;
+  remoteId?: string;
+  apiType?: string;
+  baseUrl?: string;
+  supported?: boolean;
+  capabilities?: string[];
+  reasoning?: boolean;
+  input?: Array<"text" | "image">;
+  contextWindow?: number;
+  maxTokens?: number;
+  cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  compat?: Record<string, unknown>;
+  headers?: Record<string, string>;
+}
+
 export interface CustomProvider {
   id: string;
   name: string;
   baseUrl: string;
   apiKey: string;
   apiType: string;
-  models: { id: string; name: string }[];
+  authType?: "bearer" | "anthropic" | "none" | "environment";
+  catalogUrl?: string;
+  models: ProviderModel[];
+}
+
+function normalizedProviderId(providerId: string): string {
+  return providerId === "github-copilot" ? "github-models" : providerId;
+}
+
+function normalizeProviderModel(model: ProviderModel, originalProviderId: string, providerId: string): ProviderModel {
+  const originalPrefix = `${originalProviderId}/`;
+  const remoteId = model.remoteId || (model.id.startsWith(originalPrefix) ? model.id.slice(originalPrefix.length) : model.id);
+  return {
+    ...model,
+    id: `${providerId}/${remoteId}`,
+    remoteId,
+    apiType: model.apiType === "anthropic" ? "anthropic-messages" : model.apiType,
+  };
+}
+
+function normalizeStoredProvider(provider: CustomProvider): CustomProvider {
+  const providerId = normalizedProviderId(provider.id);
+  const apiType = provider.apiType === "anthropic" ? "anthropic-messages" : provider.apiType;
+  const builtInBearerProviders = new Set(["openai", "opencode", "opencode-go", "github-models"]);
+  const inferredAuthType = providerId === "anthropic"
+    ? "anthropic"
+    : builtInBearerProviders.has(providerId) || provider.apiKey
+      ? "bearer"
+      : "none";
+  return {
+    ...provider,
+    id: providerId,
+    name: provider.id === "github-copilot" ? "GitHub Models" : provider.name,
+    apiType,
+    authType: provider.authType || inferredAuthType,
+    models: (provider.models || []).map((model) => normalizeProviderModel(model, provider.id, providerId)),
+  };
+}
+
+function normalizeStoredModelReference(model: string | undefined): string | undefined {
+  if (!model) return model;
+  return model.startsWith("github-copilot/") ? `github-models/${model.slice("github-copilot/".length)}` : model;
 }
 
 export interface GeneratedTaskNodeSpec {
@@ -241,7 +299,7 @@ export interface WorkspaceState {
   clearGlobalChatHistory: (nodeId: string) => void;
   
   addCustomProvider: (provider: CustomProvider) => void;
-  updateProviderSettings: (providerId: string, settings: { apiKey?: string; baseUrl?: string; name?: string; models?: { id: string; name: string }[] }) => void;
+  updateProviderSettings: (providerId: string, settings: Partial<Omit<CustomProvider, "id">>) => void;
   setActiveCustomProviderId: (id: string | null) => void;
   setActiveModel: (model: string) => void;
   
@@ -448,48 +506,51 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   customProviders: [
     {
       id: "opencode",
-      name: "Opencode",
+      name: "OpenCode Zen",
       baseUrl: "https://opencode.ai/zen/v1",
       apiKey: "",
       apiType: "openai-completions",
+      authType: "bearer",
+      catalogUrl: "https://opencode.ai/zen/v1/models",
       models: []
     },
     {
       id: "anthropic",
       name: "Anthropic",
-      baseUrl: "",
+      baseUrl: "https://api.anthropic.com/v1",
       apiKey: "",
-      apiType: "anthropic",
+      apiType: "anthropic-messages",
+      authType: "anthropic",
+      catalogUrl: "https://api.anthropic.com/v1/models",
       models: [
-        { id: "anthropic/claude-3-5-sonnet", name: "Claude 3.5 Sonnet" },
-        { id: "anthropic/claude-3-haiku", name: "Claude 3 Haiku" }
+        { id: "anthropic/claude-sonnet-4-6", remoteId: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", apiType: "anthropic-messages", baseUrl: "https://api.anthropic.com", supported: true },
+        { id: "anthropic/claude-opus-4-6", remoteId: "claude-opus-4-6", name: "Claude Opus 4.6", apiType: "anthropic-messages", baseUrl: "https://api.anthropic.com", supported: true },
+        { id: "anthropic/claude-haiku-4-5", remoteId: "claude-haiku-4-5", name: "Claude Haiku 4.5", apiType: "anthropic-messages", baseUrl: "https://api.anthropic.com", supported: true }
       ]
     },
     {
       id: "openai",
       name: "OpenAI",
-      baseUrl: "",
+      baseUrl: "https://api.openai.com/v1",
       apiKey: "",
-      apiType: "openai-completions",
+      apiType: "openai-responses",
+      authType: "bearer",
+      catalogUrl: "https://api.openai.com/v1/models",
       models: [
-        { id: "openai/gpt-4o", name: "GPT-4o" },
-        { id: "openai/gpt-4o-mini", name: "GPT-4o Mini" }
+        { id: "openai/gpt-5.6-sol", remoteId: "gpt-5.6-sol", name: "GPT-5.6 Sol", apiType: "openai-responses", baseUrl: "https://api.openai.com/v1", supported: true, reasoning: true, input: ["text", "image"], contextWindow: 1_050_000, maxTokens: 128_000, cost: { input: 5, output: 30, cacheRead: 0.5, cacheWrite: 6.25 } },
+        { id: "openai/gpt-5.6-terra", remoteId: "gpt-5.6-terra", name: "GPT-5.6 Terra", apiType: "openai-responses", baseUrl: "https://api.openai.com/v1", supported: true, reasoning: true, input: ["text", "image"], contextWindow: 1_050_000, maxTokens: 128_000, cost: { input: 2.5, output: 15, cacheRead: 0.25, cacheWrite: 3.125 } },
+        { id: "openai/gpt-5.6-luna", remoteId: "gpt-5.6-luna", name: "GPT-5.6 Luna", apiType: "openai-responses", baseUrl: "https://api.openai.com/v1", supported: true, reasoning: true, input: ["text", "image"], contextWindow: 1_050_000, maxTokens: 128_000, cost: { input: 1, output: 6, cacheRead: 0.1, cacheWrite: 1.25 } }
       ]
     },
     {
-      id: "github-copilot",
-      name: "GitHub Copilot",
+      id: "github-models",
+      name: "GitHub Models",
       baseUrl: "https://models.github.ai/inference",
       apiKey: "",
       apiType: "openai-completions",
-      models: [
-        { id: "github-copilot/openai/gpt-4o", name: "GPT-4o" },
-        { id: "github-copilot/openai/gpt-4o-mini", name: "GPT-4o Mini" },
-        { id: "github-copilot/openai/o1-mini", name: "o1-mini" },
-        { id: "github-copilot/meta/llama-3.3-70b-instruct", name: "Llama 3.3 70B" },
-        { id: "github-copilot/mistral-ai/mistral-large-2411", name: "Mistral Large" },
-        { id: "github-copilot/microsoft/phi-4", name: "Phi-4" }
-      ]
+      authType: "bearer",
+      catalogUrl: "https://models.github.ai/catalog/models",
+      models: []
     }
   ],
   activeCustomProviderId: "opencode",
@@ -2090,26 +2151,38 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         // Merge saved providers with current defaults: ensure all built-in providers exist
         // while restoring any user-saved API keys, models, and settings per provider.
         const currentDefaults = useWorkspaceStore.getState().customProviders;
-        const savedMap = new Map(config.customProviders.map(p => [p.id, p]));
+        const normalizedSavedProviders = config.customProviders.map(normalizeStoredProvider);
+        const savedMap = new Map(normalizedSavedProviders.map(p => [p.id, p]));
         const merged = currentDefaults.map(defaultProvider => {
           const saved = savedMap.get(defaultProvider.id);
           if (saved) {
-            // Merge: keep saved apiKey, baseUrl, and models; fall back to defaults otherwise
-            return { ...defaultProvider, ...saved };
+            // Preserve explicit saved settings while repairing empty endpoint/model
+            // fields produced by older built-in provider definitions.
+            return {
+              ...defaultProvider,
+              ...saved,
+              baseUrl: saved.baseUrl || defaultProvider.baseUrl,
+              catalogUrl: saved.catalogUrl || defaultProvider.catalogUrl,
+              models: saved.models?.length ? saved.models : defaultProvider.models,
+            };
           }
           return defaultProvider; // New built-in provider not yet in saved config
         });
         // Also keep any user-added custom providers that are not built-in defaults
         const defaultIds = new Set(currentDefaults.map(p => p.id));
-        for (const saved of config.customProviders) {
+        for (const saved of normalizedSavedProviders) {
           if (!defaultIds.has(saved.id)) {
             merged.push(saved);
           }
         }
         updates.customProviders = merged;
       }
-      if (config.activeCustomProviderId !== undefined) updates.activeCustomProviderId = config.activeCustomProviderId;
-      if (config.activeModel) updates.activeModel = config.activeModel;
+      if (config.activeCustomProviderId !== undefined) {
+        updates.activeCustomProviderId = config.activeCustomProviderId
+          ? normalizedProviderId(config.activeCustomProviderId)
+          : null;
+      }
+      if (config.activeModel) updates.activeModel = normalizeStoredModelReference(config.activeModel) || "";
       if (config.mcpServers) updates.mcpServers = config.mcpServers;
       if (config.lspSettings) updates.lspSettings = { ...config.lspSettings, enabled: false };
 

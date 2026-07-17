@@ -64,7 +64,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
   const { width, containerRef, startResizing } = useResizable(500, "reconciliation_graph_pane_width");
 
   // States
-  const [selectedModel, setSelectedModel] = useState(activeModel || "anthropic/claude-3-5-sonnet");
+  const [selectedModel, setSelectedModel] = useState(activeModel || "");
   const [activeTab, setActiveTab] = useState<"overview" | "chat" | "console" | "files">("overview");
   const [isReconciling, setIsReconciling] = useState(false);
   const [chatMessages, setChatMessages] = useState<{ role: string; content: string }[]>([]);
@@ -308,7 +308,9 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
     }
 
     socket.onopen = () => {
-      const provider = customProviders.find((p) => p.id === activeCustomProviderId);
+      const provider = customProviders.find((candidate) =>
+        candidate.models.some((candidateModel) => candidateModel.id === selectedModel)
+      ) || customProviders.find((candidate) => candidate.id === activeCustomProviderId);
       addConsoleLog(`Connected to sidecar. Dispatching ${formattedNodes.length} task nodes with ${Object.keys(duplicateFiles).length} overlapping file groups.`);
 
       socket.send(
@@ -321,7 +323,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
           duplicateFiles,
           chatHistory: nextMessages.map(m => ({ role: m.role, content: m.content })),
           userMessage: userMsgText || "",
-          customProvider: provider && (provider.id !== "anthropic" && provider.id !== "openai" || !!provider.apiKey) ? provider : null,
+          customProvider: provider || null,
         })
       );
     };
@@ -462,14 +464,23 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
 
   // Compile list of available models
   const availableModels = useMemo(() => {
-    const defaultModels = ["anthropic/claude-3-5-sonnet", "openai/gpt-4o", "openai/gpt-4o-mini"];
-    const customModels = customProviders.flatMap((p) => (p.models || []).map((m: any) => typeof m === "string" ? m : m.id));
-    return Array.from(new Set([...defaultModels, ...customModels]));
-  }, [customProviders]);
+    const configuredModels = customProviders.flatMap((provider) =>
+      (provider.models || [])
+        .filter((model) => model.supported !== false)
+        .map((model) => model.id)
+    );
+    return Array.from(new Set([activeModel, ...configuredModels].filter(Boolean)));
+  }, [activeModel, customProviders]);
 
   const modelOptions = useMemo(() => {
     return availableModels.map((m) => ({ id: m, name: m }));
   }, [availableModels]);
+
+  useEffect(() => {
+    if ((!selectedModel || !availableModels.includes(selectedModel)) && activeModel) {
+      setSelectedModel(activeModel);
+    }
+  }, [activeModel, availableModels, selectedModel]);
 
   const duplicateFilesEntries = Object.entries(duplicateFiles);
 

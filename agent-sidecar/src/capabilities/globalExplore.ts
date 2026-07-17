@@ -11,7 +11,7 @@ import path from "path";
 import fs from "fs";
 import { safeSend, getNextId, registerPendingRequest } from "../services/websocket";
 import { createListFilesTool, createSearchCodebaseTool, listFilesRecursive } from "../services/tools";
-import { callLlmWithToolsMultiRoundStreaming, LlmConfig } from "../services/llm";
+import { callLlmWithToolsPiStreaming } from "../services/llmRuntime";
 import { createMcpTools, McpServerConfig } from "../services/mcpClient";
 
 export async function globalExplore(ws: WebSocket, data: any): Promise<void> {
@@ -136,52 +136,9 @@ IMPORTANT: End your response with a section marked "--- SUMMARY ---" that contai
 
     let runResult;
     try {
-      let llmConfig: LlmConfig;
-      let modelId = model || "claude-3-5-sonnet";
-
-      if (customProvider && customProvider.baseUrl && customProvider.apiKey) {
-        let selectedModel = modelId;
-        if (selectedModel.includes("/")) {
-          selectedModel = selectedModel.split("/")[1];
-        }
-        if (!selectedModel || selectedModel === "claude-3-5-sonnet") {
-          const firstModel = customProvider.models?.[0]?.id || "";
-          selectedModel = firstModel.includes("/") ? firstModel.split("/")[1] : firstModel;
-        }
-        llmConfig = {
-          baseUrl: customProvider.baseUrl.replace(/\/$/, ""),
-          apiKey: customProvider.apiKey,
-          model: selectedModel
-        };
-        sendLog(`Using custom provider: ${customProvider.name}`);
-      } else if (customProvider && customProvider.id === "anthropic" && !customProvider.apiKey) {
-        throw new Error("Anthropic API key not configured. Use simulation fallback.");
-      } else if (model && model.includes("/")) {
-        const [provider] = model.split("/");
-        if (provider === "anthropic") {
-          llmConfig = {
-            baseUrl: "https://api.anthropic.com/v1",
-            apiKey: process.env.ANTHROPIC_API_KEY || "",
-            model: model.split("/")[1]
-          };
-        } else if (provider === "openai") {
-          llmConfig = {
-            baseUrl: "https://api.openai.com/v1",
-            apiKey: process.env.OPENAI_API_KEY || "",
-            model: model.split("/")[1]
-          };
-        } else {
-          throw new Error(`Unknown provider: ${provider}. Use simulation fallback.`);
-        }
-      } else {
-        throw new Error("No LLM configuration available. Use simulation fallback.");
-      }
-
-      if (!llmConfig.apiKey) {
-        throw new Error("No API key available. Use simulation fallback.");
-      }
-
-      console.log(`WebSocket [Server] Calling LLM (streaming): ${llmConfig.model} at ${llmConfig.baseUrl}`);
+      const modelReference = model || customProvider?.models?.find((item: any) => item.supported !== false)?.id || "";
+      if (!modelReference) throw new Error("No model is selected. Configure one in LLM Setup.");
+      console.log(`WebSocket [Server] Calling LLM (streaming): ${modelReference}`);
 
       const augmentedPrompt = planOnly
         ? `${PLAN_ONLY_INSTRUCTIONS}${prompt}\n<user prompt>`
@@ -194,18 +151,18 @@ IMPORTANT: End your response with a section marked "--- SUMMARY ---" that contai
         safeSend(ws, { type: "token", content: token });
       };
 
-      const responseText = await callLlmWithToolsMultiRoundStreaming(
-        llmConfig,
+      const responseText = await callLlmWithToolsPiStreaming({
+        modelReference,
+        customProvider,
         systemPrompt,
-        augmentedPrompt,
+        userMessage: augmentedPrompt,
         tools,
-        workspaceRoot,
         sendLog,
         sendToken,
-        50,
-        chatHistory || [],
-        () => ws.readyState !== WebSocket.OPEN
-      );
+        maxRounds: 50,
+        history: chatHistory || [],
+        shouldAbort: () => ws.readyState !== WebSocket.OPEN,
+      });
 
       runResult = { response: responseText };
       sendLog("Exploration complete.");

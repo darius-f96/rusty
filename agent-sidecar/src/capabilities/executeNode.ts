@@ -12,8 +12,8 @@ import { safeSend, getNextId, registerPendingRequest } from "../services/websock
 import { createListFilesTool, createSearchCodebaseTool } from "../services/tools";
 import { createMcpTools, McpServerConfig } from "../services/mcpClient";
 import { createLspTools } from "../services/lspTools";
-import { importEsm } from "../services/esmImport";
 import { runPiAgentChat } from "../services/piAgentChat";
+import { callLlmWithToolsPiStreaming } from "../services/llmRuntime";
 import {
   acquireTaskExecutionSlot,
   getTaskExecutionLimit,
@@ -53,25 +53,6 @@ export async function executeNode(ws: WebSocket, data: any): Promise<void> {
   if (wasQueued) sendLog("Agent slot acquired; starting task execution.");
 
   try {
-    if (customProvider) {
-      sendLog(`Registering custom LLM provider: ${customProvider.name} (${customProvider.id})`);
-      console.log(`WebSocket [Server] registering custom provider`, customProvider);
-      try {
-        const { registerProvider } = require("@earendil-works/pi-agent-core");
-        registerProvider(customProvider.id, {
-          name: customProvider.name,
-          baseUrl: customProvider.baseUrl,
-          apiKey: customProvider.apiKey || "not-needed",
-          api: customProvider.apiType || "openai-completions",
-          models: customProvider.models
-        });
-        sendLog("Custom provider registered successfully.");
-      } catch (err: any) {
-        console.error("Could not register custom provider:", err.message);
-        sendLog(`Provider warning: Using simulated/mock LLM fallback due to: ${err.message}`);
-      }
-    }
-
     const readVfsTool = {
       name: "read_file",
       description: "Read a file's content from the virtual workspace.",
@@ -278,12 +259,10 @@ CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
       : defaultSystemPrompt;
 
     let runResult;
-    let useMultiRound = !!(chatHistory && chatHistory.length > 1);
 
     (ws as any).__activeAgentTabId = nodeId;
-    const piModel = model?.includes("/")
-      ? model
-      : customProvider ? `${customProvider.id}/${model || customProvider.models?.[0]?.id || ""}` : model || "";
+    const piModel = model || customProvider?.models?.find((item: any) => item.supported !== false)?.id || "";
+    if (!piModel) throw new Error("No model is selected. Configure one in LLM Setup.");
     const piResponse = await runPiAgentChat({
       tabId: nodeId,
       model: piModel,
@@ -302,105 +281,21 @@ CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
       runResult = { status: "success", modified: Array.from(modifiedFiles), response: piResponse };
     }
 
-    if (!runResult && !useMultiRound) {
-      try {
-        const { createAgentSession } = await importEsm("@earendil-works/pi-coding-agent");
-        const { getModel } = await importEsm("@earendil-works/pi-ai");
-        const { writeMcpConfig, getPiResourceLoader } = await import("../services/piMcp");
-
-        let selectedModel;
-        if (model && model.includes("/")) {
-          const [provider, modelName] = model.split("/");
-          selectedModel = getModel(provider, modelName);
-        } else {
-          selectedModel = getModel("anthropic", "claude-3-5-sonnet-20241022");
-        }
-
-        console.log("WebSocket [Server] Creating task session with model:", selectedModel ? (selectedModel as any).modelId || (selectedModel as any).name || "default" : "default");
-
-        const sdkToolNames = enabledToolNames.map((name: string) => {
-          if (name === "read_file") return "read";
-          if (name === "write_file") return "write";
-          return name;
-        });
-
-        // Write current MCP configuration and load bundled Pi extensions, including web access.
-        await writeMcpConfig(workspaceRoot, mcpContext);
-        const resourceLoader = await getPiResourceLoader(workspaceRoot);
-
-        const { session } = await createAgentSession({
-          cwd: workspaceRoot,
-          model: selectedModel,
-          tools: sdkToolNames,
-          customTools: tools as any,
-          resourceLoader
-        });
-
-        sendLog("Executing agent reasoning loop...");
-        console.log("WebSocket [Server] Running agent core loop...");
-
-        const result = await session.prompt(instructions);
-        runResult = { status: "success", modified: Array.from(modifiedFiles), response: (result as any).output || (result as any).message?.content || "Task completed." };
-      } catch (sdkError: any) {
-        console.warn("WebSocket [Server] Pi SDK load warning (using custom fallback):", sdkError.message);
-        sendLog(`Pi SDK warning: ${sdkError.message}. Using multi-round custom fallback...`);
-        useMultiRound = true;
-      }
-    }
-
-    if (!runResult && useMultiRound) {
-      const { callLlmWithToolsMultiRoundStreaming } = await import("../services/llm");
-      let provider = "anthropic";
-      let modelName = "claude-3-5-sonnet-20241022";
-      if (model && model.includes("/")) {
-        [provider, modelName] = model.split("/");
-      }
-
-      let baseUrl = "";
-      let apiKey = "";
-
-      if (customProvider && customProvider.baseUrl && customProvider.apiKey) {
-        baseUrl = customProvider.baseUrl.replace(/\/$/, "");
-        apiKey = customProvider.apiKey;
-        if (modelName === "claude-3-5-sonnet-20241022" && customProvider.models?.[0]?.id) {
-          const firstModel = customProvider.models[0].id;
-          modelName = firstModel.includes("/") ? firstModel.split("/")[1] : firstModel;
-        }
-      } else if (provider === "anthropic") {
-        baseUrl = "https://api.anthropic.com/v1";
-        apiKey = process.env.ANTHROPIC_API_KEY || "";
-      } else if (provider === "openai") {
-        baseUrl = "https://api.openai.com/v1";
-        apiKey = process.env.OPENAI_API_KEY || "";
-      }
-
-      if (!apiKey && provider === "anthropic") {
-        console.warn("WebSocket [Server] Missing Anthropic API key. Simulating output...");
-        sendLog("Simulating execution due to missing API key...");
-        await new Promise(r => setTimeout(r, 1200));
-        runResult = {
-          status: "success",
-          modified: EMPTY_MODIFIED_LIST(inputFiles),
-          response: `[Simulated Refactoring]\n\nBased on your prompt: "${instructions}", I have successfully simulated modifications on the connected files.`
-        };
-      } else {
-        const sendToken = (token: string) => {
-          safeSend(ws, { type: "token", nodeId, content: token });
-        };
-        const responseText = await callLlmWithToolsMultiRoundStreaming(
-          { baseUrl, apiKey, model: modelName },
-          systemPrompt,
-          instructions,
-          tools,
-          workspaceRoot,
-          sendLog,
-          sendToken,
-          200,
-          chatHistory || [],
-          () => ws.readyState !== WebSocket.OPEN
-        );
-        runResult = { status: "success", modified: Array.from(modifiedFiles), response: responseText };
-      }
+    if (!runResult) {
+      sendLog("Using the provider-compatible Pi tool runtime.");
+      const responseText = await callLlmWithToolsPiStreaming({
+        modelReference: piModel,
+        customProvider,
+        systemPrompt,
+        userMessage: instructions,
+        tools,
+        sendLog,
+        sendToken: (token) => safeSend(ws, { type: "token", nodeId, content: token }),
+        maxRounds: 200,
+        history: chatHistory || [],
+        shouldAbort: () => ws.readyState !== WebSocket.OPEN,
+      });
+      runResult = { status: "success", modified: Array.from(modifiedFiles), response: responseText };
     }
 
     console.log(`WebSocket [Server] Task complete. Sending success payload...`);
@@ -423,11 +318,4 @@ CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
   } finally {
     releaseExecutionSlot();
   }
-}
-
-function EMPTY_MODIFIED_LIST(inputFiles: any[]): string[] {
-  if (inputFiles && inputFiles.length > 0) {
-    return [inputFiles[0].path];
-  }
-  return [];
 }

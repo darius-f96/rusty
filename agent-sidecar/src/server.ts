@@ -62,6 +62,7 @@ import { inlineChat } from "./capabilities/inlineChat";
 import { generateTaskNodes, stopTaskNodeGeneration } from "./capabilities/generateTaskNodes";
 import { stopCommandsForSession } from "./services/commandExecution";
 import { clearCommandSession } from "./services/commandPermissions";
+import { discoverProviderModels, testProviderConnection } from "./services/llmProviders";
 
 dotenv.config();
 
@@ -100,32 +101,27 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Proxy endpoint to bypass WebView CORS restrictions for listing models
-app.post("/proxy/models", async (req, res) => {
-  const { baseUrl, apiKey } = req.body;
-  if (!baseUrl) {
-    return res.status(400).json({ error: "Missing baseUrl" });
-  }
+// Provider-aware endpoints keep authentication, catalog URLs, headers, and
+// response normalization out of the WebView. The old generic proxy could only
+// handle OpenAI-shaped providers and silently produced unusable model IDs for
+// providers such as Anthropic and GitHub Models.
+app.post("/llm/models", async (req, res) => {
   try {
-    const url = baseUrl.endsWith("/") ? `${baseUrl}models` : `${baseUrl}/models`;
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json"
-    };
-    if (apiKey) {
-      headers["Authorization"] = `Bearer ${apiKey}`;
-    }
-    console.log(`Proxy [Server] fetching models from: ${url}`);
-    
-    const response = await fetch(url, { method: "GET", headers });
-    if (!response.ok) {
-      const text = await response.text();
-      return res.status(response.status).json({ error: `Remote server error: ${text || response.statusText}` });
-    }
-    const data = await response.json();
-    res.json(data);
+    const models = await discoverProviderModels(req.body?.provider || {});
+    res.json({ models });
   } catch (err: any) {
-    console.error("Proxy [Server] fetch models error:", err);
-    res.status(500).json({ error: err.message || "Failed to fetch models" });
+    console.error("LLM model discovery error:", err?.message || err);
+    res.status(502).json({ error: err?.message || "Failed to fetch provider models." });
+  }
+});
+
+app.post("/llm/test", async (req, res) => {
+  try {
+    const result = await testProviderConnection(req.body?.provider || {});
+    res.json({ ok: true, ...result });
+  } catch (err: any) {
+    console.error("LLM connection test error:", err?.message || err);
+    res.status(502).json({ error: err?.message || "Provider connection test failed." });
   }
 });
 

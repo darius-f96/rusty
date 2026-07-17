@@ -2,6 +2,7 @@ import * as fs from "node:fs/promises";
 import { getPiResourceLoader } from "./piMcp";
 import { importEsm } from "./esmImport";
 import { installPiCommandPolicy } from "./piCommandPolicy";
+import { getProviderDefaults, normalizeApiType, remoteModelId, resolveProviderApiKey } from "./llmProviders";
 
 interface ActivePiRun {
   stop: (reason: string) => Promise<void>;
@@ -104,9 +105,24 @@ interface RunPiAgentChatOptions {
     id: string;
     name: string;
     baseUrl: string;
-    apiKey: string;
+    apiKey?: string;
     apiType: string;
-    models: Array<{ id: string; name: string }>;
+    authType?: "bearer" | "anthropic" | "none" | "environment";
+    models: Array<{
+      id: string;
+      name: string;
+      remoteId?: string;
+      apiType?: string;
+      baseUrl?: string;
+      supported?: boolean;
+      reasoning?: boolean;
+      input?: Array<"text" | "image">;
+      contextWindow?: number;
+      maxTokens?: number;
+      cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
+      compat?: Record<string, unknown>;
+      headers?: Record<string, string>;
+    }>;
   } | null;
   sendLog: (message: string) => void;
   sendToken: (token: string) => void;
@@ -259,25 +275,48 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
   let selectedModel: any;
   if (options.customProvider) {
     const authStorage = AuthStorage.inMemory();
-    authStorage.setRuntimeApiKey(options.customProvider.id, options.customProvider.apiKey);
+    const authType = options.customProvider.authType
+      || getProviderDefaults(options.customProvider.id)?.authType
+      || (options.customProvider.apiKey ? "bearer" : "none");
+    const providerApiKey = resolveProviderApiKey(options.customProvider)
+      || (authType === "none" ? "not-needed" : "");
+    if (!providerApiKey) {
+      options.sendLog(`No API key is configured for ${options.customProvider.name}; using the compatibility agent runtime.`);
+      return undefined;
+    }
+    authStorage.setRuntimeApiKey(options.customProvider.id, providerApiKey);
     modelRegistry = ModelRegistry.inMemory(authStorage);
     modelRegistry.registerProvider(options.customProvider.id, {
       name: options.customProvider.name,
       baseUrl: options.customProvider.baseUrl,
-      apiKey: options.customProvider.apiKey,
-      api: options.customProvider.apiType || "openai-completions",
-      models: options.customProvider.models.map((model) => ({
-        id: model.id.includes("/") ? model.id.split("/").slice(1).join("/") : model.id,
+      apiKey: providerApiKey,
+      api: normalizeApiType(options.customProvider.apiType),
+      models: options.customProvider.models
+        .filter((model) => model.supported !== false)
+        .map((model) => ({
+        id: model.remoteId || remoteModelId(model.id, options.customProvider!.id),
         name: model.name,
-        api: options.customProvider!.apiType || "openai-completions",
-        reasoning: true,
-        input: ["text"],
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-        contextWindow: 200_000,
-        maxTokens: 16_384
+        api: normalizeApiType(model.apiType || options.customProvider!.apiType),
+        baseUrl: model.baseUrl || options.customProvider!.baseUrl,
+        reasoning: model.reasoning ?? false,
+        input: model.input || ["text"],
+        cost: model.cost || { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: model.contextWindow || 200_000,
+        maxTokens: model.maxTokens || 16_384,
+        compat: model.compat,
+        headers: {
+          ...(model.headers || {}),
+          ...((options.customProvider!.id === "github-models" || options.customProvider!.id === "github-copilot")
+            ? { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2026-03-10" }
+            : {}),
+          ...(normalizeApiType(model.apiType || options.customProvider!.apiType) === "anthropic-messages"
+              && authType === "bearer"
+            ? { Authorization: `Bearer ${providerApiKey}` }
+            : {}),
+        },
       }))
     });
-    selectedModel = modelRegistry.find(provider, modelId);
+    selectedModel = modelRegistry.find(options.customProvider.id, modelId);
   } else {
     selectedModel = getModel(provider as any, modelId);
   }

@@ -10,7 +10,7 @@ import { WebSocket } from "ws";
 import path from "path";
 import { safeSend, getNextId, registerPendingRequest } from "../services/websocket";
 import { createListFilesTool, createSearchCodebaseTool } from "../services/tools";
-import { callLlmWithToolsMultiRoundStreaming, LlmConfig } from "../services/llm";
+import { callLlmWithToolsPiStreaming } from "../services/llmRuntime";
 import { createLspTools } from "../services/lspTools";
 import { createMcpTools, McpServerConfig } from "../services/mcpClient";
 import { createWebSearchTool } from "../services/webSearchTool";
@@ -275,56 +275,12 @@ Questions:
 
     sendLog("Initializing agent...");
 
-    let llmConfig: LlmConfig;
-    let modelId = model || "claude-3-5-sonnet";
-
-    if (customProvider && customProvider.baseUrl && customProvider.apiKey) {
-      let selectedModel = modelId;
-      if (selectedModel.includes("/")) {
-        selectedModel = selectedModel.split("/")[1];
-      }
-      if (!selectedModel || selectedModel === "claude-3-5-sonnet") {
-        const firstModel = customProvider.models?.[0]?.id || "";
-        selectedModel = firstModel.includes("/") ? firstModel.split("/")[1] : firstModel;
-      }
-      llmConfig = {
-        baseUrl: customProvider.baseUrl.replace(/\/$/, ""),
-        apiKey: customProvider.apiKey,
-        model: selectedModel
-      };
-      sendLog(`Using custom provider: ${customProvider.name}`);
-    } else if (model && model.includes("/")) {
-      const [provider] = model.split("/");
-      if (provider === "anthropic") {
-        llmConfig = {
-          baseUrl: "https://api.anthropic.com/v1",
-          apiKey: process.env.ANTHROPIC_API_KEY || "",
-          model: model.split("/")[1]
-        };
-      } else if (provider === "openai") {
-        llmConfig = {
-          baseUrl: "https://api.openai.com/v1",
-          apiKey: process.env.OPENAI_API_KEY || "",
-          model: model.split("/")[1]
-        };
-      } else {
-        throw new Error(`Unknown provider: ${provider}.`);
-      }
-    } else {
-      throw new Error("No LLM configuration available.");
-    }
-
-    if (!llmConfig.apiKey) {
-      throw new Error("No API key available.");
-    }
-
     const sendToken = (token: string) => {
       safeSend(ws, { type: "token", tabId, content: token });
     };
 
-    const piModel = model?.includes("/")
-      ? model
-      : customProvider ? `${customProvider.id}/${llmConfig.model}` : model || "";
+    const piModel = model || customProvider?.models?.find((item: any) => item.supported !== false)?.id || "";
+    if (!piModel) throw new Error("No model is selected. Configure a provider and model in LLM Setup.");
     const piResponse = await runPiAgentChat({
       tabId,
       model: piModel,
@@ -345,18 +301,18 @@ Questions:
       requestUserQuestion,
     });
 
-    const responseText = piResponse ?? await callLlmWithToolsMultiRoundStreaming(
-      llmConfig,
+    const responseText = piResponse ?? await callLlmWithToolsPiStreaming({
+      modelReference: piModel,
+      customProvider,
       systemPrompt,
-      message,
+      userMessage: message,
       tools,
-      workspaceRoot,
       sendLog,
       sendToken,
-      30,
-      chatHistory || [],
-      () => ws.readyState !== WebSocket.OPEN
-    );
+      maxRounds: 30,
+      history: chatHistory || [],
+      shouldAbort: () => ws.readyState !== WebSocket.OPEN,
+    });
 
     sendLog("Agent complete.");
 

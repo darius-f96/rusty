@@ -3,6 +3,20 @@ import { useWorkspaceStore, CustomProvider } from "../../store";
 import { Cpu, Key, Globe, Plus, ShieldCheck, Save, Layers, Lock, Unlock, HelpCircle as HelpIcon, RefreshCw, GitBranch } from "lucide-react";
 import { CustomSelect } from "../CustomSelect";
 import { notify } from "../../notificationStore";
+import { llmIntegrationService } from "../../services/llmIntegrationService";
+
+const API_PROTOCOL_OPTIONS = [
+  { id: "openai-completions", name: "OpenAI Chat Completions" },
+  { id: "openai-responses", name: "OpenAI Responses" },
+  { id: "anthropic-messages", name: "Anthropic Messages" },
+  { id: "google-generative-ai", name: "Google Generative AI" },
+];
+
+const AUTH_TYPE_OPTIONS = [
+  { id: "none", name: "None / Local" },
+  { id: "bearer", name: "Bearer token" },
+  { id: "anthropic", name: "Anthropic x-api-key" },
+];
 
 export const LlmSetupTab: React.FC = () => {
   const customProviders = useWorkspaceStore((state) => state.customProviders);
@@ -17,150 +31,107 @@ export const LlmSetupTab: React.FC = () => {
   const selectedProvider = customProviders.find((p) => p.id === activeCustomProviderId);
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
+  const [catalogUrl, setCatalogUrl] = useState("");
+  const [apiType, setApiType] = useState("openai-completions");
+  const [authType, setAuthType] = useState<NonNullable<CustomProvider["authType"]>>("bearer");
   const [showKey, setShowKey] = useState(false);
   const [fetchingModels, setFetchingModels] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<Record<string, "connected" | "failed">>({});
 
   // Sync inputs with selected provider
   useEffect(() => {
     if (selectedProvider) {
       setApiKey(selectedProvider.apiKey || "");
       setBaseUrl(selectedProvider.baseUrl || "");
+      setCatalogUrl(selectedProvider.catalogUrl || "");
+      setApiType(selectedProvider.apiType || "openai-completions");
+      setAuthType(selectedProvider.authType || "bearer");
     }
   }, [activeCustomProviderId, selectedProvider]);
 
   // Automatically select the first model as default if activeModel is empty
   useEffect(() => {
     if (!activeModel && selectedProvider && selectedProvider.models.length > 0) {
-      setActiveModel(selectedProvider.models[0].id);
+      const firstSupportedModel = selectedProvider.models.find((model) => model.supported !== false);
+      if (firstSupportedModel) setActiveModel(firstSupportedModel.id);
     }
   }, [activeModel, selectedProvider, setActiveModel]);
 
-  // Save Settings
-  const handleSaveSettings = async () => {
-    if (!activeCustomProviderId) return;
-    updateProviderSettings(activeCustomProviderId, {
-      apiKey: apiKey.trim(),
-      baseUrl: baseUrl.trim(),
-    });
-    
-    // Automatically fetch models on save if key is present
-    if (apiKey.trim()) {
-      setFetchingModels(true);
-      console.log(`[LlmSetup] Auto-fetching models for ${selectedProvider?.name} on save...`);
-      try {
-        const proxyUrl = "http://localhost:4000/proxy/models";
-        const targetUrl = activeCustomProviderId === "opencode" 
-          ? (baseUrl.trim() || "https://opencode.ai/zen/v1") 
-          : activeCustomProviderId === "github-copilot"
-          ? "https://models.github.ai/catalog"
-          : baseUrl.trim() || selectedProvider?.baseUrl || "";
+  const providerWithDraftSettings = (): CustomProvider | null => selectedProvider ? {
+    ...selectedProvider,
+    apiKey: authType === "none" ? "" : apiKey.trim(),
+    baseUrl: baseUrl.trim(),
+    catalogUrl: catalogUrl.trim() || undefined,
+    apiType,
+    authType,
+  } : null;
 
-        const res = await fetch(proxyUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            baseUrl: targetUrl,
-            apiKey: apiKey.trim()
-          })
-        });
-        
-        if (res.ok) {
-          const data = await res.json();
-          if (data && Array.isArray(data.data)) {
-            const mapped = data.data.map((m: any) => {
-              const prefix = activeCustomProviderId + "/";
-              const modelId = m.id || m.name || "";
-              const id = modelId.startsWith(prefix) ? modelId : `${prefix}${modelId}`;
-              return {
-                id,
-                name: m.friendly_name || m.display_name || modelId.split("/").pop() || modelId
-              };
-            });
-            if (mapped.length > 0) {
-              updateProviderSettings(activeCustomProviderId, { models: mapped });
-              setActiveModel(mapped[0].id);
-              notify("Saved", `Configuration saved successfully! Auto-loaded ${mapped.length} models for ${selectedProvider?.name}.`, "success");
-              return;
-            }
-          }
-        }
-        notify("Saved", `Configuration saved for ${selectedProvider?.name}! (Model fetching failed, please double check connection details)`, "info");
-      } catch (err) {
-        console.error("Auto-fetch error:", err);
-        notify("Saved with error", `Configuration saved for ${selectedProvider?.name}, but model auto-fetch encountered an error.`, "error");
-      } finally {
-        setFetchingModels(false);
-      }
-    } else {
-      notify("Updated", `Connection settings updated for ${selectedProvider?.name}!`, "success");
-    }
+  const handleSaveSettings = () => {
+    if (!activeCustomProviderId || !selectedProvider) return;
+    updateProviderSettings(activeCustomProviderId, {
+      apiKey: authType === "none" ? "" : apiKey.trim(),
+      baseUrl: baseUrl.trim(),
+      catalogUrl: catalogUrl.trim() || undefined,
+      apiType,
+      authType,
+    });
+    notify("Saved", `Connection settings updated for ${selectedProvider.name}.`, "success");
   };
 
   const handleFetchModels = async () => {
-    if (!activeCustomProviderId) return;
-    if (!apiKey) {
-      notify("API key required", "Please provide an API Authorization Key first.", "info");
-      return;
-    }
+    const provider = providerWithDraftSettings();
+    if (!provider) return;
 
     setFetchingModels(true);
-    console.log(`[LlmSetup] Fetching models for ${selectedProvider?.name}...`);
-    console.log(`[LlmSetup] API Key provided: ${apiKey.substring(0, 10)}...`);
-    
     try {
-      const proxyUrl = "http://localhost:4000/proxy/models";
-      const targetUrl = activeCustomProviderId === "opencode" 
-        ? (baseUrl.trim() || "https://opencode.ai/zen/v1") 
-        : activeCustomProviderId === "github-copilot"
-        ? "https://models.github.ai/catalog"
-        : baseUrl.trim() || selectedProvider?.baseUrl || "";
-      
-      const res = await fetch(proxyUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          baseUrl: targetUrl,
-          apiKey: apiKey.trim()
-        })
+      const discoveredModels = await llmIntegrationService.discoverModels(provider);
+      const models = discoveredModels.map((model) => {
+        const previous = selectedProvider?.models.find((candidate) =>
+          (candidate.remoteId || candidate.id) === (model.remoteId || model.id)
+        );
+        return { ...previous, ...model };
       });
-      
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || `HTTP error ${res.status}`);
+      const supportedModels = models.filter((model) => model.supported !== false);
+      updateProviderSettings(provider.id, {
+        apiKey: provider.apiKey,
+        baseUrl: provider.baseUrl,
+        catalogUrl: provider.catalogUrl,
+        apiType: provider.apiType,
+        authType: provider.authType,
+        models,
+      });
+      if (supportedModels.length > 0 && !supportedModels.some((model) => model.id === activeModel)) {
+        setActiveModel(supportedModels[0].id);
       }
-      
-      const data = await res.json();
-      
-      if (data && Array.isArray(data.data)) {
-        const mapped = data.data.map((m: any) => {
-          const prefix = activeCustomProviderId + "/";
-          const modelId = m.id || m.name || "";
-          const id = modelId.startsWith(prefix) ? modelId : `${prefix}${modelId}`;
-          return {
-            id,
-            name: m.friendly_name || m.display_name || modelId.split("/").pop() || modelId
-          };
-        });
-        
-        if (mapped.length > 0) {
-          updateProviderSettings(activeCustomProviderId, { models: mapped });
-          setActiveModel(mapped[0].id);
-          notify("Models loaded", `Successfully fetched and loaded ${mapped.length} models for ${selectedProvider?.name}!`, "success");
-        } else {
-          notify("No models", "No models found in the provider response.", "info");
-        }
-      } else {
-        throw new Error("Invalid response format.");
-      }
+      setConnectionStatus((current) => ({ ...current, [provider.id]: "connected" }));
+      const unsupportedCount = models.length - supportedModels.length;
+      notify(
+        "Models refreshed",
+        `Loaded ${supportedModels.length} supported model${supportedModels.length === 1 ? "" : "s"}${unsupportedCount ? `; ${unsupportedCount} unsupported catalog entries were disabled` : ""}.`,
+        supportedModels.length ? "success" : "info"
+      );
     } catch (err: any) {
-      console.error(`[LlmSetup] Fetch models error:`, err.message);
+      setConnectionStatus((current) => ({ ...current, [provider.id]: "failed" }));
       notify("Fetch failed", `Failed to fetch models: ${err.message}`, "error");
     } finally {
       setFetchingModels(false);
+    }
+  };
+
+  const handleTestConnection = async () => {
+    const provider = providerWithDraftSettings();
+    if (!provider) return;
+    setTestingConnection(true);
+    try {
+      const result = await llmIntegrationService.testConnection(provider);
+      setConnectionStatus((current) => ({ ...current, [provider.id]: "connected" }));
+      notify("Connection successful", `${provider.name} returned ${result.modelCount} models; ${result.supportedModelCount} are supported by Axiom.`, "success");
+    } catch (err: any) {
+      setConnectionStatus((current) => ({ ...current, [provider.id]: "failed" }));
+      notify("Connection failed", err.message || "Could not connect to the provider.", "error");
+    } finally {
+      setTestingConnection(false);
     }
   };
 
@@ -169,25 +140,48 @@ export const LlmSetupTab: React.FC = () => {
   const [provId, setProvId] = useState("");
   const [provName, setProvName] = useState("");
   const [provUrl, setProvUrl] = useState("http://localhost:11434/v1");
+  const [provCatalogUrl, setProvCatalogUrl] = useState("");
   const [provModels, setProvModels] = useState("qwen2.5-coder:7b");
+  const [provApiType, setProvApiType] = useState("openai-completions");
+  const [provAuthType, setProvAuthType] = useState<"bearer" | "anthropic" | "none">("none");
 
   const handleAddNewProvider = (e: React.FormEvent) => {
     e.preventDefault();
     if (!provId || !provName) return;
 
     const providerId = provId.trim().toLowerCase();
+    if (!/^[a-z0-9][a-z0-9._-]*$/.test(providerId)) {
+      notify("Invalid provider ID", "Use lowercase letters, numbers, dots, underscores, or hyphens. Slashes are reserved for model references.", "error");
+      return;
+    }
+    if (customProviders.some((provider) => provider.id === providerId)) {
+      notify("Provider already exists", `A provider with ID ${providerId} is already registered.`, "error");
+      return;
+    }
+    if (!provUrl.trim()) {
+      notify("Base URL required", "Enter the provider's API base URL.", "error");
+      return;
+    }
     const modelsList = provModels.split(",").map((m) => {
       const modelName = m.trim();
-      const id = modelName.includes("/") ? modelName : `${providerId}/${modelName}`;
-      return { id, name: modelName.split("/").pop() || modelName };
-    });
+      return {
+        id: `${providerId}/${modelName}`,
+        remoteId: modelName,
+        name: modelName.split("/").pop() || modelName,
+        apiType: provApiType,
+        baseUrl: provUrl.trim(),
+        supported: true,
+      };
+    }).filter((model) => model.remoteId);
 
     const newProvider: CustomProvider = {
       id: provId.trim().toLowerCase(),
       name: provName.trim(),
       baseUrl: provUrl.trim(),
       apiKey: "",
-      apiType: "openai-completions",
+      apiType: provApiType,
+      authType: provAuthType,
+      catalogUrl: provCatalogUrl.trim() || undefined,
       models: modelsList,
     };
 
@@ -200,6 +194,11 @@ export const LlmSetupTab: React.FC = () => {
     notify("Provider added", `LLM Provider ${provName} registered successfully!`, "success");
     setProvId("");
     setProvName("");
+    setProvUrl("http://localhost:11434/v1");
+    setProvCatalogUrl("");
+    setProvModels("qwen2.5-coder:7b");
+    setProvApiType("openai-completions");
+    setProvAuthType("none");
     setShowAddCustom(false);
   };
 
@@ -211,9 +210,9 @@ export const LlmSetupTab: React.FC = () => {
       case "anthropic":
         return "Connects directly to Anthropic's Claude API. If API Key is left blank, it falls back to the ANTHROPIC_API_KEY environment variable defined in the agent sidecar startup environment.";
       case "opencode":
-        return "Connects to OpenCode Zen/Go models using your developer API token. The base URL defaults to https://opencode.ai/zen/go/v1. Find your API Key in your OpenCode account dashboard.";
-      case "github-copilot":
-        return "Connects to GitHub Models via the official OpenAI-compatible inference API. Requires a GitHub Personal Access Token (PAT) with the 'models:read' scope. Generate one at GitHub → Settings → Developer settings → Personal access tokens. You can click 'Fetch Models' after saving to load the full GitHub Models catalog.";
+        return "Connects to OpenCode Zen. If the key is blank, the sidecar uses OPENCODE_API_KEY. Model discovery enriches the Zen catalog with the protocol required by each model. OpenCode Go should be registered separately with provider ID opencode-go and base URL https://opencode.ai/zen/go/v1.";
+      case "github-models":
+        return "Connects to GitHub Models via the official OpenAI-compatible inference API. Requires a GitHub Personal Access Token (PAT) with the 'models:read' scope; a blank field falls back to GITHUB_TOKEN in the sidecar environment. Use Fetch Models to load the official catalog.";
       default:
         return "Custom OpenAI-compatible provider (e.g. Ollama, LM Studio, vLLM, or LiteLLM gateway). Configure the URL and models as needed.";
     }
@@ -245,25 +244,36 @@ export const LlmSetupTab: React.FC = () => {
                 const isActive = p.id === activeCustomProviderId;
                 
                 // Connection indicator status text & color
-                let statusLabel = "Env Fallback";
+                const testedStatus = connectionStatus[p.id];
+                let statusLabel = p.authType === "none" ? "No Auth" : "Env / Key";
                 let statusColor = "bg-amber-500/80";
-                if (p.apiKey) {
+                if (testedStatus === "connected") {
+                  statusLabel = "Connected";
+                  statusColor = "bg-emerald-500";
+                } else if (testedStatus === "failed") {
+                  statusLabel = "Failed";
+                  statusColor = "bg-rose-500/80";
+                } else if (p.apiKey) {
                   statusLabel = "Configured";
                   statusColor = "bg-emerald-500";
-                } else if (p.id !== "openai" && p.id !== "anthropic") {
+                } else if (
+                  p.authType !== "none"
+                  && !["openai", "anthropic", "opencode", "opencode-go", "github-models"].includes(p.id)
+                ) {
                   statusLabel = "Key Required";
                   statusColor = "bg-rose-500/80";
                 }
 
-                const isGithubCopilot = p.id === "github-copilot";
+                const isGithubModels = p.id === "github-models";
 
                 return (
                   <div
                     key={p.id}
                     onClick={() => {
                       setActiveCustomProviderId(p.id);
-                      if (p.models.length > 0) {
-                        setActiveModel(p.models[0].id);
+                      const firstSupportedModel = p.models.find((model) => model.supported !== false);
+                      if (firstSupportedModel) {
+                        setActiveModel(firstSupportedModel.id);
                       }
                     }}
                     className={`group flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${
@@ -274,7 +284,7 @@ export const LlmSetupTab: React.FC = () => {
                   >
                     <div className="flex flex-col min-w-0 pr-2">
                       <span className="text-xs font-bold text-[var(--text-light)] group-hover:text-[var(--accent-color)] transition-colors flex items-center space-x-1.5">
-                        {isGithubCopilot && <GitBranch size={11} className="text-[var(--text-muted)] flex-shrink-0" />}
+                        {isGithubModels && <GitBranch size={11} className="text-[var(--text-muted)] flex-shrink-0" />}
                         <span>{p.name}</span>
                       </span>
                       <span className="text-[10px] text-[var(--text-muted)] font-mono truncate mt-0.5 max-w-[180px]">
@@ -352,7 +362,38 @@ export const LlmSetupTab: React.FC = () => {
                     value={provUrl}
                     onChange={(e) => setProvUrl(e.target.value)}
                     className="w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded-lg p-2 text-xs font-mono text-[var(--text-light)] focus:outline-none focus:border-[var(--border-active)]"
+                    required
                   />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[9px] uppercase font-bold text-[var(--text-muted)] font-mono">Catalog URL (Optional)</label>
+                  <input
+                    type="text"
+                    placeholder="Defaults to {base URL}/models"
+                    value={provCatalogUrl}
+                    onChange={(e) => setProvCatalogUrl(e.target.value)}
+                    className="w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded-lg p-2 text-xs font-mono text-[var(--text-light)] focus:outline-none focus:border-[var(--border-active)]"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="block text-[9px] uppercase font-bold text-[var(--text-muted)] font-mono">API Protocol</label>
+                    <CustomSelect
+                      value={provApiType}
+                      onChange={setProvApiType}
+                      options={API_PROTOCOL_OPTIONS}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[9px] uppercase font-bold text-[var(--text-muted)] font-mono">Authentication</label>
+                    <CustomSelect
+                      value={provAuthType}
+                      onChange={(value) => setProvAuthType(value as "bearer" | "anthropic" | "none")}
+                      options={AUTH_TYPE_OPTIONS}
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-1">
@@ -408,23 +449,25 @@ export const LlmSetupTab: React.FC = () => {
                       <Key size={13} className="text-violet-400" />
                       <span>API Authorization Key</span>
                     </label>
-                    <button
-                      type="button"
-                      onClick={() => setShowKey(!showKey)}
-                      className="text-[10px] text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer flex items-center space-x-1 font-mono"
-                    >
-                      {showKey ? (
-                        <>
-                          <Lock size={10} />
-                          <span>Hide</span>
-                        </>
-                      ) : (
-                        <>
-                          <Unlock size={10} />
-                          <span>Show</span>
-                        </>
-                      )}
-                    </button>
+                    {authType !== "none" && (
+                      <button
+                        type="button"
+                        onClick={() => setShowKey(!showKey)}
+                        className="text-[10px] text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer flex items-center space-x-1 font-mono"
+                      >
+                        {showKey ? (
+                          <>
+                            <Lock size={10} />
+                            <span>Hide</span>
+                          </>
+                        ) : (
+                          <>
+                            <Unlock size={10} />
+                            <span>Show</span>
+                          </>
+                        )}
+                      </button>
+                    )}
                   </div>
                   
                   <input
@@ -432,13 +475,16 @@ export const LlmSetupTab: React.FC = () => {
                     placeholder={
                       selectedProvider.id === "openai" || selectedProvider.id === "anthropic"
                         ? "Enter key (falls back to process.env if left empty)"
-                        : selectedProvider.id === "github-copilot"
-                        ? "GitHub PAT with models:read scope (ghp_... or github_pat_...)"
+                        : selectedProvider.id === "github-models"
+                        ? "GitHub PAT with models:read scope (or use GITHUB_TOKEN)"
+                        : authType === "none"
+                        ? "This provider does not require a key"
                         : "Enter your API Key / Auth Token"
                     }
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
-                    className="w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded-xl px-3.5 py-2.5 text-xs text-[var(--text-light)] font-mono focus:outline-none focus:border-[var(--border-active)] placeholder-[var(--text-muted)]/70 shadow-inner"
+                    disabled={authType === "none"}
+                    className="w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded-xl px-3.5 py-2.5 text-xs text-[var(--text-light)] font-mono focus:outline-none focus:border-[var(--border-active)] placeholder-[var(--text-muted)]/70 shadow-inner disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                   
                   {(selectedProvider.id === "openai" || selectedProvider.id === "anthropic") && !apiKey && (
@@ -446,10 +492,10 @@ export const LlmSetupTab: React.FC = () => {
                       ℹ Environment Variable configuration will be active for this provider since no custom key is provided.
                     </span>
                   )}
-                  {selectedProvider.id === "github-copilot" && !apiKey && (
+                  {selectedProvider.id === "github-models" && !apiKey && (
                     <span className="text-[10px] text-amber-400/80 leading-relaxed italic block mt-1 font-mono flex items-center space-x-1">
                       <GitBranch size={10} className="flex-shrink-0" />
-                      <span>A GitHub PAT with <strong>models:read</strong> scope is required. Generate one at GitHub → Settings → Developer settings → Personal access tokens.</span>
+                      <span>Enter a PAT with <strong>models:read</strong>, or provide GITHUB_TOKEN to the sidecar environment.</span>
                     </span>
                   )}
                 </div>
@@ -466,24 +512,56 @@ export const LlmSetupTab: React.FC = () => {
                     placeholder="e.g. https://api.openai.com/v1"
                     value={baseUrl}
                     onChange={(e) => setBaseUrl(e.target.value)}
-                    disabled={selectedProvider.id === "openai" || selectedProvider.id === "anthropic"}
-                    className="w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded-xl px-3.5 py-2.5 text-xs text-[var(--text-light)] font-mono focus:outline-none focus:border-[var(--border-active)] placeholder-[var(--text-muted)]/70 disabled:opacity-50 disabled:cursor-not-allowed shadow-inner"
+                    className="w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded-xl px-3.5 py-2.5 text-xs text-[var(--text-light)] font-mono focus:outline-none focus:border-[var(--border-active)] placeholder-[var(--text-muted)]/70 shadow-inner"
                   />
 
-                  {selectedProvider.id === "github-copilot" && (
+                  {selectedProvider.id === "github-models" && (
                     <span className="text-[10px] text-[var(--text-muted)] leading-relaxed italic block mt-1 font-mono">
                       GitHub Models inference endpoint. You can change this if using a custom proxy or organizational endpoint.
                     </span>
                   )}
 
-                  {(selectedProvider.id === "openai" || selectedProvider.id === "anthropic") && (
-                    <span className="text-[10px] text-[var(--text-muted)] leading-relaxed italic block mt-1 font-mono">
-                      Note: The default connection endpoint cannot be edited for native built-in cloud providers.
-                    </span>
-                  )}
                 </div>
 
-                {/* 3. Default Target Model Dropdown */}
+                {/* 3. Model catalog URL */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-[var(--text-normal)] uppercase font-mono tracking-wide flex items-center space-x-1.5">
+                    <Layers size={13} className="text-violet-400" />
+                    <span>Model Catalog URL</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Defaults to the base URL plus /models"
+                    value={catalogUrl}
+                    onChange={(e) => setCatalogUrl(e.target.value)}
+                    className="w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded-xl px-3.5 py-2.5 text-xs text-[var(--text-light)] font-mono focus:outline-none focus:border-[var(--border-active)] placeholder-[var(--text-muted)]/70 shadow-inner"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-[var(--text-normal)] uppercase font-mono tracking-wide">
+                      Default API Protocol
+                    </label>
+                    <CustomSelect
+                      value={apiType}
+                      onChange={setApiType}
+                      options={API_PROTOCOL_OPTIONS}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-[var(--text-normal)] uppercase font-mono tracking-wide">
+                      Authentication
+                    </label>
+                    <CustomSelect
+                      value={authType}
+                      onChange={(value) => setAuthType(value as NonNullable<CustomProvider["authType"]>)}
+                      options={AUTH_TYPE_OPTIONS}
+                    />
+                  </div>
+                </div>
+
+                {/* 4. Default Target Model Dropdown */}
                 <div className="space-y-2 pt-2">
                   <label className="block text-xs font-bold text-[var(--text-normal)] uppercase font-mono tracking-wide flex items-center space-x-1.5">
                     <Layers size={13} className="text-violet-400" />
@@ -494,11 +572,18 @@ export const LlmSetupTab: React.FC = () => {
                     onChange={(val) => setActiveModel(val)}
                     options={
                       selectedProvider.models.length > 0
-                        ? selectedProvider.models.map((m) => ({ id: m.id, name: `${m.name} (${m.id})` }))
+                        ? selectedProvider.models
+                            .filter((model) => model.supported !== false)
+                            .map((m) => ({ id: m.id, name: `${m.name} (${m.remoteId || m.id})` }))
                         : []
                     }
-                    placeholder="No models available - Save configuration to fetch models"
+                    placeholder="No supported models available - fetch the provider catalog"
                   />
+                  {selectedProvider.models.some((model) => model.supported === false) && (
+                    <span className="text-[10px] text-[var(--text-muted)] font-mono">
+                      {selectedProvider.models.filter((model) => model.supported === false).length} catalog entries are hidden because their protocol or tool capabilities are not supported.
+                    </span>
+                  )}
                 </div>
 
                 {/* Save and Fetch buttons */}
@@ -512,12 +597,22 @@ export const LlmSetupTab: React.FC = () => {
                     <button
                       type="button"
                       onClick={handleFetchModels}
-                      disabled={fetchingModels}
+                      disabled={fetchingModels || testingConnection}
                       className="border border-[var(--border-color)] hover:border-[var(--accent-color)] bg-[var(--bg-app)] hover:bg-[var(--accent-bg)]/10 text-[var(--text-normal)] hover:text-[var(--text-light)] font-mono font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer flex items-center space-x-1.5 disabled:opacity-50"
-                      title="Fetch models from the provider's /models endpoint"
+                      title="Discover and normalize the provider's model catalog"
                     >
                       <RefreshCw size={13} className={fetchingModels ? "animate-spin text-[var(--accent-color)]" : ""} />
                       <span>{fetchingModels ? "Fetching..." : "Fetch Models"}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleTestConnection}
+                      disabled={fetchingModels || testingConnection}
+                      className="border border-[var(--border-color)] hover:border-emerald-400 bg-[var(--bg-app)] hover:bg-emerald-500/10 text-[var(--text-normal)] hover:text-[var(--text-light)] font-mono font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer flex items-center space-x-1.5 disabled:opacity-50"
+                    >
+                      <ShieldCheck size={13} className={testingConnection ? "animate-pulse text-emerald-400" : ""} />
+                      <span>{testingConnection ? "Testing..." : "Test"}</span>
                     </button>
 
                     <button

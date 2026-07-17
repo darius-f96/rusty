@@ -219,7 +219,9 @@ export const SkillsTab: React.FC = () => {
   };
 
   const modelOptions = customProviders.flatMap((p) =>
-    p.models.map((m) => ({ id: m.id, name: `${p.name} / ${m.name}` }))
+    p.models
+      .filter((model) => model.supported !== false)
+      .map((m) => ({ id: m.id, name: `${p.name} / ${m.name}` }))
   );
 
   return (

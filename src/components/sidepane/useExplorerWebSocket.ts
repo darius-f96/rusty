@@ -80,17 +80,14 @@ export const useExplorerWebSocket = (selectedNode: any) => {
   const activeModel = useWorkspaceStore((state) => state.activeModel);
   const providers = useWorkspaceStore((state) => state.customProviders);
   const activeCustomProviderId = useWorkspaceStore((state) => state.activeCustomProviderId);
-  const isProviderActive = (prov: any) => {
-    if (prov.id === "anthropic" || prov.id === "openai") {
-      return !!prov.apiKey;
-    }
-    return true;
-  };
+  const isProviderActive = (prov: any) => prov.models.some((model: any) => model.supported !== false);
   const filteredProviders = providers.filter(isProviderActive);
   const activeProvider = filteredProviders.find((p) => p.id === activeCustomProviderId);
-  const availableModels = activeProvider ? activeProvider.models : [];
+  const availableModels = activeProvider
+    ? activeProvider.models.filter((model) => model.supported !== false)
+    : [];
   const allAvailableModels = filteredProviders.flatMap((prov) =>
-    prov.models.map((m: any) => ({
+    prov.models.filter((model: any) => model.supported !== false).map((m: any) => ({
       id: m.id,
       name: `${prov.name} / ${m.name}`,
     }))
@@ -227,9 +224,11 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       const rootPath = useWorkspaceStore.getState().rootPath;
       const currentProviders = useWorkspaceStore.getState().customProviders;
       const currentActiveProviderId = useWorkspaceStore.getState().activeCustomProviderId;
-      const prov = currentProviders.find((p) => p.id === currentActiveProviderId);
       const currentActiveModel = useWorkspaceStore.getState().activeModel;
       const currentExploreModel = selectedNode?.data?.exploreModel || selectedNode?.data?.model || currentActiveModel;
+      const prov = currentProviders.find((provider) =>
+        provider.models.some((candidate) => candidate.id === currentExploreModel)
+      ) || currentProviders.find((provider) => provider.id === currentActiveProviderId);
       const chatHistory = useWorkspaceStore.getState().globalChatHistory[selectedNodeId] || [];
 
       // Resolve skill: prefer the skill selected on the node, fall back to DEFAULT_SKILL_ID.
@@ -261,11 +260,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
           .filter((m) => m.role === "user" || m.role === "assistant")
           .map((m) => ({ role: m.role, content: m.content })),
         mcpServers,
-        customProvider:
-          prov &&
-          (prov.id !== "anthropic" && prov.id !== "openai" || !!prov.apiKey)
-            ? prov
-            : null,
+        customProvider: prov || null,
         skill: skillData,
         lspSettings: { ...useWorkspaceStore.getState().lspSettings, enabled: false },
       }));
@@ -519,9 +514,11 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       const rootPath = useWorkspaceStore.getState().rootPath;
       const currentProviders = useWorkspaceStore.getState().customProviders;
       const currentActiveProviderId = useWorkspaceStore.getState().activeCustomProviderId;
-      const prov = currentProviders.find((p) => p.id === currentActiveProviderId);
       const currentActiveModel = useWorkspaceStore.getState().activeModel;
       const currentSummarizeModel = selectedNode?.data?.summarizeModel || currentActiveModel;
+      const prov = currentProviders.find((provider) =>
+        provider.models.some((candidate) => candidate.id === currentSummarizeModel)
+      ) || currentProviders.find((provider) => provider.id === currentActiveProviderId);
 
       // Always use task-auditor skill for summarization on this node type.
       const skills = useWorkspaceStore.getState().skills;
@@ -539,11 +536,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
         workspaceRoot: rootPath,
         model: currentSummarizeModel,
         chatHistory: [],
-        customProvider:
-          prov &&
-          (prov.id !== "anthropic" && prov.id !== "openai" || !!prov.apiKey)
-            ? prov
-            : null,
+        customProvider: prov || null,
         skill: skillData,
       }));
     };
@@ -663,7 +656,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
         nodeId: selectedNodeId,
         model: taskGenerationModel,
         chatHistory,
-        customProvider: provider && (provider.id !== "anthropic" && provider.id !== "openai" || !!provider.apiKey) ? provider : null,
+        customProvider: provider || null,
       }));
     };
     socket.onmessage = (event) => {

@@ -73,10 +73,12 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
   const lastUserMessageIdRef = useRef<string | null>(null);
   const lastConsoleMessageIdRef = useRef<string | null>(null);
 
-  const modelOptions = customProviders.flatMap((p) => p.models).map((m) => ({
-    id: m.id,
-    name: `${m.name} (${m.id})`,
-  }));
+  const modelOptions = customProviders.flatMap((p) => p.models)
+    .filter((model) => model.supported !== false)
+    .map((m) => ({
+      id: m.id,
+      name: `${m.name} (${m.id})`,
+    }));
 
   useEffect(() => {
     if (selectedModel !== activeModel) {
@@ -339,7 +341,9 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
       const wsRootPath = useWorkspaceStore.getState().rootPath;
       const currentProviders = useWorkspaceStore.getState().customProviders;
       const currentActiveProviderId = useWorkspaceStore.getState().activeCustomProviderId;
-      const prov = currentProviders.find((p) => p.id === currentActiveProviderId);
+      const prov = currentProviders.find((provider) =>
+        provider.models.some((candidate) => candidate.id === selectedModel)
+      ) || currentProviders.find((provider) => provider.id === currentActiveProviderId);
       const chatHistory = useWorkspaceStore.getState().agentChats[tab.id] || [];
       const currentSkills = useWorkspaceStore.getState().skills;
       const resolved = resolveSkill(currentSkills, selectedSkillId);
@@ -361,11 +365,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
         chatHistory: chatHistory
           .filter((m: any) => m.role === "user" || m.role === "assistant")
           .map((m: any) => ({ role: m.role, content: m.content })),
-        customProvider:
-          prov &&
-          (prov.id !== "anthropic" && prov.id !== "openai" || !!prov.apiKey)
-            ? prov
-            : null,
+        customProvider: prov || null,
         skill: skillData,
         mcpServers,
         lspSettings: { ...useWorkspaceStore.getState().lspSettings, enabled: false },

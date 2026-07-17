@@ -388,11 +388,7 @@ export const Workspace: React.FC = () => {
             mcpContext,
             upstreamTaskContext,
             chatHistory: chatHistoryToSend,
-          customProvider:
-            provider &&
-            (provider.id !== "anthropic" && provider.id !== "openai" || !!provider.apiKey)
-              ? provider
-              : null,
+          customProvider: provider || null,
           skill: skillData,
           lspSettings: { ...useWorkspaceStore.getState().lspSettings, enabled: false },
         })

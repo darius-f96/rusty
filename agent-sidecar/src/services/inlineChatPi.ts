@@ -44,45 +44,15 @@ ${options.context.fileContent.slice(0, 120_000)}
 
 Answer only the user's focused question about this editor context. Prefer a short explanation followed by a small code example when useful. Do not use tools, delegate work, inspect unrelated files, or claim that files were changed. If the user asks for a change, provide the exact replacement code for the selected region (or the smallest relevant snippet when there is no selection).`;
 
-  const providerId = options.customProvider?.id || options.model.split("/")[0];
-  const modelPrefix = `${providerId}/`;
-  const model = options.model.startsWith(modelPrefix)
-    ? options.model.slice(modelPrefix.length)
-    : options.model.split("/").slice(1).join("/") || options.model;
-  const isAnthropic = options.customProvider?.apiType === "anthropic" || providerId === "anthropic";
-  const baseUrl = (options.customProvider?.baseUrl
-    || (isAnthropic ? "https://api.anthropic.com/v1" : "https://api.openai.com/v1")).replace(/\/$/, "");
-  const apiKey = options.customProvider?.apiKey
-    || (isAnthropic ? process.env.ANTHROPIC_API_KEY : process.env.OPENAI_API_KEY)
-    || "";
-  if (!apiKey) throw new Error(`No API key is configured for ${options.customProvider?.name || providerId}.`);
-
-  const history = options.history.filter((item) => item.role === "user" || item.role === "assistant");
-  const response = await fetch(`${baseUrl}/${isAnthropic ? "messages" : "chat/completions"}`, {
-    method: "POST",
-    headers: isAnthropic
-      ? { "content-type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" }
-      : { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify(isAnthropic ? {
-      model,
-      max_tokens: 4096,
-      system: systemPrompt,
-      messages: [...history, { role: "user", content: options.message }],
-    } : {
-      model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        ...history,
-        { role: "user", content: options.message },
-      ],
-    }),
+  const content = await completeLlmText({
+    modelReference: options.model,
+    customProvider: options.customProvider,
+    systemPrompt,
+    userMessage: options.message,
+    history: options.history,
+    maxTokens: 4096,
   });
-  if (!response.ok) throw new Error(`LLM API error: ${response.status} - ${await response.text()}`);
-  const data: any = await response.json();
-  const content = isAnthropic
-    ? data.content?.filter((part: any) => part.type === "text").map((part: any) => part.text).join("")
-    : data.choices?.[0]?.message?.content;
-  if (!content) throw new Error("The selected model returned no text.");
   options.sendToken(content);
   return content;
 }
+import { completeLlmText } from "./llmRuntime";
