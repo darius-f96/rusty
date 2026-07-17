@@ -95,7 +95,7 @@ export const McpIntegrationTab: React.FC = () => {
               </p>
               <button
                 onClick={handleAdd}
-                className="flex items-center space-x-2 px-4 py-2 bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 text-white text-xs font-bold rounded-lg transition-colors"
+                className="flex items-center space-x-2 px-4 py-2 bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 text-[var(--color-primary-foreground)] text-xs font-bold rounded-lg transition-colors"
               >
                 <Plus size={14} />
                 <span>Add Server</span>
@@ -131,7 +131,7 @@ export const McpIntegrationTab: React.FC = () => {
                   onClick={() => toggleEnabled(server.name)}
                   className={`p-1.5 rounded-lg transition-colors ${
                     server.enabled
-                      ? "text-emerald-400 hover:bg-emerald-500/10"
+                      ? "text-[var(--color-status-success)] hover:bg-[var(--color-status-success-bg)]"
                       : "text-[var(--text-muted)] hover:bg-[var(--accent-bg)]"
                   }`}
                   title={server.enabled ? "Disable" : "Enable"}
@@ -147,7 +147,7 @@ export const McpIntegrationTab: React.FC = () => {
                 </button>
                 <button
                   onClick={() => handleDelete(server.name)}
-                  className="p-1.5 rounded-lg text-rose-400/60 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                  className="p-1.5 rounded-lg text-[var(--color-status-danger)] hover:text-[var(--color-status-danger)] hover:bg-[var(--color-status-danger-bg)] transition-colors"
                   title="Delete"
                 >
                   <Trash2 size={14} />

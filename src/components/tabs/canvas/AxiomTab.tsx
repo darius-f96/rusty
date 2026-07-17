@@ -594,7 +594,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
                     }}
                     className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
                   >
-                    <Folder size={13} className="text-emerald-400" />
+                    <Folder size={13} className="text-[var(--color-status-success)]" />
                     <span>Create Context Node</span>
                   </button>
                   <button
@@ -605,7 +605,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
                     }}
                     className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
                   >
-                    <Plug size={13} className="text-sky-400" />
+                    <Plug size={13} className="text-[var(--color-status-info)]" />
                     <span>Create MCP Node</span>
                   </button>
                   <button
@@ -616,7 +616,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
                     }}
                     className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
                   >
-                    <StickyNote size={13} className="text-amber-400" />
+                    <StickyNote size={13} className="text-[var(--color-status-warning)]" />
                     <span>Create Sticky Note</span>
                   </button>
                   <button
@@ -627,7 +627,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
                     }}
                     className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
                   >
-                    <Square size={13} className="text-red-400" />
+                    <Square size={13} className="text-[var(--color-status-danger)]" />
                     <span>Create Boundary</span>
                   </button>
                   <div className="border-t border-[var(--border-color)] my-1" />
@@ -639,7 +639,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
                     }}
                     className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
                   >
-                    <Globe size={13} className="text-red-400" />
+                    <Globe size={13} className="text-[var(--color-status-danger)]" />
                     <span>Create Global Explorer</span>
                   </button>
                 </div>
@@ -657,7 +657,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
                 }}
                 className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] hover:bg-[var(--bg-header)] text-[var(--text-light)] text-xs font-mono font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition-all shadow-md hover:border-[var(--border-active)] cursor-pointer nodrag"
               >
-                <Settings size={14} className="text-red-400" />
+                <Settings size={14} className="text-[var(--color-status-danger)]" />
                 <span>Action</span>
                 <ChevronDown size={12} className="text-[var(--text-muted)]" />
               </button>
@@ -670,7 +670,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
                     }}
                     className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
                   >
-                    <GitMerge size={13} className="text-red-400" />
+                    <GitMerge size={13} className="text-[var(--color-status-danger)]" />
                     <span>Reconcile Changes</span>
                   </button>
                   <button
@@ -680,7 +680,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
                     }}
                     className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
                   >
-                    <Save size={13} className="text-emerald-400" />
+                    <Save size={13} className="text-[var(--color-status-success)]" />
                     <span>Save Axiom</span>
                   </button>
                   <div className="border-t border-[var(--border-color)] my-1" />
@@ -694,20 +694,20 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
                     disabled={isPipelineApplied || isReconciliationRunning}
                     className={`w-full text-left px-3 py-2 flex items-center space-x-2 transition-colors ${
                       isPipelineApplied
-                        ? "text-emerald-400 cursor-not-allowed opacity-90"
+                        ? "text-[var(--color-status-success)] cursor-not-allowed opacity-90"
                         : isReconciliationRunning
-                        ? "text-amber-400 cursor-not-allowed opacity-75"
+                        ? "text-[var(--color-status-warning)] cursor-not-allowed opacity-75"
                         : "hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] cursor-pointer"
                     }`}
                   >
                     {isPipelineApplied ? (
                       <>
-                        <CheckSquare size={13} className="text-emerald-400" />
+                        <CheckSquare size={13} className="text-[var(--color-status-success)]" />
                         <span>Axiom Applied</span>
                       </>
                     ) : isReconciliationRunning ? (
                       <>
-                        <GitMerge size={13} className="text-amber-400 animate-pulse" />
+                        <GitMerge size={13} className="text-[var(--color-status-warning)] animate-pulse" />
                         <span>Reconciliation Running</span>
                       </>
                     ) : (
@@ -754,7 +754,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
                 onClick={() => handleAddNodeFromContextMenu("context")}
                 className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
               >
-                <Folder size={13} className="text-emerald-400" />
+                <Folder size={13} className="text-[var(--color-status-success)]" />
                 <span>Add Context Node</span>
               </button>
               <button
@@ -769,21 +769,21 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
                 }}
                 className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
               >
-                <Plug size={13} className="text-sky-400" />
+                <Plug size={13} className="text-[var(--color-status-info)]" />
                 <span>Add MCP Node</span>
               </button>
               <button
                 onClick={() => handleAddNodeFromContextMenu("sticky")}
                 className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
               >
-                <StickyNote size={13} className="text-amber-400" />
+                <StickyNote size={13} className="text-[var(--color-status-warning)]" />
                 <span>Add Sticky Note</span>
               </button>
               <button
                 onClick={() => handleAddNodeFromContextMenu("boundary")}
                 className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
               >
-                <Square size={13} className="text-red-400" />
+                <Square size={13} className="text-[var(--color-status-danger)]" />
                 <span>Add Boundary</span>
               </button>
               <div className="border-t border-[var(--border-color)] my-1" />
@@ -799,7 +799,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
                 }}
                 className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
               >
-                <Globe size={13} className="text-red-400" />
+                <Globe size={13} className="text-[var(--color-status-danger)]" />
                 <span>Add Global Explorer</span>
               </button>
             </div>
@@ -837,7 +837,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
               elevateNodesOnSelect={false}
               multiSelectionKeyCode={["Meta", "Control"]}
             >
-              <Background color="#1f2937" gap={16} size={1} variant={BackgroundVariant.Dots} />
+              <Background color="var(--color-border-default)" gap={16} size={1} variant={BackgroundVariant.Dots} />
             </ReactFlow>
           </div>
 
@@ -883,11 +883,11 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
 
         {/* Save Axiom Prompt Modal */}
         {showSaveModal && (
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-[var(--color-surface-overlay)] backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-xl w-full max-w-md shadow-2xl overflow-hidden font-mono">
               <div className="px-4 py-3 bg-[var(--bg-header)] border-b border-[var(--border-color)] flex items-center justify-between">
                 <span className="text-[var(--text-light)] text-sm font-bold flex items-center space-x-2">
-                  <Save size={16} className="text-emerald-400" />
+                  <Save size={16} className="text-[var(--color-status-success)]" />
                   <span>Save Axiom Canvas</span>
                 </span>
                 <button
@@ -899,7 +899,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
               </div>
               <div className="p-4 flex flex-col space-y-3">
                 <p className="text-xs text-[var(--text-normal)]">
-                  Enter a filename/title for this Axiom. It will be serialized under <code className="text-emerald-400 font-bold">.axiom/canvas/</code>.
+                  Enter a filename/title for this Axiom. It will be serialized under <code className="text-[var(--color-status-success)] font-bold">.axiom/canvas/</code>.
                 </p>
                 <div className="flex flex-col space-y-1">
                   <label htmlFor="axiom-title-input" className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Axiom Title</label>
@@ -922,7 +922,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
                 </button>
                 <button
                   onClick={confirmSavePipeline}
-                  className="px-4 py-1.5 bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/90 text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors shadow-md hover:shadow-lg"
+                  className="px-4 py-1.5 bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/90 text-[var(--color-primary-foreground)] rounded-lg text-xs font-semibold cursor-pointer transition-colors shadow-md hover:shadow-lg"
                 >
                   Save Axiom
                 </button>
@@ -969,7 +969,7 @@ const FloatingConnectButton: React.FC<{
         transform: "translate(-50%, -50%)",
         zIndex: 1000,
       }}
-      className="bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/90 text-white rounded-full p-3 shadow-2xl border border-[var(--border-color)] cursor-pointer flex items-center justify-center transition-all hover:scale-110 active:scale-95 duration-200"
+      className="bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/90 text-[var(--color-primary-foreground)] rounded-full p-3 shadow-2xl border border-[var(--border-color)] cursor-pointer flex items-center justify-center transition-all hover:scale-110 active:scale-95 duration-200"
       title="Connect nodes"
     >
       <Link2 size={18} />

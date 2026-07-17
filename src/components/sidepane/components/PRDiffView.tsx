@@ -77,7 +77,7 @@ const FileDiffCard: React.FC<FileDiffCardProps> = ({
   return (
     <div
       ref={containerRef}
-      className="border border-[var(--border-color)] rounded-xl overflow-hidden shadow-md flex flex-col bg-black/10 transition-all hover:border-[var(--border-active)]/55"
+      className="border border-[var(--border-color)] rounded-xl overflow-hidden shadow-md flex flex-col bg-[var(--color-surface-sunken)] transition-all hover:border-[var(--border-active)]/55"
     >
       {/* Git PR File Header */}
       <div
@@ -92,7 +92,7 @@ const FileDiffCard: React.FC<FileDiffCardProps> = ({
 
         <div className="flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
           {state.isDirty && (
-            <span className="text-[9px] font-mono text-amber-400 bg-amber-400/10 border border-amber-400/20 px-1.5 py-0.5 rounded uppercase">
+            <span className="text-[9px] font-mono text-[var(--color-status-warning)] bg-[var(--color-status-warning-bg)] border border-[var(--color-status-warning-border)] px-1.5 py-0.5 rounded uppercase">
               Unsaved
             </span>
           )}
@@ -110,7 +110,7 @@ const FileDiffCard: React.FC<FileDiffCardProps> = ({
               <button
                 onClick={() => onSaveFile(file)}
                 disabled={state.isSaving}
-                className="p-1 hover:bg-emerald-600 bg-emerald-600/80 text-white rounded transition-colors flex items-center space-x-1"
+                className="p-1 hover:bg-[var(--color-status-success-solid)] bg-[var(--color-status-success-bg)] text-[var(--color-status-success)] hover:text-[var(--color-status-success-solid-foreground)] rounded transition-colors flex items-center space-x-1"
                 title="Save file changes to VFS"
               >
                 {state.isSaving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
@@ -157,7 +157,7 @@ const FileDiffCard: React.FC<FileDiffCardProps> = ({
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center bg-[var(--bg-app)] text-[var(--text-muted)] text-[11px] font-mono">
-              <Loader2 className="animate-spin text-red-700 mr-2" size={14} />
+              <Loader2 className="animate-spin text-[var(--color-status-danger)] mr-2" size={14} />
               <span>Preloading editor for {state.name}...</span>
             </div>
           )}
@@ -320,7 +320,7 @@ export const PRDiffView: React.FC<PRDiffViewProps> = ({ tabId, modifiedFiles }) 
   if (loading) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[var(--bg-app)] text-[var(--text-muted)] text-xs font-mono">
-        <Loader2 className="animate-spin text-red-700 mb-2" size={24} />
+        <Loader2 className="animate-spin text-[var(--color-status-danger)] mb-2" size={24} />
         <span>Loading all code diffs...</span>
       </div>
     );

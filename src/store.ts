@@ -10,8 +10,7 @@ import {
   applyEdgeChanges,
 } from "@xyflow/react";
 import { invoke } from "@tauri-apps/api/core";
-import { themes, applyThemeProperties, defineMonacoTheme } from "./theme";
-import { loader } from "@monaco-editor/react";
+import { resolveTheme } from "./theme";
 import { skillsService } from "./services/skillsService";
 import { BUILT_IN_SKILLS, DEFAULT_SKILL_ID, GLOBAL_CHAT_DEFAULT_SKILL_ID, BUILT_IN_SKILL_IDS } from "./config/skillDefinitions";
 import { VfsRegistry } from "./services/vfs";
@@ -622,18 +621,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   canvasHistories: {
     canvas: { past: [], future: [] }
   },
-  activeThemeId: localStorage.getItem("selected_theme") || "spaceDust",
+  activeThemeId: resolveTheme(localStorage.getItem("selected_theme") || "spaceDust").id,
   setActiveThemeId: (themeId) => {
-    const t = themes[themeId] || themes.spaceDust;
-    applyThemeProperties(t);
-    localStorage.setItem("selected_theme", themeId);
-    set({ activeThemeId: themeId });
-    loader.init().then((monaco) => {
-      defineMonacoTheme(monaco, t);
-      monaco.editor.setTheme("axiom-custom-theme");
-    }).catch(e => {
-      console.warn("Failed to update monaco theme:", e);
-    });
+    const resolvedThemeId = resolveTheme(themeId).id;
+    localStorage.setItem("selected_theme", resolvedThemeId);
+    set({ activeThemeId: resolvedThemeId });
     setTimeout(() => useWorkspaceStore.getState().saveSecureConfig(), 0);
   },
 
@@ -775,7 +767,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   onConnect: (connection) => set((state) => {
     const activeTabId = getActiveCanvasTabId(state);
     const isContext = connection.source?.startsWith("context");
-    const edgeStyle = isContext ? { stroke: "#10b981", strokeWidth: 2 } : undefined;
+    const edgeStyle = isContext ? { stroke: "var(--color-status-success-solid)", strokeWidth: 2 } : undefined;
     const newEdge = {
       ...connection,
       style: edgeStyle
@@ -805,9 +797,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     const isContext = connection.source?.startsWith("context");
     const isMcp = connection.source?.startsWith("mcp");
     const edgeStyle = isContext
-      ? { stroke: "#10b981", strokeWidth: 2 }
+      ? { stroke: "var(--color-status-success-solid)", strokeWidth: 2 }
       : isMcp
-      ? { stroke: "#0ea5e9", strokeWidth: 2 }
+      ? { stroke: "var(--color-status-info-solid)", strokeWidth: 2 }
       : undefined;
     const newEdge = {
       ...connection,
@@ -2069,7 +2061,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       sourceHandle: taskHandleId === "context-in-top" ? "context-out-bottom" : "context-out-top",
       target: taskId,
       targetHandle: taskHandleId,
-      style: { stroke: "#10b981", strokeWidth: 2 }
+      style: { stroke: "var(--color-status-success-solid)", strokeWidth: 2 }
     };
 
     return updateContextAndSync(state, targetTabId, (ctx) => ({
@@ -2187,18 +2179,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       if (config.lspSettings) updates.lspSettings = { ...config.lspSettings, enabled: false };
 
       if (config.activeThemeId) {
-        updates.activeThemeId = config.activeThemeId;
-        localStorage.setItem("selected_theme", config.activeThemeId);
-        const themeId = config.activeThemeId;
-        const { themes, applyThemeProperties, defineMonacoTheme } = await import("./theme");
-        const t = themes[themeId] || themes.spaceDust;
-        applyThemeProperties(t);
-
-        const { loader } = await import("@monaco-editor/react");
-        loader.init().then((monaco) => {
-          defineMonacoTheme(monaco, t);
-          monaco.editor.setTheme("axiom-custom-theme");
-        }).catch(e => console.warn("Failed to set monaco theme:", e));
+        const resolvedThemeId = resolveTheme(config.activeThemeId).id;
+        updates.activeThemeId = resolvedThemeId;
+        localStorage.setItem("selected_theme", resolvedThemeId);
       }
 
       set(updates);

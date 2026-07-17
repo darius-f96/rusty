@@ -133,8 +133,8 @@ export const TerminalPanel: React.FC = () => {
                     <span
                       className={`w-1.5 h-1.5 rounded-full mr-0.5 ${
                         devLogs.some((l) => l.type === "error")
-                          ? "bg-rose-500 animate-pulse"
-                          : "bg-emerald-500"
+                          ? "bg-[var(--color-status-danger-solid)] animate-pulse"
+                          : "bg-[var(--color-status-success-solid)]"
                       }`}
                     />
                   )}
@@ -146,7 +146,7 @@ export const TerminalPanel: React.FC = () => {
                         e.stopPropagation();
                         closeTerminalTab(tab.id);
                       }}
-                      className="hover:bg-[var(--bg-app)] hover:text-[var(--text-light)] rounded-full p-0.5 text-zinc-500 hover:text-zinc-300 transition-all cursor-pointer border-none flex items-center justify-center bg-transparent"
+                      className="hover:bg-[var(--color-interaction-hover)] hover:text-[var(--color-fg-strong)] rounded-full p-0.5 text-[var(--color-fg-muted)] transition-all cursor-pointer border-none flex items-center justify-center bg-transparent"
                     >
                       <X size={10} />
                     </button>
@@ -185,13 +185,13 @@ export const TerminalPanel: React.FC = () => {
       </div>
 
       {/* Terminal / Logs Content */}
-      <div className={`flex-1 min-h-0 bg-black relative ${showDevConsole ? "" : "hidden"}`}>
+      <div className={`flex-1 min-h-0 bg-[var(--color-terminal-background)] relative ${showDevConsole ? "" : "hidden"}`}>
         {terminalTabs.length === 0 ? (
           <div className="w-full h-full flex flex-col items-center justify-center text-[var(--text-muted)] font-mono text-xs select-none">
             <span>No active terminals</span>
             <button
               onClick={() => addTerminalTab("local")}
-              className="mt-2 px-3 py-1 bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 text-black font-bold rounded cursor-pointer transition-all border-none"
+              className="mt-2 px-3 py-1 bg-[var(--color-primary)] hover:opacity-85 text-[var(--color-primary-foreground)] font-bold rounded cursor-pointer transition-all border-none"
             >
               Open Terminal
             </button>
@@ -206,22 +206,22 @@ export const TerminalPanel: React.FC = () => {
                   key={tab.id}
                   ref={consoleScrollRef}
                   style={{ display: isActive ? "block" : "none" }}
-                  className="w-full h-full p-4 font-mono text-[11px] overflow-y-auto space-y-1 bg-black text-zinc-400 select-text selection:bg-indigo-900 selection:text-white"
+                  className="w-full h-full p-4 font-mono text-[11px] overflow-y-auto space-y-1 bg-[var(--color-log-background)] text-[var(--color-log-foreground)] select-text selection:bg-[var(--color-interaction-selected)]"
                 >
                   {devLogs.length === 0 ? (
                     <span className="text-[var(--text-muted)] select-none">// No dev console logs captured yet.</span>
                   ) : (
                     devLogs.map((log) => {
                       const colors = {
-                        log: "text-zinc-400",
-                        warn: "text-amber-400 font-semibold",
-                        error: "text-rose-400 font-bold",
-                        system: "text-indigo-400 font-bold",
+                        log: "text-[var(--color-log-foreground)]",
+                        warn: "text-[var(--color-status-warning)] font-semibold",
+                        error: "text-[var(--color-status-danger)] font-bold",
+                        system: "text-[var(--color-status-info)] font-bold",
                       };
                       return (
                         <div
                           key={log.id}
-                          className="flex items-start space-x-2 leading-relaxed border-b border-zinc-950 pb-0.5 hover:bg-zinc-900/10"
+                          className="flex items-start space-x-2 leading-relaxed border-b border-[var(--color-border-subtle)] pb-0.5 hover:bg-[var(--color-interaction-hover)]"
                         >
                           <span className="text-[var(--text-muted)] select-none">[{log.timestamp}]</span>
                           <span className={colors[log.type]}>{log.text}</span>

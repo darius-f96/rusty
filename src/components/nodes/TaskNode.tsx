@@ -48,15 +48,15 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
   // Get status configuration
   const statusStyles = {
     idle: { border: "border-[var(--border-color)] bg-[var(--bg-sidebar)] hover:border-[var(--border-active)] shadow-lg" },
-    running: { border: "border-[var(--accent-color)] bg-[var(--bg-sidebar)] shadow-[rgba(136,192,208,0.25)] shadow-lg animate-pulse" },
-    success: { border: "border-emerald-500/80 bg-[var(--bg-sidebar)] shadow-[rgba(16,185,129,0.15)] shadow-lg" },
-    error: { border: "border-rose-500/80 bg-[var(--bg-sidebar)] shadow-[rgba(244,63,94,0.15)] shadow-lg" }
+    running: { border: "border-[var(--accent-color)] bg-[var(--bg-sidebar)] shadow-[0_0_15px_var(--color-focus-ring)] animate-pulse" },
+    success: { border: "border-[var(--color-status-success-border)] bg-[var(--bg-sidebar)] shadow-[0_0_15px_var(--color-status-success-bg)]" },
+    error: { border: "border-[var(--color-status-danger-border)] bg-[var(--bg-sidebar)] shadow-[0_0_15px_var(--color-status-danger-bg)]" }
   };
 
   return (
     <div className={`w-80 rounded-lg border text-[var(--text-normal)] overflow-hidden transition-all duration-300 ${statusStyles[nodeStatus].border}`}>
       {/* Node Header (Draggable surface) */}
-      <div className="flex items-center justify-between border-b border-[var(--border-color)]/70 bg-black/15 px-3 py-2 select-none cursor-move">
+      <div className="flex items-center justify-between border-b border-[var(--border-color)]/70 bg-[var(--color-surface-sunken)] px-3 py-2 select-none cursor-move">
         <div className="flex items-center space-x-2 flex-1 mr-2 min-w-0">
           <Sparkles size={14} className={nodeStatus === "running" ? "text-[var(--accent-color)] animate-spin flex-shrink-0" : "text-[var(--accent-color)] flex-shrink-0"} />
           
@@ -89,7 +89,7 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
               }}
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
-              className="nodrag text-emerald-400 hover:text-emerald-300 p-1 hover:bg-white/5 rounded transition-colors"
+              className="nodrag text-[var(--color-status-success)] hover:text-[var(--color-status-success)] p-1 hover:bg-[var(--color-surface-elevated)] rounded transition-colors"
             >
               <Check size={14} />
             </button>
@@ -102,7 +102,7 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
-                className="nodrag text-[var(--text-muted)] hover:text-[var(--text-light)] p-1 hover:bg-white/5 rounded transition-colors"
+                className="nodrag text-[var(--text-muted)] hover:text-[var(--text-light)] p-1 hover:bg-[var(--color-surface-elevated)] rounded transition-colors"
                 title={isMinimized ? "Expand instructions" : "Minimize instructions"}
               >
                 {isMinimized ? <Maximize2 size={14} /> : <Minimize2 size={14} />}
@@ -114,7 +114,7 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
-                className="nodrag text-[var(--text-muted)] hover:text-[var(--text-light)] p-1 hover:bg-white/5 rounded transition-colors"
+                className="nodrag text-[var(--text-muted)] hover:text-[var(--text-light)] p-1 hover:bg-[var(--color-surface-elevated)] rounded transition-colors"
                 title="Rename node"
               >
                 <Pencil size={14} />
@@ -126,7 +126,7 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
-                className="nodrag text-[var(--text-muted)] hover:text-rose-400 p-1 hover:bg-rose-500/10 rounded transition-colors"
+                className="nodrag text-[var(--text-muted)] hover:text-[var(--color-status-danger)] p-1 hover:bg-[var(--color-status-danger-bg)] rounded transition-colors"
                 title="Delete node"
               >
                 <Trash2 size={14} />
@@ -139,7 +139,7 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
                   onMouseDown={(e) => e.stopPropagation()}
-                  className="nodrag text-rose-400 hover:text-rose-300 p-1 hover:bg-rose-500/10 rounded transition-colors"
+                  className="nodrag text-[var(--color-status-danger)] hover:text-[var(--color-status-danger)] p-1 hover:bg-[var(--color-status-danger-bg)] rounded transition-colors"
                   title="Stop execution"
                 >
                   <Octagon size={14} />
@@ -151,8 +151,8 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
           {/* Status indicator */}
           <div className="flex-shrink-0 pl-1">
             {nodeStatus === "running" && <Loader2 size={14} className="text-[var(--accent-color)] animate-spin" />}
-            {nodeStatus === "success" && <CheckCircle2 size={14} className="text-emerald-400" />}
-            {nodeStatus === "error" && <AlertCircle size={14} className="text-rose-400" />}
+            {nodeStatus === "success" && <CheckCircle2 size={14} className="text-[var(--color-status-success)]" />}
+            {nodeStatus === "error" && <AlertCircle size={14} className="text-[var(--color-status-danger)]" />}
           </div>
         </div>
       </div>
@@ -173,7 +173,7 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
               placeholder="e.g. Add error logs to standard handlers, optimize map lookups..."
-              className="nodrag w-full bg-black/20 border border-[var(--border-color)]/70 rounded p-2 text-[11px] font-mono leading-relaxed text-[var(--text-light)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--border-active)] resize-none overflow-hidden"
+              className="nodrag w-full bg-[var(--color-surface-sunken)] border border-[var(--border-color)]/70 rounded p-2 text-[11px] font-mono leading-relaxed text-[var(--text-light)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--border-active)] resize-none overflow-hidden"
               style={{ minHeight: "60px", height: "auto" }}
             />
           </div>
@@ -181,7 +181,7 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
       )}
 
       {/* Node Footer */}
-      <div className="bg-black/10 px-3 py-1.5 border-t border-[var(--border-color)] flex items-center justify-between text-[10px] select-none">
+      <div className="bg-[var(--color-surface-sunken)] px-3 py-1.5 border-t border-[var(--border-color)] flex items-center justify-between text-[10px] select-none">
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -216,13 +216,13 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
         type="target"
         position={Position.Left}
         id="task-in"
-        style={{ background: "#6366f1", width: 14, height: 14, border: "2.5px solid var(--bg-sidebar)" }}
+        style={{ background: "var(--color-primary)", width: 14, height: 14, border: "2.5px solid var(--color-surface-sidebar)" }}
       />
       <Handle
         type="source"
         position={Position.Right}
         id="task-out"
-        style={{ background: "#6366f1", width: 14, height: 14, border: "2.5px solid var(--bg-sidebar)" }}
+        style={{ background: "var(--color-primary)", width: 14, height: 14, border: "2.5px solid var(--color-surface-sidebar)" }}
       />
 
       {/* Context connections (vertical: Top & Bottom) */}
@@ -230,13 +230,13 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
         type="target"
         position={Position.Top}
         id="context-in-top"
-        style={{ background: "#10b981", width: 14, height: 14, border: "2.5px solid var(--bg-sidebar)" }}
+        style={{ background: "var(--color-status-success-solid)", width: 14, height: 14, border: "2.5px solid var(--color-surface-sidebar)" }}
       />
       <Handle
         type="target"
         position={Position.Bottom}
         id="context-in-bottom"
-        style={{ background: "#10b981", width: 14, height: 14, border: "2.5px solid var(--bg-sidebar)" }}
+        style={{ background: "var(--color-status-success-solid)", width: 14, height: 14, border: "2.5px solid var(--color-surface-sidebar)" }}
       />
     </div>
   );

@@ -268,7 +268,7 @@ export const TabBarView: React.FC<TabBarViewProps> = ({
                           setDropdownOpen(false);
                         }
                       }}
-                      className="p-0.5 rounded-sm hover:bg-[var(--border-color)] text-[var(--text-muted)] hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="p-0.5 rounded-sm hover:bg-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--color-status-danger)] opacity-0 group-hover:opacity-100 transition-opacity"
                     >
                       <X size={10} />
                     </button>

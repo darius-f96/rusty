@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useWorkspaceStore } from "../../store";
 import { CustomSelect } from "../CustomSelect";
+import { themeOptions } from "../../theme";
 import {
   detectAllLspServers,
   installLspServer,
@@ -91,22 +92,6 @@ export const SettingsTab: React.FC = () => {
     }
   };
 
-  const themeOptions = [
-    { id: "dark", name: "Slate Dark" },
-    { id: "sepia", name: "Warm Sepia" },
-    { id: "oneDark", name: "One Dark Pro" },
-    { id: "sakura", name: "Sakura Blossom" },
-    { id: "spaceDust", name: "Space Dust" },
-    { id: "goldsrc", name: "GoldSrc" },
-    { id: "oneMonokai", name: "One Monokai" },
-    { id: "andromeda", name: "Andromeda" },
-    { id: "atomOneLight", name: "Atom One Light" },
-    { id: "noctis", name: "Noctis" },
-    { id: "panda", name: "Panda Theme" },
-    { id: "ruby", name: "Ruby" },
-    { id: "blulocoLight", name: "Bluloco Light" },
-  ];
-
   const handleServerPathChange = (lang: string, val: string) => {
     updateLspSettings({
       servers: {
@@ -193,7 +178,7 @@ export const SettingsTab: React.FC = () => {
                     onChange={(e) => updateLspSettings({ enabled: e.target.checked })}
                     className="sr-only peer"
                   />
-                  <div className="w-9 h-5 bg-[var(--bg-app)] border border-[var(--border-color)] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-[var(--text-muted)] after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--accent-color)] peer-checked:after:bg-white peer-checked:after:border-transparent"></div>
+                  <div className="w-9 h-5 bg-[var(--bg-app)] border border-[var(--border-color)] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-[var(--color-primary-foreground)] after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-[var(--text-muted)] after:border-[var(--color-border-default)] after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--accent-color)] peer-checked:after:bg-[var(--color-primary-foreground)] peer-checked:after:border-transparent"></div>
                 </label>
               </div>
 
@@ -215,8 +200,8 @@ export const SettingsTab: React.FC = () => {
                                 detecting
                                   ? "bg-[var(--text-muted)] animate-pulse"
                                   : detected
-                                    ? "bg-emerald-500"
-                                    : "bg-rose-500"
+                                    ? "bg-[var(--color-status-success-solid)]"
+                                    : "bg-[var(--color-status-danger-solid)]"
                               }`}
                               title={
                                 detecting
@@ -237,9 +222,9 @@ export const SettingsTab: React.FC = () => {
                               isInstalling
                                 ? "bg-[var(--bg-app)] border-[var(--border-color)] text-[var(--text-muted)] cursor-wait"
                                 : installState?.status === "installed"
-                                  ? "bg-emerald-900/40 border-emerald-700/50 text-emerald-300 hover:bg-emerald-900/60"
+                                  ? "bg-[var(--color-status-success-bg)] border-[var(--color-status-success-border)] text-[var(--color-status-success)] hover:bg-[var(--color-status-success-bg)]"
                                   : installState?.status === "error"
-                                    ? "bg-rose-900/40 border-rose-700/50 text-rose-300 hover:bg-rose-900/60"
+                                    ? "bg-[var(--color-status-danger-bg)] border-[var(--color-status-danger-border)] text-[var(--color-status-danger)] hover:bg-[var(--color-status-danger-bg)]"
                                     : "bg-[var(--bg-app)] border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-light)] hover:border-[var(--border-active)] cursor-pointer"
                             }`}
                             title={installState?.message || (detected ? "Reinstall" : "Download & install")}
@@ -254,9 +239,9 @@ export const SettingsTab: React.FC = () => {
                         {installState?.message && (
                           <div className={`text-[10px] font-mono ${
                             installState.status === "error"
-                              ? "text-rose-400"
+                              ? "text-[var(--color-status-danger)]"
                               : installState.status === "installed"
-                                ? "text-emerald-400"
+                                ? "text-[var(--color-status-success)]"
                                 : "text-[var(--text-muted)]"
                           }`}>
                             {installState.message}

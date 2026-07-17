@@ -290,9 +290,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             >
               <span className="flex items-center space-x-2 min-w-0">
                 {item.isDir ? (
-                  <Folder size={12} className="text-red-400 flex-shrink-0" />
+                  <Folder size={12} className="text-[var(--color-secondary)] flex-shrink-0" />
                 ) : (
-                  <FileText size={12} className="text-zinc-400 flex-shrink-0" />
+                  <FileText size={12} className="text-[var(--color-fg-muted)] flex-shrink-0" />
                 )}
                 <span className="truncate">{item.name}</span>
               </span>
@@ -306,9 +306,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
       {/* 2. Attachments Preview Drawer */}
       {agentQuestion && (
-        <div className="mx-3 mt-3 rounded-lg border border-red-700/45 bg-red-950/25 overflow-hidden">
-          <div className="flex items-center gap-2 px-3 py-2 border-b border-red-800/45 text-red-200">
-            <CircleHelp size={14} className="text-red-400 flex-shrink-0" />
+        <div className="mx-3 mt-3 rounded-lg border border-[var(--color-status-info-border)] bg-[var(--color-status-info-bg)] overflow-hidden">
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--color-status-info-border)] text-[var(--color-status-info)]">
+            <CircleHelp size={14} className="text-[var(--color-status-info)] flex-shrink-0" />
             <span className="text-[10px] font-mono uppercase tracking-wider font-semibold">Agent needs your decision</span>
           </div>
           <div className="px-3 pt-2.5 pb-3">
@@ -320,7 +320,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     key={`${option.label}-${index}`}
                     type="button"
                     onClick={() => answerQuestion(option.label)}
-                    className="w-full text-left rounded border border-[var(--border-color)]/70 bg-[var(--bg-app)]/65 px-2.5 py-2 hover:border-red-400/70 hover:bg-red-950/30 transition-colors cursor-pointer"
+                    className="w-full text-left rounded border border-[var(--color-border-default)] bg-[var(--color-surface-input)] px-2.5 py-2 hover:border-[var(--color-status-info)] hover:bg-[var(--color-interaction-hover)] transition-colors cursor-pointer"
                   >
                     <div className="text-[11px] text-[var(--text-light)] font-medium">{option.label}</div>
                     {option.description && <div className="mt-0.5 text-[10px] text-[var(--text-muted)]">{option.description}</div>}
@@ -333,17 +333,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       )}
 
       {attachments.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 px-3 pt-3 pb-2 border-b border-[var(--border-color)]/20 bg-black/10">
+        <div className="flex flex-wrap gap-1.5 px-3 pt-3 pb-2 border-b border-[var(--color-border-subtle)] bg-[var(--color-log-header)]">
           {attachments.map((att) => (
             <div
               key={att.path}
-              className="flex items-center space-x-1.5 px-2 py-0.5 rounded bg-black/35 border border-[var(--border-color)]/50 text-[10px] font-mono text-[var(--text-light)]"
+              className="flex items-center space-x-1.5 px-2 py-0.5 rounded bg-[var(--color-surface-elevated)] border border-[var(--color-border-subtle)] text-[10px] font-mono text-[var(--color-fg-strong)]"
             >
               <Paperclip size={10} className="text-[var(--accent-color)]" />
               <span className="truncate max-w-[150px]">{att.name}</span>
               <button
                 onClick={() => handleRemoveAttachment(att.path)}
-                className="text-[var(--text-muted)] hover:text-rose-400 transition-colors p-0.5 rounded-full"
+                className="text-[var(--text-muted)] hover:text-[var(--color-status-danger)] transition-colors p-0.5 rounded-full"
               >
                 <X size={10} />
               </button>
@@ -368,7 +368,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       </div>
 
       {/* 4. Controls Footer Row */}
-      <div className="flex items-center justify-between px-3 py-2 bg-black/10 border-t border-[var(--border-color)]/25 text-[10px] font-mono text-[var(--text-muted)] select-none rounded-b-lg">
+      <div className="flex items-center justify-between px-3 py-2 bg-[var(--color-log-header)] border-t border-[var(--color-border-subtle)] text-[10px] font-mono text-[var(--color-fg-muted)] select-none rounded-b-lg">
         <div className="flex items-center space-x-3">
           {/* Upload Button */}
           <button
@@ -399,7 +399,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 type="button"
                 onClick={() => answerQuestion(value)}
                 disabled={!value.trim()}
-                className="flex items-center space-x-1.5 px-3 py-1 rounded bg-red-800 disabled:opacity-40 text-white hover:bg-red-700 font-semibold transition-all cursor-pointer shadow-sm text-[10px]"
+                className="flex items-center space-x-1.5 px-3 py-1 rounded bg-[var(--color-status-danger-solid)] disabled:opacity-40 text-[var(--color-status-danger-solid-foreground)] hover:bg-[var(--color-status-danger-solid)] font-semibold transition-all cursor-pointer shadow-sm text-[10px]"
               >
                 <Send size={9} />
                 <span>ANSWER</span>
@@ -408,7 +408,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 <button
                   type="button"
                   onClick={onStop}
-                  className="flex items-center space-x-1.5 px-3 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white font-semibold transition-all cursor-pointer shadow-sm text-[10px]"
+                  className="flex items-center space-x-1.5 px-3 py-1 rounded bg-[var(--color-status-danger-solid)] hover:bg-[var(--color-status-danger-solid)] text-[var(--color-status-danger-solid-foreground)] font-semibold transition-all cursor-pointer shadow-sm text-[10px]"
                 >
                   <Square size={9} fill="currentColor" />
                   <span>STOP</span>
@@ -419,7 +419,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             <button
               type="button"
               onClick={onStop}
-              className="flex items-center space-x-1.5 px-3 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white font-semibold transition-all cursor-pointer shadow-sm animate-pulse text-[10px]"
+              className="flex items-center space-x-1.5 px-3 py-1 rounded bg-[var(--color-status-danger-solid)] hover:bg-[var(--color-status-danger-solid)] text-[var(--color-status-danger-solid-foreground)] font-semibold transition-all cursor-pointer shadow-sm animate-pulse text-[10px]"
             >
               <Square size={9} fill="currentColor" />
               <span>STOP</span>
@@ -429,7 +429,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               type="button"
               onClick={handleSend}
               disabled={disabled || (!value.trim() && attachments.length === 0)}
-              className="flex items-center space-x-1.5 px-3 py-1 rounded bg-[var(--accent-color)] disabled:opacity-40 disabled:hover:bg-[var(--accent-color)] text-white hover:bg-[var(--accent-color)]/80 font-semibold transition-all cursor-pointer shadow-sm text-[10px]"
+              className="flex items-center space-x-1.5 px-3 py-1 rounded bg-[var(--accent-color)] disabled:opacity-40 disabled:hover:bg-[var(--accent-color)] text-[var(--color-primary-foreground)] hover:bg-[var(--accent-color)]/80 font-semibold transition-all cursor-pointer shadow-sm text-[10px]"
             >
               <Send size={9} />
               <span>PROMPT</span>

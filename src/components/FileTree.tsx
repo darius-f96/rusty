@@ -55,17 +55,17 @@ const getGitState = (node: any, gitStatus: any): GitState | null => {
     const hasStaged = gitStatus.staged.some((f: any) => f.path.startsWith(node.path + "/"));
     
     if (hasUnstaged && hasStaged) {
-      return { colorClass: "text-amber-400/80", char: "•", label: "Modified & Staged contents" };
+      return { colorClass: "text-[var(--color-status-warning)]", char: "•", label: "Modified & Staged contents" };
     }
     if (hasUnstaged) {
       const isUntrackedOnly = !gitStatus.unstaged.some((f: any) => f.path.startsWith(node.path + "/") && f.status_type !== "untracked");
       if (isUntrackedOnly) {
-        return { colorClass: "text-emerald-400/75", char: "•", label: "Untracked contents" };
+        return { colorClass: "text-[var(--color-status-success)]", char: "•", label: "Untracked contents" };
       }
-      return { colorClass: "text-amber-400/80", char: "•", label: "Modified contents" };
+      return { colorClass: "text-[var(--color-status-warning)]", char: "•", label: "Modified contents" };
     }
     if (hasStaged) {
-      return { colorClass: "text-emerald-400/75", char: "•", label: "Staged contents" };
+      return { colorClass: "text-[var(--color-status-success)]", char: "•", label: "Staged contents" };
     }
     return null;
   } else {
@@ -73,19 +73,19 @@ const getGitState = (node: any, gitStatus: any): GitState | null => {
     const unstaged = gitStatus.unstaged.find((f: any) => f.path === node.path);
  
     if (staged && unstaged) {
-      return { colorClass: "text-amber-400 font-bold", char: "M", label: "Staged & Modified" };
+      return { colorClass: "text-[var(--color-status-warning)] font-bold", char: "M", label: "Staged & Modified" };
     }
     if (unstaged) {
       if (unstaged.status_type === "untracked") {
-        return { colorClass: "text-emerald-400 opacity-90", char: "U", label: "Untracked" };
+        return { colorClass: "text-[var(--color-status-success)] opacity-90", char: "U", label: "Untracked" };
       }
-      return { colorClass: "text-amber-400 font-semibold", char: "M", label: "Modified" };
+      return { colorClass: "text-[var(--color-status-warning)] font-semibold", char: "M", label: "Modified" };
     }
     if (staged) {
       if (staged.status_type === "added") {
-        return { colorClass: "text-emerald-400 font-bold", char: "A", label: "Staged Added" };
+        return { colorClass: "text-[var(--color-status-success)] font-bold", char: "A", label: "Staged Added" };
       }
-      return { colorClass: "text-sky-400 font-bold", char: "A", label: "Staged" };
+      return { colorClass: "text-[var(--color-status-info)] font-bold", char: "A", label: "Staged" };
     }
     return null;
   }
@@ -365,7 +365,7 @@ const FileTreeContextMenu: React.FC<{
             key={idx}
             onClick={() => handleAction((item as any).action)}
             className={`w-full flex items-center space-x-2.5 px-3 py-1.5 text-left hover:bg-[var(--accent-bg)] transition-colors ${
-              (item as any).danger ? "text-rose-400 hover:bg-rose-500/10" : "text-[var(--text-normal)] hover:text-[var(--text-light)]"
+              (item as any).danger ? "text-[var(--color-status-danger)] hover:bg-[var(--color-status-danger-bg)]" : "text-[var(--text-normal)] hover:text-[var(--text-light)]"
             }`}
           >
             <Icon size={13} className="flex-shrink-0" />
@@ -604,7 +604,7 @@ const FileTreeNode: React.FC<{
       style={{ WebkitUserDrag: "element" } as React.CSSProperties}
       className={`group relative flex items-center justify-between py-1 px-1.5 pl-[18px] transition-all cursor-grab active:cursor-grabbing font-sans text-xs w-full border rounded-md ${
         isActiveFile
-          ? "bg-zinc-800/40 border-zinc-700/30 text-[var(--text-light)] font-medium shadow-sm"
+          ? "bg-[var(--color-surface-sunken)] border-[var(--color-border-subtle)] text-[var(--text-light)] font-medium shadow-sm"
           : "hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] border-transparent hover:border-[var(--border-color)]/20 " + (gitState ? gitState.colorClass : "text-[var(--text-normal)]")
       }`}
     >

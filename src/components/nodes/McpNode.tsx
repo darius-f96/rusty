@@ -39,9 +39,9 @@ export const McpNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) 
   return (
     <div className="w-72 rounded-xl border border-[var(--border-color)] bg-[var(--bg-sidebar)] text-[var(--text-normal)] overflow-hidden transition-all duration-300 hover:border-[var(--border-active)] shadow-lg">
       {/* Node Header (Draggable surface) */}
-      <div className="flex items-center justify-between border-b border-[var(--border-color)] bg-gradient-to-r from-sky-600/15 to-transparent px-3 py-2 select-none cursor-move">
+      <div className="flex items-center justify-between border-b border-[var(--border-color)] bg-gradient-to-r from-[var(--color-status-info-bg)] to-transparent px-3 py-2 select-none cursor-move">
         <div className="flex items-center space-x-2 flex-1 mr-2 min-w-0">
-          <Plug size={14} className="text-sky-400 flex-shrink-0" />
+          <Plug size={14} className="text-[var(--color-status-info)] flex-shrink-0" />
           {isEditing ? (
             <input
               type="text"
@@ -54,7 +54,7 @@ export const McpNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) 
                 if (e.key === "Enter") handleNameSave();
                 if (e.key === "Escape") setIsEditing(false);
               }}
-              className="nodrag bg-[var(--bg-app)] border border-[var(--border-color)] rounded px-1.5 py-0.5 font-sans text-xs text-[var(--text-light)] focus:outline-none focus:border-sky-400 w-full"
+              className="nodrag bg-[var(--bg-app)] border border-[var(--border-color)] rounded px-1.5 py-0.5 font-sans text-xs text-[var(--text-light)] focus:outline-none focus:border-[var(--color-status-info-border)] w-full"
               autoFocus
             />
           ) : (
@@ -70,7 +70,7 @@ export const McpNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) 
               onClick={handleNameSave}
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
-              className="nodrag text-emerald-400 hover:text-emerald-300 p-0.5 rounded transition-colors"
+              className="nodrag text-[var(--color-status-success)] hover:text-[var(--color-status-success)] p-0.5 rounded transition-colors"
             >
               <Check size={13} />
             </button>
@@ -89,7 +89,7 @@ export const McpNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) 
                 onClick={(e) => { e.stopPropagation(); deleteNode(id); }}
                 onPointerDown={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
-                className="nodrag text-[var(--text-muted)] hover:text-rose-400 p-0.5 rounded transition-colors cursor-pointer"
+                className="nodrag text-[var(--text-muted)] hover:text-[var(--color-status-danger)] p-0.5 rounded transition-colors cursor-pointer"
                 title="Delete node"
               >
                 <Trash2 size={12} />
@@ -138,7 +138,7 @@ export const McpNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) 
                         className="w-full text-left px-3 py-1.5 hover:bg-[var(--accent-bg)] text-xs font-sans text-[var(--text-normal)] hover:text-[var(--text-light)] transition-colors flex items-center justify-between"
                       >
                         <span className="truncate">{srv.displayName || srv.name}</span>
-                        <span className={`text-[9px] font-mono ml-2 ${srv.enabled ? "text-emerald-400" : "text-[var(--text-muted)]"}`}>
+                        <span className={`text-[9px] font-mono ml-2 ${srv.enabled ? "text-[var(--color-status-success)]" : "text-[var(--text-muted)]"}`}>
                           {srv.transport.type}
                         </span>
                       </button>
@@ -168,7 +168,7 @@ export const McpNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) 
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
             placeholder="What should the LLM fetch from this MCP server?"
-            className="nodrag w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded-lg p-2 text-xs font-sans leading-relaxed text-[var(--text-light)] placeholder-[var(--text-muted)] focus:outline-none focus:border-sky-400 resize-none"
+            className="nodrag w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded-lg p-2 text-xs font-sans leading-relaxed text-[var(--text-light)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--color-status-info-border)] resize-none"
             style={{ minHeight: "45px", height: "auto" }}
             rows={2}
           />
@@ -181,7 +181,7 @@ export const McpNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) 
           type="source"
           position={Position.Top}
           id="context-out-top"
-          style={{ background: "#0ea5e9", width: 14, height: 14, border: "2.5px solid var(--bg-sidebar)" }}
+          style={{ background: "var(--color-status-info-solid)", width: 14, height: 14, border: "2.5px solid var(--color-surface-sidebar)" }}
         />
       )}
       {!isTopConnected && (
@@ -189,7 +189,7 @@ export const McpNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) 
           type="source"
           position={Position.Bottom}
           id="context-out-bottom"
-          style={{ background: "#0ea5e9", width: 14, height: 14, border: "2.5px solid var(--bg-sidebar)" }}
+          style={{ background: "var(--color-status-info-solid)", width: 14, height: 14, border: "2.5px solid var(--color-surface-sidebar)" }}
         />
       )}
     </div>

@@ -172,7 +172,7 @@ export const DiffTabContent: React.FC<DiffTabContentProps> = ({
                     }
                   }
                 }}
-                className="p-1 text-[var(--text-muted)] hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors cursor-pointer"
+                className="p-1 text-[var(--text-muted)] hover:text-[var(--color-status-danger)] hover:bg-[var(--color-status-danger-bg)] rounded transition-colors cursor-pointer"
                 title="Delete this file from VFS"
               >
                 <Trash2 size={14} />
@@ -193,7 +193,7 @@ export const DiffTabContent: React.FC<DiffTabContentProps> = ({
                   }
                 }
               }}
-              className="flex items-center space-x-1 px-1.5 py-0.5 text-[10px] text-[var(--text-muted)] hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors cursor-pointer animate-fade-in"
+              className="flex items-center space-x-1 px-1.5 py-0.5 text-[10px] text-[var(--text-muted)] hover:text-[var(--color-status-danger)] hover:bg-[var(--color-status-danger-bg)] rounded transition-colors cursor-pointer animate-fade-in"
               title="Delete all files from VFS"
             >
               <Trash2 size={12} />
@@ -227,7 +227,7 @@ export const DiffTabContent: React.FC<DiffTabContentProps> = ({
           <button
             onClick={handleSave}
             disabled={!isDirty || isSaving || isDiffLoading}
-            className="flex items-center space-x-1 px-2 py-1 text-[10px] font-mono bg-emerald-600/80 hover:bg-emerald-600 disabled:bg-[var(--bg-sidebar)] disabled:text-[var(--text-muted)] text-white rounded transition-colors"
+            className="flex items-center space-x-1 px-2 py-1 text-[10px] font-mono bg-[var(--color-status-success-bg)] hover:bg-[var(--color-status-success-solid)] text-[var(--color-status-success)] hover:text-[var(--color-status-success-solid-foreground)] disabled:bg-[var(--bg-sidebar)] disabled:text-[var(--text-muted)] rounded transition-colors"
             title="Save changes to VFS"
           >
             <Save size={11} />

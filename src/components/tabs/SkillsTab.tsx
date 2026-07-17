@@ -261,7 +261,7 @@ export const SkillsTab: React.FC = () => {
                     onClick={() => setSelectedSkillId(skill.id)}
                     className={`group flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${
                       isSelected
-                        ? "border-[var(--accent-color)] bg-[var(--accent-bg)]/20 shadow-[0_0_10px_rgba(139,92,246,0.1)]"
+                        ? "border-[var(--accent-color)] bg-[var(--accent-bg)]/20 shadow-[0_0_10px_var(--color-focus-ring)]"
                         : "border-[var(--border-color)] bg-[var(--bg-app)]/50 hover:bg-[var(--bg-sidebar)] hover:border-[var(--border-active)]"
                     }`}
                   >
@@ -275,7 +275,7 @@ export const SkillsTab: React.FC = () => {
                     </div>
                     <div className="flex items-center space-x-2 flex-shrink-0">
                       {skill.isBuiltIn && (
-                        <span className="text-[8px] font-bold text-white bg-amber-500/80 px-1.5 py-0.5 rounded-full">
+                        <span className="text-[8px] font-bold text-[var(--color-status-warning)] bg-[var(--color-status-warning-bg)] px-1.5 py-0.5 rounded-full">
                           Built-in
                         </span>
                       )}
@@ -285,7 +285,7 @@ export const SkillsTab: React.FC = () => {
                             e.stopPropagation();
                             handleDelete(skill.id);
                           }}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity text-rose-400/60 hover:text-rose-400"
+                          className="opacity-0 group-hover:opacity-100 transition-opacity text-[var(--color-status-danger)] hover:text-[var(--color-status-danger)]"
                         >
                           <Trash2 size={12} />
                         </button>
@@ -385,12 +385,12 @@ export const SkillsTab: React.FC = () => {
                             onClick={() => handleMcpToggle(name)}
                             className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border transition-all ${
                               selected
-                                ? "border-sky-500 bg-sky-500/15 text-sky-300"
-                                : "border-[var(--border-color)] bg-[var(--bg-app)]/50 text-[var(--text-muted)] hover:border-sky-500/50 hover:text-[var(--text-light)]"
+                                ? "border-[var(--color-status-info-border)] bg-[var(--color-status-info-bg)] text-[var(--color-status-info)]"
+                                : "border-[var(--border-color)] bg-[var(--bg-app)]/50 text-[var(--text-muted)] hover:border-[var(--color-status-info-border)] hover:text-[var(--text-light)]"
                             }`}
                             title={srv.transport.url || srv.transport.command || name}
                           >
-                            <Plug size={12} className={selected ? "text-sky-400" : "text-[var(--text-muted)]"} />
+                            <Plug size={12} className={selected ? "text-[var(--color-status-info)]" : "text-[var(--text-muted)]"} />
                             <span className="text-[11px] font-bold">{srv.displayName || name}</span>
                             {!srv.enabled && (
                               <span className="text-[8px] font-mono text-[var(--text-muted)] uppercase">off</span>
@@ -423,7 +423,7 @@ export const SkillsTab: React.FC = () => {
                   <button
                     onClick={handleSave}
                     disabled={!isDirty}
-                    className="flex items-center space-x-2 px-4 py-2 bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg transition-colors"
+                    className="flex items-center space-x-2 px-4 py-2 bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 disabled:opacity-40 disabled:cursor-not-allowed text-[var(--color-primary-foreground)] text-xs font-bold rounded-lg transition-colors"
                   >
                     <Save size={14} />
                     <span>Save</span>
@@ -469,13 +469,13 @@ export const SkillsTab: React.FC = () => {
                       }
                     }}
                     disabled={isGenerating}
-                    className="flex items-center space-x-2 px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors"
+                    className="flex items-center space-x-2 px-4 py-2 bg-[var(--color-secondary)] hover:opacity-85 disabled:opacity-50 text-[var(--color-secondary-foreground)] text-xs font-bold rounded-lg transition-colors"
                   >
                     <Wand2 size={14} />
                     <span>{isGenerating ? "Generating..." : "Generate"}</span>
                   </button>
                   {generateError && (
-                    <p className="text-xs text-rose-400 font-mono">{generateError}</p>
+                    <p className="text-xs text-[var(--color-status-danger)] font-mono">{generateError}</p>
                   )}
                 </div>
               </div>
@@ -488,7 +488,7 @@ export const SkillsTab: React.FC = () => {
               </p>
               <button
                 onClick={handleNewSkill}
-                className="flex items-center space-x-2 px-4 py-2 bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 text-white text-xs font-bold rounded-lg transition-colors"
+                className="flex items-center space-x-2 px-4 py-2 bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 text-[var(--color-primary-foreground)] text-xs font-bold rounded-lg transition-colors"
               >
                 <Plus size={14} />
                 <span>New Skill</span>
@@ -500,10 +500,10 @@ export const SkillsTab: React.FC = () => {
 
       {showSavedModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div className="absolute inset-0 bg-[var(--color-surface-sunken)] backdrop-blur-sm" />
           <div className="relative bg-[var(--bg-sidebar)] border border-[var(--accent-color)]/30 rounded-xl px-6 py-4 shadow-2xl shadow-[var(--accent-color)]/10 flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center">
-              <Save size={16} className="text-emerald-400" />
+            <div className="w-8 h-8 rounded-full bg-[var(--color-status-success-bg)] flex items-center justify-center">
+              <Save size={16} className="text-[var(--color-status-success)]" />
             </div>
             <span className="text-sm font-bold text-[var(--text-light)]">Changes have been saved</span>
           </div>

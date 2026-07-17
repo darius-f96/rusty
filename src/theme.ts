@@ -1,4 +1,8 @@
-export interface AppTheme {
+export type ThemeAppearance = "light" | "dark";
+
+interface ThemeSeed {
+  name: string;
+  appearance: ThemeAppearance;
   bgApp: string;
   bgSidebar: string;
   bgHeader: string;
@@ -20,11 +24,103 @@ export interface AppTheme {
     variables: string;
     types: string;
   };
-  isLight?: boolean;
 }
 
-export const themes: Record<string, AppTheme> = {
+export interface ThemeStatusTokens {
+  foreground: string;
+  background: string;
+  border: string;
+  solid: string;
+  solidForeground: string;
+}
+
+export interface AppTheme {
+  id: string;
+  name: string;
+  appearance: ThemeAppearance;
+  colors: {
+    primary: string;
+    primaryForeground: string;
+    secondary: string;
+    secondaryForeground: string;
+    foreground: {
+      default: string;
+      muted: string;
+      strong: string;
+      inverse: string;
+    };
+  };
+  workspace: {
+    app: string;
+    workspace: string;
+    sidebar: string;
+    header: string;
+    panel: string;
+    elevated: string;
+    sunken: string;
+    input: string;
+    canvas: string;
+    overlay: string;
+  };
+  borders: {
+    default: string;
+    subtle: string;
+    strong: string;
+    focus: string;
+  };
+  interaction: {
+    hover: string;
+    active: string;
+    selected: string;
+    focusRing: string;
+    disabled: string;
+  };
+  status: {
+    info: ThemeStatusTokens;
+    success: ThemeStatusTokens;
+    warning: ThemeStatusTokens;
+    danger: ThemeStatusTokens;
+  };
+  editor: {
+    background: string;
+    foreground: string;
+    lineNumber: string;
+    lineNumberActive: string;
+    lineHighlight: string;
+    lineHighlightBorder: string;
+    selection: string;
+    inactiveSelection: string;
+    selectionHighlight: string;
+    cursor: string;
+  };
+  terminal: {
+    background: string;
+    foreground: string;
+    cursor: string;
+    selection: string;
+  };
+  logs: {
+    background: string;
+    surface: string;
+    header: string;
+    foreground: string;
+    muted: string;
+  };
+  syntax: ThemeSeed["syntax"];
+  diff: {
+    addedBackground: string;
+    addedTextBackground: string;
+    addedGutter: string;
+    removedBackground: string;
+    removedTextBackground: string;
+    removedGutter: string;
+  };
+}
+
+const themeSeeds: Record<string, ThemeSeed> = {
   dark: {
+    name: "Slate Dark",
+    appearance: "dark",
     bgApp: "#0A0B0D",
     bgSidebar: "#121316",
     bgHeader: "#0F1012",
@@ -48,7 +144,8 @@ export const themes: Record<string, AppTheme> = {
     }
   },
   sepia: {
-    isLight: true,
+    name: "Warm Sepia",
+    appearance: "light",
     bgApp: "#F4ECD8",
     bgSidebar: "#EADFB4",
     bgHeader: "#E5D9AC",
@@ -72,6 +169,8 @@ export const themes: Record<string, AppTheme> = {
     }
   },
   oneDark: {
+    name: "One Dark Pro",
+    appearance: "dark",
     bgApp: "#181A1F",
     bgSidebar: "#21252B",
     bgHeader: "#1E2227",
@@ -95,6 +194,8 @@ export const themes: Record<string, AppTheme> = {
     }
   },
   sakura: {
+    name: "Sakura Blossom",
+    appearance: "dark",
     bgApp: "#1D141C",
     bgSidebar: "#231B22",
     bgHeader: "#1A1119",
@@ -118,6 +219,8 @@ export const themes: Record<string, AppTheme> = {
     }
   },
   spaceDust: {
+    name: "Space Dust",
+    appearance: "dark",
     bgApp: "#061217",
     bgSidebar: "#0F242C",
     bgHeader: "#040E12",
@@ -141,6 +244,8 @@ export const themes: Record<string, AppTheme> = {
     }
   },
   goldsrc: {
+    name: "GoldSrc",
+    appearance: "dark",
     bgApp: "#1f241b",
     bgSidebar: "#424c3b",
     bgHeader: "#2f362a",
@@ -164,6 +269,8 @@ export const themes: Record<string, AppTheme> = {
     }
   },
   oneMonokai: {
+    name: "One Monokai",
+    appearance: "dark",
     bgApp: "#1E2024",
     bgSidebar: "#282C34",
     bgHeader: "#21252B",
@@ -187,6 +294,8 @@ export const themes: Record<string, AppTheme> = {
     }
   },
   andromeda: {
+    name: "Andromeda",
+    appearance: "dark",
     bgApp: "#1B1D23",
     bgSidebar: "#23262E",
     bgHeader: "#1E2127",
@@ -210,7 +319,8 @@ export const themes: Record<string, AppTheme> = {
     }
   },
   atomOneLight: {
-    isLight: true,
+    name: "Atom One Light",
+    appearance: "light",
     bgApp: "#F9F9F9",
     bgSidebar: "#F0F0F0",
     bgHeader: "#EAEAEA",
@@ -234,6 +344,8 @@ export const themes: Record<string, AppTheme> = {
     }
   },
   noctis: {
+    name: "Noctis",
+    appearance: "dark",
     bgApp: "#161B22",
     bgSidebar: "#1B222C",
     bgHeader: "#131820",
@@ -257,6 +369,8 @@ export const themes: Record<string, AppTheme> = {
     }
   },
   panda: {
+    name: "Panda Theme",
+    appearance: "dark",
     bgApp: "#242526",
     bgSidebar: "#292A2B",
     bgHeader: "#1F2021",
@@ -280,6 +394,8 @@ export const themes: Record<string, AppTheme> = {
     }
   },
   ruby: {
+    name: "Ruby",
+    appearance: "dark",
     bgApp: "#1A0A0E",
     bgSidebar: "#261016",
     bgHeader: "#1F0B10",
@@ -303,7 +419,8 @@ export const themes: Record<string, AppTheme> = {
     }
   },
   blulocoLight: {
-    isLight: true,
+    name: "Bluloco Light",
+    appearance: "light",
     bgApp: "#F4F6F9",
     bgSidebar: "#EAEFF5",
     bgHeader: "#E2E8F0",
@@ -328,41 +445,292 @@ export const themes: Record<string, AppTheme> = {
   }
 };
 
-export const theme = themes.spaceDust; // Fallback
+function hexChannels(hex: string): [number, number, number] {
+  const normalized = hex.replace("#", "");
+  const expanded = normalized.length === 3
+    ? normalized.split("").map((part) => part + part).join("")
+    : normalized.slice(0, 6);
+  return [0, 2, 4].map((offset) => Number.parseInt(expanded.slice(offset, offset + 2), 16)) as [number, number, number];
+}
 
-/** Injects theme colors into CSS custom properties on document root */
-export function applyThemeProperties(t: AppTheme) {
+function withAlpha(hex: string, alpha: number): string {
+  const [red, green, blue] = hexChannels(hex);
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+function mixHex(base: string, mix: string, amount: number): string {
+  const baseChannels = hexChannels(base);
+  const mixChannels = hexChannels(mix);
+  const channels = baseChannels.map((value, index) => Math.round(value + (mixChannels[index] - value) * amount));
+  return `#${channels.map((value) => value.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function relativeLuminance(color: string): number {
+  const [red, green, blue] = hexChannels(color).map((channel) => {
+    const value = channel / 255;
+    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  }) as [number, number, number];
+  return (0.2126 * red) + (0.7152 * green) + (0.0722 * blue);
+}
+
+function contrastRatio(first: string, second: string): number {
+  const brightest = Math.max(relativeLuminance(first), relativeLuminance(second));
+  const darkest = Math.min(relativeLuminance(first), relativeLuminance(second));
+  return (brightest + 0.05) / (darkest + 0.05);
+}
+
+function ensureContrast(foreground: string, background: string, minimum: number): string {
+  if (contrastRatio(foreground, background) >= minimum) return foreground;
+  const target = relativeLuminance(background) > 0.5 ? "#000000" : "#FFFFFF";
+  for (let amount = 0.05; amount <= 1; amount += 0.05) {
+    const candidate = mixHex(foreground, target, amount);
+    if (contrastRatio(candidate, background) >= minimum) return candidate;
+  }
+  return target;
+}
+
+function readableForeground(background: string): string {
+  const dark = "#111827";
+  const light = "#FFFFFF";
+  return contrastRatio(background, dark) >= contrastRatio(background, light) ? dark : light;
+}
+
+function statusTokens(foreground: string, appearance: ThemeAppearance): ThemeStatusTokens {
+  const solid = appearance === "light" ? foreground : mixHex(foreground, "#000000", 0.45);
+  return {
+    foreground,
+    background: withAlpha(foreground, appearance === "light" ? 0.1 : 0.16),
+    border: withAlpha(foreground, appearance === "light" ? 0.28 : 0.38),
+    solid,
+    solidForeground: readableForeground(solid),
+  };
+}
+
+function createTheme(id: string, seed: ThemeSeed): AppTheme {
+  const appearance = seed.appearance;
+  const isLight = appearance === "light";
+  const status = isLight
+    ? { info: "#0369A1", success: "#047857", warning: "#A15C00", danger: "#BE123C" }
+    : { info: "#7DD3FC", success: "#6EE7B7", warning: "#FCD34D", danger: "#FDA4AF" };
+  const logBackground = mixHex(seed.bgEditor, isLight ? "#000000" : "#FFFFFF", isLight ? 0.035 : 0.025);
+  const mutedForeground = ensureContrast(seed.textMuted, seed.bgApp, 4.5);
+  const syntax = {
+    ...seed.syntax,
+    comments: ensureContrast(seed.syntax.comments, seed.bgEditor, 3),
+  };
+
+  return {
+    id,
+    name: seed.name,
+    appearance,
+    colors: {
+      primary: seed.accent,
+      primaryForeground: readableForeground(seed.accent),
+      secondary: syntax.types,
+      secondaryForeground: readableForeground(syntax.types),
+      foreground: {
+        default: seed.textNormal,
+        muted: mutedForeground,
+        strong: seed.textLight,
+        inverse: isLight ? "#FFFFFF" : "#111827",
+      },
+    },
+    workspace: {
+      app: seed.bgApp,
+      workspace: seed.bgEditor,
+      sidebar: seed.bgSidebar,
+      header: seed.bgHeader,
+      panel: seed.bgEditor,
+      elevated: mixHex(seed.bgSidebar, isLight ? "#FFFFFF" : "#FFFFFF", isLight ? 0.45 : 0.035),
+      sunken: mixHex(seed.bgSidebar, "#000000", isLight ? 0.04 : 0.12),
+      input: seed.bgApp,
+      canvas: seed.bgCanvas,
+      overlay: "rgba(0, 0, 0, 0.55)",
+    },
+    borders: {
+      default: seed.border,
+      subtle: withAlpha(seed.border, 0.62),
+      strong: seed.borderActive,
+      focus: seed.accent,
+    },
+    interaction: {
+      hover: withAlpha(seed.accent, isLight ? 0.09 : 0.12),
+      active: withAlpha(seed.accent, isLight ? 0.15 : 0.2),
+      selected: seed.accentBg,
+      focusRing: withAlpha(seed.accent, 0.28),
+      disabled: withAlpha(mutedForeground, 0.45),
+    },
+    status: {
+      info: statusTokens(status.info, appearance),
+      success: statusTokens(status.success, appearance),
+      warning: statusTokens(status.warning, appearance),
+      danger: statusTokens(status.danger, appearance),
+    },
+    editor: {
+      background: seed.bgEditor,
+      foreground: seed.textNormal,
+      lineNumber: mutedForeground,
+      lineNumberActive: seed.textLight,
+      lineHighlight: mixHex(seed.bgEditor, seed.textNormal, isLight ? 0.045 : 0.065),
+      lineHighlightBorder: "#00000000",
+      selection: withAlpha(seed.textNormal, isLight ? 0.16 : 0.22),
+      inactiveSelection: withAlpha(seed.textNormal, isLight ? 0.1 : 0.14),
+      selectionHighlight: withAlpha(seed.textNormal, isLight ? 0.08 : 0.11),
+      cursor: ensureContrast(
+        mixHex(seed.bgEditor, seed.textNormal, isLight ? 0.55 : 0.48),
+        seed.bgEditor,
+        3,
+      ),
+    },
+    terminal: {
+      background: logBackground,
+      foreground: seed.textNormal,
+      cursor: seed.accent,
+      selection: withAlpha(seed.accent, isLight ? 0.25 : 0.35),
+    },
+    logs: {
+      background: logBackground,
+      surface: mixHex(logBackground, isLight ? "#000000" : "#FFFFFF", isLight ? 0.025 : 0.025),
+      header: mixHex(logBackground, isLight ? "#000000" : "#FFFFFF", isLight ? 0.05 : 0.04),
+      foreground: seed.textNormal,
+      muted: mutedForeground,
+    },
+    syntax,
+    diff: isLight
+      ? {
+          addedBackground: "rgba(22, 163, 74, 0.12)",
+          addedTextBackground: "rgba(22, 163, 74, 0.2)",
+          addedGutter: "rgba(22, 163, 74, 0.42)",
+          removedBackground: "rgba(220, 38, 38, 0.1)",
+          removedTextBackground: "rgba(220, 38, 38, 0.18)",
+          removedGutter: "rgba(220, 38, 38, 0.4)",
+        }
+      : {
+          addedBackground: "rgba(31, 157, 85, 0.11)",
+          addedTextBackground: "rgba(31, 157, 85, 0.22)",
+          addedGutter: "rgba(31, 157, 85, 0.38)",
+          removedBackground: "rgba(229, 72, 77, 0.11)",
+          removedTextBackground: "rgba(229, 72, 77, 0.22)",
+          removedGutter: "rgba(229, 72, 77, 0.38)",
+        },
+  };
+}
+
+export const themes: Record<string, AppTheme> = Object.fromEntries(
+  Object.entries(themeSeeds).map(([id, seed]) => [id, createTheme(id, seed)]),
+);
+
+export const themeOptions = Object.values(themes).map(({ id, name }) => ({ id, name }));
+export const theme = themes.spaceDust;
+
+export function resolveTheme(themeId: string): AppTheme {
+  return themes[themeId] || themes.spaceDust;
+}
+
+const cssVariables = (themeDefinition: AppTheme): Record<string, string> => ({
+  "--color-primary": themeDefinition.colors.primary,
+  "--color-primary-foreground": themeDefinition.colors.primaryForeground,
+  "--color-secondary": themeDefinition.colors.secondary,
+  "--color-secondary-foreground": themeDefinition.colors.secondaryForeground,
+  "--color-secondary-bg": withAlpha(themeDefinition.colors.secondary, themeDefinition.appearance === "light" ? 0.1 : 0.16),
+  "--color-secondary-border": withAlpha(themeDefinition.colors.secondary, 0.35),
+  "--color-fg-default": themeDefinition.colors.foreground.default,
+  "--color-fg-muted": themeDefinition.colors.foreground.muted,
+  "--color-fg-strong": themeDefinition.colors.foreground.strong,
+  "--color-fg-inverse": themeDefinition.colors.foreground.inverse,
+  "--color-surface-app": themeDefinition.workspace.app,
+  "--color-surface-workspace": themeDefinition.workspace.workspace,
+  "--color-surface-sidebar": themeDefinition.workspace.sidebar,
+  "--color-surface-header": themeDefinition.workspace.header,
+  "--color-surface-panel": themeDefinition.workspace.panel,
+  "--color-surface-elevated": themeDefinition.workspace.elevated,
+  "--color-surface-sunken": themeDefinition.workspace.sunken,
+  "--color-surface-input": themeDefinition.workspace.input,
+  "--color-surface-canvas": themeDefinition.workspace.canvas,
+  "--color-surface-overlay": themeDefinition.workspace.overlay,
+  "--color-border-default": themeDefinition.borders.default,
+  "--color-border-subtle": themeDefinition.borders.subtle,
+  "--color-border-strong": themeDefinition.borders.strong,
+  "--color-border-focus": themeDefinition.borders.focus,
+  "--color-interaction-hover": themeDefinition.interaction.hover,
+  "--color-interaction-active": themeDefinition.interaction.active,
+  "--color-interaction-selected": themeDefinition.interaction.selected,
+  "--color-focus-ring": themeDefinition.interaction.focusRing,
+  "--color-disabled": themeDefinition.interaction.disabled,
+  "--color-log-background": themeDefinition.logs.background,
+  "--color-log-surface": themeDefinition.logs.surface,
+  "--color-log-header": themeDefinition.logs.header,
+  "--color-log-foreground": themeDefinition.logs.foreground,
+  "--color-log-muted": themeDefinition.logs.muted,
+  "--color-editor-background": themeDefinition.editor.background,
+  "--color-terminal-background": themeDefinition.terminal.background,
+  "--color-status-info": themeDefinition.status.info.foreground,
+  "--color-status-info-bg": themeDefinition.status.info.background,
+  "--color-status-info-border": themeDefinition.status.info.border,
+  "--color-status-info-solid": themeDefinition.status.info.solid,
+  "--color-status-info-solid-foreground": themeDefinition.status.info.solidForeground,
+  "--color-status-success": themeDefinition.status.success.foreground,
+  "--color-status-success-bg": themeDefinition.status.success.background,
+  "--color-status-success-border": themeDefinition.status.success.border,
+  "--color-status-success-solid": themeDefinition.status.success.solid,
+  "--color-status-success-solid-foreground": themeDefinition.status.success.solidForeground,
+  "--color-status-warning": themeDefinition.status.warning.foreground,
+  "--color-status-warning-bg": themeDefinition.status.warning.background,
+  "--color-status-warning-border": themeDefinition.status.warning.border,
+  "--color-status-warning-solid": themeDefinition.status.warning.solid,
+  "--color-status-warning-solid-foreground": themeDefinition.status.warning.solidForeground,
+  "--color-status-danger": themeDefinition.status.danger.foreground,
+  "--color-status-danger-bg": themeDefinition.status.danger.background,
+  "--color-status-danger-border": themeDefinition.status.danger.border,
+  "--color-status-danger-solid": themeDefinition.status.danger.solid,
+  "--color-status-danger-solid-foreground": themeDefinition.status.danger.solidForeground,
+  "--syntax-comment": themeDefinition.syntax.comments,
+  "--syntax-keyword": themeDefinition.syntax.keywords,
+  "--syntax-string": themeDefinition.syntax.strings,
+  "--syntax-number": themeDefinition.syntax.numbers,
+  "--syntax-function": themeDefinition.syntax.functions,
+  "--syntax-variable": themeDefinition.syntax.variables,
+  "--syntax-type": themeDefinition.syntax.types,
+
+  // Compatibility aliases while existing components move to semantic tokens.
+  "--bg-app": themeDefinition.workspace.app,
+  "--bg-sidebar": themeDefinition.workspace.sidebar,
+  "--bg-header": themeDefinition.workspace.header,
+  "--bg-editor": themeDefinition.editor.background,
+  "--bg-canvas": themeDefinition.workspace.canvas,
+  "--border-color": themeDefinition.borders.default,
+  "--border-active": themeDefinition.borders.strong,
+  "--text-normal": themeDefinition.colors.foreground.default,
+  "--text-muted": themeDefinition.colors.foreground.muted,
+  "--text-light": themeDefinition.colors.foreground.strong,
+  "--text-color": themeDefinition.colors.foreground.strong,
+  "--accent-color": themeDefinition.colors.primary,
+  "--accent-bg": themeDefinition.interaction.selected,
+});
+
+/** Applies every CSS-consumable token and browser-level appearance hint. */
+export function applyThemeProperties(themeDefinition: AppTheme) {
   const root = document.documentElement;
-  root.style.setProperty("--bg-app", t.bgApp);
-  root.style.setProperty("--bg-sidebar", t.bgSidebar);
-  root.style.setProperty("--bg-header", t.bgHeader);
-  root.style.setProperty("--bg-editor", t.bgEditor);
-  root.style.setProperty("--bg-canvas", t.bgCanvas);
-  root.style.setProperty("--border-color", t.border);
-  root.style.setProperty("--border-active", t.borderActive);
-  root.style.setProperty("--text-normal", t.textNormal);
-  root.style.setProperty("--text-muted", t.textMuted);
-  root.style.setProperty("--text-light", t.textLight);
-  root.style.setProperty("--accent-color", t.accent);
-  root.style.setProperty("--accent-bg", t.accentBg);
+  Object.entries(cssVariables(themeDefinition)).forEach(([property, value]) => root.style.setProperty(property, value));
+  root.dataset.theme = themeDefinition.id;
+  root.dataset.appearance = themeDefinition.appearance;
+  root.style.colorScheme = themeDefinition.appearance;
 
-  // Update application favicon based on theme brightness
   const favicon = document.querySelector("link[rel='icon']");
   if (favicon) {
-    favicon.setAttribute("href", t.isLight ? "/axiom-light.png" : "/axiom-dark.png");
+    favicon.setAttribute("href", themeDefinition.appearance === "light" ? "/axiom-light.png" : "/axiom-dark.png");
     favicon.setAttribute("type", "image/png");
   }
 }
 
-
-/** Registers theme configuration with monaco editor runtime */
+/** Registers the active application theme with Monaco. */
 export function defineMonacoTheme(monaco: any, t: AppTheme) {
   monaco.editor.defineTheme("axiom-custom-theme", {
-    base: "vs-dark",
+    base: t.appearance === "light" ? "vs" : "vs-dark",
     inherit: true,
     semanticHighlighting: true,
     rules: [
-      { token: "", foreground: t.textNormal.replace("#", "") },
+      { token: "", foreground: t.editor.foreground.replace("#", "") },
       { token: "comment", foreground: t.syntax.comments.replace("#", ""), fontStyle: "italic" },
       { token: "keyword", foreground: t.syntax.keywords.replace("#", "") },
       { token: "keyword.control", foreground: t.syntax.keywords.replace("#", "") },
@@ -379,19 +747,32 @@ export function defineMonacoTheme(monaco: any, t: AppTheme) {
       { token: "identifier", foreground: t.syntax.variables.replace("#", "") },
     ],
     colors: {
-      "editor.background": t.bgEditor,
-      "editor.foreground": t.textNormal,
-      "editorLineNumber.foreground": t.textMuted,
-      "editorLineNumber.activeForeground": t.textLight,
-      "editor.lineHighlightBackground": t.bgSidebar + "33",
-      "editor.selectionBackground": t.accent + "44",
-      "editorCursor.foreground": t.accent,
-      "diffEditor.insertedTextBackground": "#1f9d5538",
-      "diffEditor.removedTextBackground": "#e5484d38",
-      "diffEditor.insertedLineBackground": "#1f9d551c",
-      "diffEditor.removedLineBackground": "#e5484d1c",
-      "diffEditorGutter.insertedLineBackground": "#1f9d5560",
-      "diffEditorGutter.removedLineBackground": "#e5484d60",
+      "focusBorder": t.editor.lineHighlightBorder,
+      "contrastActiveBorder": t.editor.lineHighlightBorder,
+      "editor.background": t.editor.background,
+      "editor.foreground": t.editor.foreground,
+      "editorLineNumber.foreground": t.editor.lineNumber,
+      "editorLineNumber.activeForeground": t.editor.lineNumberActive,
+      "editor.lineHighlightBackground": t.editor.lineHighlight,
+      "editor.lineHighlightBorder": t.editor.lineHighlightBorder,
+      "editor.selectionBackground": t.editor.selection,
+      "editor.inactiveSelectionBackground": t.editor.inactiveSelection,
+      "editor.selectionHighlightBackground": t.editor.selectionHighlight,
+      "editor.selectionHighlightBorder": t.editor.lineHighlightBorder,
+      "editor.wordHighlightBorder": t.editor.lineHighlightBorder,
+      "editor.wordHighlightStrongBorder": t.editor.lineHighlightBorder,
+      "editor.rangeHighlightBorder": t.editor.lineHighlightBorder,
+      "editorBracketMatch.border": t.editor.lineHighlightBorder,
+      "editor.snippetTabstopHighlightBorder": t.editor.lineHighlightBorder,
+      "editor.snippetFinalTabstopHighlightBorder": t.editor.lineHighlightBorder,
+      "editorOverviewRuler.selectionHighlightForeground": t.editor.lineHighlightBorder,
+      "editorCursor.foreground": t.editor.cursor,
+      "diffEditor.insertedTextBackground": t.diff.addedTextBackground,
+      "diffEditor.removedTextBackground": t.diff.removedTextBackground,
+      "diffEditor.insertedLineBackground": t.diff.addedBackground,
+      "diffEditor.removedLineBackground": t.diff.removedBackground,
+      "diffEditorGutter.insertedLineBackground": t.diff.addedGutter,
+      "diffEditorGutter.removedLineBackground": t.diff.removedGutter,
     },
   });
 }

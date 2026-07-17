@@ -1,5 +1,6 @@
 import React from "react";
 import { useWorkspaceStore } from "../store";
+import { resolveTheme } from "../theme";
 
 interface AxiomIconProps {
   size?: number;
@@ -8,7 +9,7 @@ interface AxiomIconProps {
 
 export const AxiomIcon: React.FC<AxiomIconProps> = ({ size = 20, className = "" }) => {
   const activeThemeId = useWorkspaceStore((state) => state.activeThemeId);
-  const isLight = ["sepia", "atomOneLight", "blulocoLight"].includes(activeThemeId);
+  const isLight = resolveTheme(activeThemeId).appearance === "light";
 
   return (
     <img
@@ -20,4 +21,3 @@ export const AxiomIcon: React.FC<AxiomIconProps> = ({ size = 20, className = "" 
     />
   );
 };
-

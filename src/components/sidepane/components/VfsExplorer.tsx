@@ -101,7 +101,7 @@ export const VfsExplorer: React.FC<VfsExplorerProps> = ({ onClose, tabId }) => {
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)] bg-[var(--bg-header)]">
         <div className="flex items-center space-x-2">
-          <Folder size={14} className="text-amber-400" />
+          <Folder size={14} className="text-[var(--color-status-warning)]" />
           <span className="text-xs font-semibold text-[var(--text-light)]">VFS Explorer</span>
           <span className="text-[10px] text-[var(--text-muted)]">({nodeFiles.length} nodes)</span>
         </div>
@@ -143,7 +143,7 @@ export const VfsExplorer: React.FC<VfsExplorerProps> = ({ onClose, tabId }) => {
               return (
                 <div key={nf.node_id} className="border border-[var(--border-color)] rounded-lg overflow-hidden">
                   {/* Node header */}
-                  <div className={`flex items-center justify-between px-2 py-1.5 ${!isNodePresent ? "bg-rose-900/20" : "bg-[var(--bg-app)]"}`}>
+                  <div className={`flex items-center justify-between px-2 py-1.5 ${!isNodePresent ? "bg-[var(--color-status-danger-bg)]" : "bg-[var(--bg-app)]"}`}>
                     <div className="flex items-center space-x-1.5 flex-1 min-w-0">
                       <button
                         onClick={() => toggleNode(nf.node_id)}
@@ -151,19 +151,19 @@ export const VfsExplorer: React.FC<VfsExplorerProps> = ({ onClose, tabId }) => {
                       >
                         {isExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
                       </button>
-                      <Folder size={11} className="text-amber-400 flex-shrink-0" />
+                      <Folder size={11} className="text-[var(--color-status-warning)] flex-shrink-0" />
                       <span className="text-[10px] font-medium text-[var(--text-light)] truncate" title={nf.node_id}>
                         {nodeName}
                       </span>
                       {!isNodePresent && (
-                        <span className="text-[8px] px-1 py-0.5 bg-rose-600/30 text-rose-300 rounded flex-shrink-0">deleted</span>
+                        <span className="text-[8px] px-1 py-0.5 bg-[var(--color-status-danger-bg)] text-[var(--color-status-danger)] rounded flex-shrink-0">deleted</span>
                       )}
                     </div>
                     <div className="flex items-center space-x-1 flex-shrink-0 ml-2">
                       <span className="text-[9px] text-[var(--text-muted)]">{nf.files.length} files</span>
                       <button
                         onClick={() => deleteNodeFiles(nf.node_id)}
-                        className="p-1 text-rose-500 hover:text-rose-400 transition-colors"
+                        className="p-1 text-[var(--color-status-danger)] hover:text-[var(--color-status-danger)] transition-colors"
                         title="Delete all files for this node"
                       >
                         <Trash2 size={10} />
@@ -199,7 +199,7 @@ export const VfsExplorer: React.FC<VfsExplorerProps> = ({ onClose, tabId }) => {
         <div className="px-3 py-2 border-t border-[var(--border-color)]">
           <button
             onClick={deleteAllNodeFiles}
-            className="w-full text-[10px] font-medium text-rose-400 hover:text-rose-300 py-1.5 px-2 rounded border border-rose-500/30 hover:border-rose-500/50 transition-colors flex items-center justify-center space-x-1.5"
+            className="w-full text-[10px] font-medium text-[var(--color-status-danger)] hover:text-[var(--color-status-danger)] py-1.5 px-2 rounded border border-[var(--color-status-danger-border)] hover:border-[var(--color-status-danger-border)] transition-colors flex items-center justify-center space-x-1.5"
           >
             <Trash2 size={10} />
             <span>Delete All VFS Files</span>

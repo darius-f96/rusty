@@ -827,11 +827,11 @@ export const Workspace: React.FC = () => {
       })}
 
       {closeIntercept && closeIntercept.type === "running" && createPortal(
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-[var(--color-surface-overlay)] backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-xl w-full max-w-md shadow-2xl overflow-hidden font-mono">
             <div className="px-4 py-3 bg-[var(--bg-header)] border-b border-[var(--border-color)] flex items-center justify-between">
               <span className="text-[var(--text-light)] text-sm font-bold flex items-center space-x-2">
-                <AlertTriangle size={16} className="text-amber-500 animate-pulse" />
+                <AlertTriangle size={16} className="text-[var(--color-status-warning)] animate-pulse" />
                 <span>Active Processes Running</span>
               </span>
               <button
@@ -843,7 +843,7 @@ export const Workspace: React.FC = () => {
             </div>
             <div className="p-4 flex flex-col space-y-3">
               <p className="text-xs text-[var(--text-normal)] leading-relaxed">
-                The Axiom tab <code className="text-amber-400 font-bold">"{closeIntercept.title}"</code> has active background processes running.
+                The Axiom tab <code className="text-[var(--color-status-warning)] font-bold">"{closeIntercept.title}"</code> has active background processes running.
               </p>
               <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
                 Closing this tab will stop all running agents and cancel ongoing operations. Are you sure you want to proceed?
@@ -858,7 +858,7 @@ export const Workspace: React.FC = () => {
               </button>
               <button
                 onClick={handleConfirmCloseRunning}
-                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors shadow-md"
+                className="px-4 py-1.5 bg-[var(--color-status-danger-solid)] hover:bg-[var(--color-status-danger-solid)] text-[var(--color-status-danger-solid-foreground)] rounded-lg text-xs font-semibold cursor-pointer transition-colors shadow-md"
               >
                 Stop Agents & Close
               </button>
@@ -890,11 +890,11 @@ const UnsavedChangesModal: React.FC<{
   const [saveTitle, setSaveTitle] = useState(title);
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-[var(--color-surface-overlay)] backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-xl w-full max-w-md shadow-2xl overflow-hidden font-mono">
         <div className="px-4 py-3 bg-[var(--bg-header)] border-b border-[var(--border-color)] flex items-center justify-between">
           <span className="text-[var(--text-light)] text-sm font-bold flex items-center space-x-2">
-            <HelpCircle size={16} className="text-sky-400" />
+            <HelpCircle size={16} className="text-[var(--color-status-info)]" />
             <span>Unsaved Axiom Canvas</span>
           </span>
           <button
@@ -906,7 +906,7 @@ const UnsavedChangesModal: React.FC<{
         </div>
         <div className="p-4 flex flex-col space-y-4">
           <p className="text-xs text-[var(--text-normal)] leading-relaxed">
-            You have unsaved changes in <code className="text-sky-400 font-bold">"{title}"</code>. Enter a title to save your canvas before closing:
+            You have unsaved changes in <code className="text-[var(--color-status-info)] font-bold">"{title}"</code>. Enter a title to save your canvas before closing:
           </p>
           <div className="flex flex-col space-y-1">
             <label htmlFor="modal-axiom-title-input" className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-semibold font-sans">Axiom Title</label>
@@ -923,7 +923,7 @@ const UnsavedChangesModal: React.FC<{
         <div className="px-4 py-3 bg-[var(--bg-header)] border-t border-[var(--border-color)] flex items-center justify-between">
           <button
             onClick={onDiscard}
-            className="px-3 py-1.5 border border-rose-500/30 hover:bg-rose-500/10 text-rose-400 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+            className="px-3 py-1.5 border border-[var(--color-status-danger-border)] hover:bg-[var(--color-status-danger-bg)] text-[var(--color-status-danger)] rounded-lg text-xs font-semibold cursor-pointer transition-colors"
           >
             Discard Changes
           </button>
@@ -936,7 +936,7 @@ const UnsavedChangesModal: React.FC<{
             </button>
             <button
               onClick={() => onSave(saveTitle)}
-              className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors shadow-md flex items-center space-x-1"
+              className="px-4 py-1.5 bg-[var(--color-status-success-solid)] hover:bg-[var(--color-status-success-solid)] text-[var(--color-status-success-solid-foreground)] rounded-lg text-xs font-semibold cursor-pointer transition-colors shadow-md flex items-center space-x-1"
             >
               <Save size={13} />
               <span>Save & Close</span>

@@ -5,6 +5,7 @@ import "xterm/css/xterm.css";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useWorkspaceStore } from "../store";
+import { resolveTheme } from "../theme";
 
 interface LocalTerminalProps {
   sessionId: string;
@@ -17,6 +18,7 @@ export const LocalTerminal: React.FC<LocalTerminalProps> = ({ sessionId, cwd, is
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const rootPath = useWorkspaceStore((state) => state.rootPath);
+  const activeThemeId = useWorkspaceStore((state) => state.activeThemeId);
   const isSessionCreatedRef = useRef<boolean>(false);
   const isActiveRef = useRef<boolean>(isActive);
   const lastSizeRef = useRef<{ cols: number; rows: number } | null>(null);
@@ -31,6 +33,7 @@ export const LocalTerminal: React.FC<LocalTerminalProps> = ({ sessionId, cwd, is
   useEffect(() => {
     if (!containerRef.current) return;
 
+    const terminalTheme = resolveTheme(useWorkspaceStore.getState().activeThemeId).terminal;
     const term = new Terminal({
       cursorBlink: true,
       fontSize: 12,
@@ -42,10 +45,10 @@ export const LocalTerminal: React.FC<LocalTerminalProps> = ({ sessionId, cwd, is
       fastScrollSensitivity: 5,
       macOptionIsMeta: true,
       theme: {
-        background: "#000000",
-        foreground: "#cccccc",
-        cursor: "#ffffff",
-        selectionBackground: "rgba(255, 255, 255, 0.3)",
+        background: terminalTheme.background,
+        foreground: terminalTheme.foreground,
+        cursor: terminalTheme.cursor,
+        selectionBackground: terminalTheme.selection,
       },
     });
 
@@ -182,6 +185,18 @@ export const LocalTerminal: React.FC<LocalTerminalProps> = ({ sessionId, cwd, is
     };
   }, [sessionId, cwd, rootPath]);
 
+  useEffect(() => {
+    const terminal = terminalRef.current;
+    if (!terminal) return;
+    const terminalTheme = resolveTheme(activeThemeId).terminal;
+    terminal.options.theme = {
+      background: terminalTheme.background,
+      foreground: terminalTheme.foreground,
+      cursor: terminalTheme.cursor,
+      selectionBackground: terminalTheme.selection,
+    };
+  }, [activeThemeId]);
+
   // Recalculate size and focus when tab becomes active
   useEffect(() => {
     if (isActive && terminalRef.current && fitAddonRef.current) {
@@ -212,7 +227,7 @@ export const LocalTerminal: React.FC<LocalTerminalProps> = ({ sessionId, cwd, is
   }, [isActive, sessionId]);
 
   return (
-    <div className="w-full h-full bg-black overflow-hidden p-2">
+    <div className="w-full h-full bg-[var(--color-terminal-background)] overflow-hidden p-2">
       <div ref={containerRef} className="w-full h-full" />
     </div>
   );

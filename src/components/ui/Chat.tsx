@@ -99,7 +99,7 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
     const isUser = msg.role === "user";
     const title = isUser ? "USER" : "AGENT";
     const borderLeftClass = isUser ? "border-l-[var(--accent-color)]" : "border-l-red-700/80";
-    const headerTextColor = isUser ? "text-[var(--accent-color)]" : "text-red-400";
+    const headerTextColor = isUser ? "text-[var(--accent-color)]" : "text-[var(--color-status-danger)]";
     const bgClass = isUser ? "bg-[var(--accent-bg)]/5" : "bg-[var(--bg-sidebar)]/30";
 
     let formattedTime = "";
@@ -115,7 +115,7 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
     return (
       <div key={msg.id} className={`mb-5 border border-[var(--border-color)] border-l-4 ${borderLeftClass} rounded-lg ${bgClass} overflow-hidden`}>
         {/* Programmatic Header */}
-        <div className="flex items-center justify-between px-3.5 py-2 bg-black/15 border-b border-[var(--border-color)]/20 text-[10px] font-mono select-none">
+        <div className="flex items-center justify-between px-3.5 py-2 bg-[var(--color-log-header)] border-b border-[var(--color-border-subtle)] text-[10px] font-mono select-none">
           <div className="flex items-center space-x-2">
             <span className={`font-bold tracking-wider ${headerTextColor}`}>[{title}]</span>
             {formattedTime && (
@@ -129,7 +129,7 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
 
         {/* Content Area */}
         <div className="p-4 text-xs leading-relaxed text-[var(--text-normal)] select-text text-left max-w-full overflow-hidden">
-          <div className="prose prose-invert max-w-none">
+          <div className="prose max-w-none">
             <MarkdownRenderer content={msg.content} />
           </div>
 
@@ -141,12 +141,12 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
                 {msg.attachments.map((att, idx) => (
                   <div
                     key={idx}
-                    className="flex items-center space-x-2 px-2.5 py-1 rounded bg-black/20 border border-[var(--border-color)]/45 text-[10px] font-mono text-[var(--text-normal)] hover:border-[var(--accent-color)]/40 transition-colors"
+                    className="flex items-center space-x-2 px-2.5 py-1 rounded bg-[var(--color-surface-elevated)] border border-[var(--color-border-subtle)] text-[10px] font-mono text-[var(--color-fg-default)] hover:border-[var(--color-border-focus)] transition-colors"
                   >
                     {att.isDir ? (
-                      <Folder size={11} className="text-amber-400/80" />
+                      <Folder size={11} className="text-[var(--color-status-warning)]" />
                     ) : (
-                      <FileText size={11} className="text-sky-400/80" />
+                      <FileText size={11} className="text-[var(--color-status-info)]" />
                     )}
                     <span className="truncate max-w-[200px]">{att.name}</span>
                   </div>

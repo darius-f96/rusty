@@ -65,25 +65,25 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
       {/* Chat sub-header with model dropdowns */}
       <div className="flex items-center gap-2 px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/20 select-none flex-shrink-0">
         <div className="flex items-center gap-1.5 flex-1 min-w-0">
-          <span className="text-[9px] font-mono uppercase text-red-400 flex-shrink-0">Chat</span>
+          <span className="text-[9px] font-mono uppercase text-[var(--color-status-danger)] flex-shrink-0">Chat</span>
           <CustomSelect
             value={exploreModel}
             onChange={(val) => updateNode(selectedNode.id, { exploreModel: val })}
             options={allAvailableModels}
             placeholder={allAvailableModels.length === 0 ? (exploreModel || "None") : "Chat model"}
             className="flex-1 min-w-0 nodrag nopan"
-            buttonClassName="w-full flex items-center justify-between bg-[var(--bg-app)] text-[var(--text-light)] border border-[var(--border-color)] focus:border-red-700 rounded px-1.5 py-1 outline-none cursor-pointer text-left transition-all hover:border-red-700/50 text-[10px] font-mono"
+            buttonClassName="w-full flex items-center justify-between bg-[var(--bg-app)] text-[var(--text-light)] border border-[var(--border-color)] focus:border-[var(--color-status-danger-border)] rounded px-1.5 py-1 outline-none cursor-pointer text-left transition-all hover:border-[var(--color-status-danger-border)] text-[10px] font-mono"
           />
         </div>
         <div className="flex items-center gap-1.5 flex-1 min-w-0">
-          <span className="text-[9px] font-mono uppercase text-amber-400 flex-shrink-0">Summ</span>
+          <span className="text-[9px] font-mono uppercase text-[var(--color-status-warning)] flex-shrink-0">Summ</span>
           <CustomSelect
             value={summarizeModel}
             onChange={(val) => updateNode(selectedNode.id, { summarizeModel: val })}
             options={allAvailableModels}
             placeholder={allAvailableModels.length === 0 ? (summarizeModel || "None") : "Summ model"}
             className="flex-1 min-w-0 nodrag nopan"
-            buttonClassName="w-full flex items-center justify-between bg-[var(--bg-app)] text-[var(--text-light)] border border-[var(--border-color)] focus:border-amber-500 rounded px-1.5 py-1 outline-none cursor-pointer text-left transition-all hover:border-amber-500/50 text-[10px] font-mono"
+            buttonClassName="w-full flex items-center justify-between bg-[var(--bg-app)] text-[var(--text-light)] border border-[var(--border-color)] focus:border-[var(--color-status-warning-border)] rounded px-1.5 py-1 outline-none cursor-pointer text-left transition-all hover:border-[var(--color-status-warning-border)] text-[10px] font-mono"
           />
         </div>
       </div>
@@ -102,7 +102,7 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
       {generatedTaskDraft.length > 0 && (
         <div className="border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/40 p-3 max-h-[45%] overflow-y-auto flex-shrink-0">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-mono uppercase font-bold text-amber-400">Review generated tasks</span>
+            <span className="text-[10px] font-mono uppercase font-bold text-[var(--color-status-warning)]">Review generated tasks</span>
             <button onClick={() => setGeneratedTaskDraft([])} className="text-[var(--text-muted)] hover:text-[var(--text-light)]"><X size={13} /></button>
           </div>
           <div className="space-y-2">
@@ -110,7 +110,7 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
               <div key={index} className="rounded border border-[var(--border-color)] bg-[var(--bg-app)] p-2 flex gap-2">
                 <input type="checkbox" checked={task.selected} onChange={(event) => setGeneratedTaskDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, selected: event.target.checked } : item))} className="mt-1" />
                 <div className="flex-1 space-y-1">
-                  <input value={task.title} onChange={(event) => setGeneratedTaskDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value } : item))} className="w-full bg-transparent text-xs font-semibold text-[var(--text-light)] border-b border-[var(--border-color)] focus:outline-none focus:border-amber-500" />
+                  <input value={task.title} onChange={(event) => setGeneratedTaskDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value } : item))} className="w-full bg-transparent text-xs font-semibold text-[var(--text-light)] border-b border-[var(--border-color)] focus:outline-none focus:border-[var(--color-status-warning-border)]" />
                   <textarea value={task.description} onChange={(event) => setGeneratedTaskDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, description: event.target.value } : item))} rows={3} className="w-full resize-y bg-transparent text-[10px] font-mono text-[var(--text-normal)] focus:outline-none" />
                 </div>
               </div>
@@ -123,7 +123,7 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
               if (tasks.length) setGeneratedTaskDraft([]);
             }}
             disabled={!generatedTaskDraft.some((task) => task.selected && task.title.trim() && task.description.trim())}
-            className="mt-2 w-full bg-emerald-600/90 hover:bg-emerald-500 disabled:opacity-40 text-white rounded px-3 py-2 text-xs font-semibold flex items-center justify-center gap-1.5"
+            className="mt-2 w-full bg-[var(--color-status-success-bg)] hover:bg-[var(--color-status-success-solid)] disabled:opacity-40 text-[var(--color-status-success)] hover:text-[var(--color-status-success-solid-foreground)] rounded px-3 py-2 text-xs font-semibold flex items-center justify-center gap-1.5"
           ><Check size={13} /> Add selected tasks</button>
         </div>
       )}

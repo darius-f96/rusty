@@ -6,7 +6,7 @@
   align-items: flex-start;
   justify-content: center;
   padding: 40px 16px;
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--color-surface-overlay);
   backdrop-filter: blur(6px);
   overflow-y: auto;
 }
@@ -17,7 +17,7 @@
   background: var(--bg-sidebar);
   border: 1px solid var(--border-color);
   border-radius: 16px;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 24px 60px color-mix(in srgb, var(--color-surface-overlay) 80%, transparent);
   display: flex;
   flex-direction: column;
   max-height: calc(100vh - 80px);
@@ -135,7 +135,7 @@
 
 .labelRequired::after {
   content: " *";
-  color: #f43f5e;
+  color: var(--color-status-danger);
 }
 
 .row {
@@ -176,19 +176,19 @@
 .select:focus,
 .textarea:focus {
   border-color: var(--accent-color);
-  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.18);
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
 }
 
 .inputError,
 .selectError,
 .textareaError {
-  border-color: #f43f5e;
+  border-color: var(--color-status-danger);
 }
 
 .inputError:focus,
 .selectError:focus,
 .textareaError:focus {
-  box-shadow: 0 0 0 2px rgba(244, 63, 94, 0.18);
+  box-shadow: 0 0 0 2px var(--color-status-danger-bg);
 }
 
 .select {
@@ -202,7 +202,7 @@
 
 .error {
   font-size: 11px;
-  color: #f43f5e;
+  color: var(--color-status-danger);
   font-family: monospace;
   display: flex;
   align-items: center;
@@ -264,7 +264,7 @@
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--color-primary-foreground);
   transition: transform 0.15s ease;
 }
 
@@ -306,8 +306,8 @@
 }
 
 .iconBtn:hover {
-  color: #f43f5e;
-  border-color: #f43f5e;
+  color: var(--color-status-danger);
+  border-color: var(--color-status-danger-border);
 }
 
 .addBtn {
@@ -353,15 +353,15 @@
 }
 
 .testSuccess {
-  color: #34d399;
-  background: rgba(16, 185, 129, 0.1);
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: var(--color-status-success);
+  background: var(--color-status-success-bg);
+  border: 1px solid var(--color-status-success-border);
 }
 
 .testError {
-  color: #f43f5e;
-  background: rgba(244, 63, 94, 0.1);
-  border: 1px solid rgba(244, 63, 94, 0.3);
+  color: var(--color-status-danger);
+  background: var(--color-status-danger-bg);
+  border: 1px solid var(--color-status-danger-border);
 }
 
 .testPending {
@@ -443,7 +443,7 @@
 }
 
 .btnPrimary {
-  color: #fff;
+  color: var(--color-primary-foreground);
   background: var(--accent-color);
 }
 

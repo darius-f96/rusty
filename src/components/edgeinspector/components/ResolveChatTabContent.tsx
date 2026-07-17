@@ -35,12 +35,12 @@ export const ResolveChatTabContent: React.FC<ResolveChatTabContentProps> = ({
             key={idx}
             className={`flex flex-col rounded-xl p-3 w-full space-y-1 text-left ${
               msg.role === "user"
-                ? "bg-rose-500/10 border border-rose-500/20"
+                ? "bg-[var(--color-status-danger-bg)] border border-[var(--color-status-danger-border)]"
                 : "bg-[var(--bg-sidebar)]/60 border border-[var(--border-color)]/80"
             }`}
           >
             <span className={`font-mono text-[9px] uppercase font-bold ${
-              msg.role === "user" ? "text-rose-400" : "text-violet-400"
+              msg.role === "user" ? "text-[var(--color-status-danger)]" : "text-[var(--color-secondary)]"
             }`}>
               {msg.role === "user" ? "You" : msg.role === "system" ? "System" : "Resolver"}
             </span>
@@ -58,7 +58,7 @@ export const ResolveChatTabContent: React.FC<ResolveChatTabContentProps> = ({
             e.preventDefault();
             handleSendChat();
           }}
-          className="flex items-center space-x-2 bg-[var(--bg-app)] border border-[var(--border-color)] p-1.5 rounded-lg focus-within:border-rose-400"
+          className="flex items-center space-x-2 bg-[var(--bg-app)] border border-[var(--border-color)] p-1.5 rounded-lg focus-within:border-[var(--color-status-danger-border)]"
         >
           <input
             type="text"
@@ -71,7 +71,7 @@ export const ResolveChatTabContent: React.FC<ResolveChatTabContentProps> = ({
           <button
             type="submit"
             disabled={isResolving || !chatInput.trim()}
-            className="bg-rose-500 hover:bg-rose-400 disabled:bg-[var(--bg-sidebar)] disabled:text-[var(--text-muted)] text-white text-xs font-mono font-bold px-3 py-1.5 rounded-md flex items-center space-x-1.5 transition-all cursor-pointer"
+            className="bg-[var(--color-status-danger-solid)] hover:bg-[var(--color-status-danger-solid)] disabled:bg-[var(--bg-sidebar)] disabled:text-[var(--text-muted)] text-[var(--color-status-danger-solid-foreground)] text-xs font-mono font-bold px-3 py-1.5 rounded-md flex items-center space-x-1.5 transition-all cursor-pointer"
           >
             {isResolving ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
             <span>Send</span>

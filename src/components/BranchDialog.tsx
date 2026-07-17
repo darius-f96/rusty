@@ -129,7 +129,7 @@ export const BranchDialog: React.FC<BranchDialogProps> = ({ mode, currentBranch,
     <Modal
       title={config.title}
       icon={config.icon}
-      iconClassName={config.variant === "danger" ? "text-rose-400" : "text-[var(--accent-color)]"}
+      iconClassName={config.variant === "danger" ? "text-[var(--color-status-danger)]" : "text-[var(--accent-color)]"}
       onClose={onCancel}
       onConfirm={handleConfirm}
       confirmLabel={showOriginWarning ? "Delete from Origin" : config.confirmLabel}
@@ -227,21 +227,21 @@ export const BranchDialog: React.FC<BranchDialogProps> = ({ mode, currentBranch,
             onChange={(e) => setForceDelete(e.target.checked)}
             className="accent-rose-500"
           />
-          <span>Force delete (<span className="font-mono text-rose-400">-D</span>) — even if not merged</span>
+          <span>Force delete (<span className="font-mono text-[var(--color-status-danger)]">-D</span>) — even if not merged</span>
         </label>
       )}
 
       {showOriginWarning && (
-        <div className="flex items-start space-x-2 text-xs text-rose-300 font-mono bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2">
-          <AlertTriangle size={14} className="flex-shrink-0 mt-0.5 text-rose-400" />
+        <div className="flex items-start space-x-2 text-xs text-[var(--color-status-danger)] font-mono bg-[var(--color-status-danger-bg)] border border-[var(--color-status-danger-border)] rounded-lg px-3 py-2">
+          <AlertTriangle size={14} className="flex-shrink-0 mt-0.5 text-[var(--color-status-danger)]" />
           <span className="leading-relaxed">
-            This will permanently delete <span className="font-bold text-rose-200">{branchName}</span> from the remote origin via <span className="font-bold">push --delete</span>. This action cannot be undone.
+            This will permanently delete <span className="font-bold text-[var(--color-status-danger)]">{branchName}</span> from the remote origin via <span className="font-bold">push --delete</span>. This action cannot be undone.
           </span>
         </div>
       )}
 
       {error && (
-        <div className="flex items-center space-x-2 text-xs text-rose-400 font-mono">
+        <div className="flex items-center space-x-2 text-xs text-[var(--color-status-danger)] font-mono">
           <AlertCircle size={12} />
           <span>{error}</span>
         </div>

@@ -59,7 +59,7 @@ export const SidePaneHeader: React.FC<SidePaneHeaderProps> = ({
             <button
               onClick={isGeneratingTasks ? onStopGenerateTasks : onGenerateTasks}
               disabled={!isGeneratingTasks && disableGlobalActions}
-              className={`${isGeneratingTasks ? "text-rose-400 hover:text-rose-300 hover:bg-rose-500/10" : "text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"} disabled:text-[var(--text-muted)] disabled:opacity-50 transition-colors px-2 py-1 rounded-lg cursor-pointer flex items-center gap-1 text-[10px] font-mono`}
+              className={`${isGeneratingTasks ? "text-[var(--color-status-danger)] hover:text-[var(--color-status-danger)] hover:bg-[var(--color-status-danger-bg)]" : "text-[var(--color-status-success)] hover:text-[var(--color-status-success)] hover:bg-[var(--color-status-success-bg)]"} disabled:text-[var(--text-muted)] disabled:opacity-50 transition-colors px-2 py-1 rounded-lg cursor-pointer flex items-center gap-1 text-[10px] font-mono`}
               title={isGeneratingTasks ? "Stop task generation" : "Generate editable TaskNode drafts from this conversation"}
             >
               {isGeneratingTasks ? <Octagon size={14} /> : <ListPlus size={14} />}
@@ -68,7 +68,7 @@ export const SidePaneHeader: React.FC<SidePaneHeaderProps> = ({
             <button
               onClick={onSummarize}
               disabled={disableGlobalActions || isSummarizing}
-              className="text-amber-400 hover:text-amber-300 disabled:text-[var(--text-muted)] disabled:opacity-50 transition-colors px-2 py-1 rounded-lg hover:bg-amber-500/10 cursor-pointer flex items-center gap-1 text-[10px] font-mono"
+              className="text-[var(--color-status-warning)] hover:text-[var(--color-status-warning)] disabled:text-[var(--text-muted)] disabled:opacity-50 transition-colors px-2 py-1 rounded-lg hover:bg-[var(--color-status-warning-bg)] cursor-pointer flex items-center gap-1 text-[10px] font-mono"
               title="Generate global architectural summary"
             >
               <Sparkles size={14} className={isSummarizing ? "animate-spin" : ""} />

@@ -57,12 +57,15 @@ export const Modal: React.FC<ModalProps> = ({
 
   const isDanger = variant === "danger";
   const confirmBtnClass = isDanger
-    ? "bg-rose-500 hover:bg-rose-500/85"
+    ? "bg-[var(--color-status-danger-solid)] hover:bg-[var(--color-status-danger-bg)]"
     : "bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80";
+  const confirmTextClass = isDanger
+    ? "text-[var(--color-status-danger-solid-foreground)]"
+    : "text-[var(--color-primary-foreground)]";
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-[var(--color-surface-overlay)] backdrop-blur-sm" onClick={onClose} />
       <div ref={panelRef} className={`relative bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-xl shadow-2xl ${width} max-h-[85vh] flex flex-col`}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border-color)]">
@@ -94,7 +97,7 @@ export const Modal: React.FC<ModalProps> = ({
             <button
               onClick={onConfirm}
               disabled={disableConfirm}
-              className={`flex items-center space-x-1.5 px-4 py-1.5 ${confirmBtnClass} disabled:opacity-40 text-white text-xs font-bold rounded-lg transition-colors`}
+              className={`flex items-center space-x-1.5 px-4 py-1.5 ${confirmBtnClass} ${confirmTextClass} disabled:opacity-40 text-xs font-bold rounded-lg transition-colors`}
             >
               {isDanger ? <AlertTriangle size={13} /> : <Check size={13} />}
               <span>{confirmLabel}</span>

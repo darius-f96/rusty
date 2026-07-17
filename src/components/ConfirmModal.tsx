@@ -39,16 +39,19 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
 
   const kindStyles = {
     warning: {
-      icon: "text-amber-400",
-      button: "bg-amber-600 hover:bg-amber-500",
+      icon: "text-[var(--color-status-warning)]",
+      button: "bg-[var(--color-status-warning-solid)] hover:bg-[var(--color-status-warning-solid)]",
+      foreground: "text-[var(--color-status-warning-solid-foreground)]",
     },
     danger: {
-      icon: "text-rose-400",
-      button: "bg-rose-600 hover:bg-rose-500",
+      icon: "text-[var(--color-status-danger)]",
+      button: "bg-[var(--color-status-danger-solid)] hover:bg-[var(--color-status-danger-solid)]",
+      foreground: "text-[var(--color-status-danger-solid-foreground)]",
     },
     info: {
-      icon: "text-violet-400",
-      button: "bg-violet-600 hover:bg-violet-500",
+      icon: "text-[var(--color-secondary)]",
+      button: "bg-[var(--color-secondary)] hover:opacity-85",
+      foreground: "text-[var(--color-secondary-foreground)]",
     },
   };
 
@@ -56,11 +59,11 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
 
   const modalContent = (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center"
+      className="confirm-modal-portal fixed inset-0 z-[9999] flex items-center justify-center"
       onClick={onCancel}
     >
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-[var(--color-surface-overlay)] backdrop-blur-sm" />
 
       {/* Modal */}
       <div
@@ -96,7 +99,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           </button>
           <button
             onClick={onConfirm}
-            className={`px-3 py-1.5 text-xs font-mono font-bold text-white ${styles.button} rounded-lg transition-colors shadow-md`}
+            className={`px-3 py-1.5 text-xs font-mono font-bold ${styles.foreground} ${styles.button} rounded-lg transition-colors shadow-md`}
           >
             {confirmLabel}
           </button>

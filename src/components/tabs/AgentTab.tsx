@@ -737,7 +737,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
                         <span className="text-[8px] font-mono text-[var(--text-muted)]">{chat.messageCount} msgs</span>
                         <button
                           onClick={(e) => handleDeleteChat(e, chat)}
-                          className="opacity-0 group-hover:opacity-100 text-rose-400/60 hover:text-rose-400 transition-all p-0.5 border-none bg-transparent cursor-pointer"
+                          className="opacity-0 group-hover:opacity-100 text-[var(--color-status-danger)] hover:text-[var(--color-status-danger)] transition-all p-0.5 border-none bg-transparent cursor-pointer"
                           title="Delete chat"
                         >
                           <Trash2 size={10} />
@@ -788,7 +788,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
               className="w-48"
             />
             {modifiedFiles.length > 0 && (
-              <span className="flex items-center space-x-1.5 px-2.5 py-1 bg-emerald-500/15 border border-emerald-500/30 rounded-lg text-[10px] font-mono text-emerald-300">
+              <span className="flex items-center space-x-1.5 px-2.5 py-1 bg-[var(--color-status-success-bg)] border border-[var(--color-status-success-border)] rounded-lg text-[10px] font-mono text-[var(--color-status-success)]">
                 <CheckCircle2 size={11} />
                 <span>{modifiedFiles.length} file{modifiedFiles.length !== 1 ? "s" : ""} modified</span>
               </span>
@@ -803,7 +803,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
         {/* Modified files bar */}
         {modifiedFiles.length > 0 && (
           <div className="flex items-center space-x-2 px-4 py-1.5 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/30 flex-shrink-0 overflow-x-auto">
-            <FolderGit2 size={12} className="text-emerald-400 flex-shrink-0" />
+            <FolderGit2 size={12} className="text-[var(--color-status-success)] flex-shrink-0" />
             <span className="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider flex-shrink-0">Changes:</span>
             {modifiedFiles.map((filePath) => {
               const fileName = filePath.split("/").pop() || filePath;
@@ -811,9 +811,9 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
                 <button
                   key={filePath}
                   onClick={() => handleOpenModifiedFile(filePath)}
-                  className="flex items-center space-x-1 px-2 py-0.5 bg-[var(--bg-app)] border border-[var(--border-color)] hover:border-emerald-500/50 rounded text-[10px] font-mono text-[var(--text-light)] cursor-pointer transition-colors flex-shrink-0"
+                  className="flex items-center space-x-1 px-2 py-0.5 bg-[var(--color-surface-app)] border border-[var(--color-border-default)] hover:border-[var(--color-status-success)] rounded text-[10px] font-mono text-[var(--color-fg-strong)] cursor-pointer transition-colors flex-shrink-0"
                 >
-                  <FileText size={10} className="text-emerald-400" />
+                  <FileText size={10} className="text-[var(--color-status-success)]" />
                   <span>{fileName}</span>
                 </button>
               );

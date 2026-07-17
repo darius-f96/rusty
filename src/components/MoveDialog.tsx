@@ -156,7 +156,7 @@ export const MoveDialog: React.FC<MoveDialogProps> = ({ node, fileTree, onMove, 
           <button
             onClick={handleMove}
             disabled={!destPath.trim()}
-            className="flex items-center space-x-1.5 px-4 py-1.5 bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 disabled:opacity-40 text-white text-xs font-bold rounded-lg transition-colors"
+            className="flex items-center space-x-1.5 px-4 py-1.5 bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 disabled:opacity-40 text-[var(--color-primary-foreground)] text-xs font-bold rounded-lg transition-colors"
           >
             <Check size={13} />
             <span>Move</span>

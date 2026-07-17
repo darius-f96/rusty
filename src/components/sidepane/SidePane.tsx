@@ -168,7 +168,7 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
       {!isMaximized && (
         <div
           onMouseDown={startResizing}
-          className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-red-700/50 active:bg-red-700 transition-colors z-50"
+          className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-[var(--color-status-danger-bg)] active:bg-[var(--color-status-danger-solid)] transition-colors z-50"
           style={{ transform: "translateX(-50%)" }}
         />
       )}
@@ -292,7 +292,7 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
           {nodeStatus === "running" ? (
             <button
               onClick={() => onStopExecution(selectedNode.id)}
-              className="bg-rose-600 hover:bg-rose-500 text-white text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer"
+              className="bg-[var(--color-status-danger-solid)] hover:bg-[var(--color-status-danger-solid)] text-[var(--color-status-danger-solid-foreground)] text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer"
             >
               <Octagon size={14} />
               <span>Stop</span>
@@ -300,7 +300,7 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
           ) : (
             <button
               onClick={() => onExecuteNode(selectedNode.id)}
-              className="bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 disabled:bg-[var(--bg-sidebar)] disabled:text-[var(--text-muted)] text-white text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all glow-btn shadow-md cursor-pointer"
+              className="bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 disabled:bg-[var(--bg-sidebar)] disabled:text-[var(--text-muted)] text-[var(--color-primary-foreground)] text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all glow-btn shadow-md cursor-pointer"
             >
               <Sparkles size={14} />
               <span>Run Executor</span>

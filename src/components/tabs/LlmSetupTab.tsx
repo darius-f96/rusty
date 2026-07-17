@@ -246,22 +246,22 @@ export const LlmSetupTab: React.FC = () => {
                 // Connection indicator status text & color
                 const testedStatus = connectionStatus[p.id];
                 let statusLabel = p.authType === "none" ? "No Auth" : "Env / Key";
-                let statusColor = "bg-amber-500/80";
+                let statusColor = "bg-[var(--color-status-warning-bg)] text-[var(--color-status-warning)]";
                 if (testedStatus === "connected") {
                   statusLabel = "Connected";
-                  statusColor = "bg-emerald-500";
+                  statusColor = "bg-[var(--color-status-success-solid)] text-[var(--color-status-success-solid-foreground)]";
                 } else if (testedStatus === "failed") {
                   statusLabel = "Failed";
-                  statusColor = "bg-rose-500/80";
+                  statusColor = "bg-[var(--color-status-danger-bg)] text-[var(--color-status-danger)]";
                 } else if (p.apiKey) {
                   statusLabel = "Configured";
-                  statusColor = "bg-emerald-500";
+                  statusColor = "bg-[var(--color-status-success-solid)] text-[var(--color-status-success-solid-foreground)]";
                 } else if (
                   p.authType !== "none"
                   && !["openai", "anthropic", "opencode", "opencode-go", "github-models"].includes(p.id)
                 ) {
                   statusLabel = "Key Required";
-                  statusColor = "bg-rose-500/80";
+                  statusColor = "bg-[var(--color-status-danger-bg)] text-[var(--color-status-danger)]";
                 }
 
                 const isGithubModels = p.id === "github-models";
@@ -278,7 +278,7 @@ export const LlmSetupTab: React.FC = () => {
                     }}
                     className={`group flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${
                       isActive
-                        ? "border-[var(--accent-color)] bg-[var(--accent-bg)]/20 shadow-[0_0_10px_rgba(139,92,246,0.1)]"
+                        ? "border-[var(--accent-color)] bg-[var(--accent-bg)]/20 shadow-[0_0_10px_var(--color-focus-ring)]"
                         : "border-[var(--border-color)] bg-[var(--bg-app)]/50 hover:bg-[var(--bg-sidebar)] hover:border-[var(--border-active)]"
                     }`}
                   >
@@ -293,7 +293,7 @@ export const LlmSetupTab: React.FC = () => {
                     </div>
 
                     <div className="flex items-center space-x-2 flex-shrink-0">
-                      <span className={`text-[8px] font-bold text-white px-1.5 py-0.5 rounded-full ${statusColor}`}>
+                      <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full ${statusColor}`}>
                         {statusLabel}
                       </span>
                       {isActive && <div className="w-1.5 h-1.5 rounded-full bg-[var(--accent-color)] animate-pulse" />}
@@ -323,7 +323,7 @@ export const LlmSetupTab: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowAddCustom(false)}
-                  className="text-rose-400 hover:text-rose-300 text-[10px] font-mono cursor-pointer"
+                  className="text-[var(--color-status-danger)] hover:text-[var(--color-status-danger)] text-[10px] font-mono cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -409,7 +409,7 @@ export const LlmSetupTab: React.FC = () => {
 
                 <button
                   type="submit"
-                  className="w-full bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/85 text-white font-mono font-bold py-2 rounded-lg text-xs transition-all shadow-md cursor-pointer flex items-center justify-center space-x-1.5"
+                  className="w-full bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/85 text-[var(--color-primary-foreground)] font-mono font-bold py-2 rounded-lg text-xs transition-all shadow-md cursor-pointer flex items-center justify-center space-x-1.5"
                 >
                   <Plus size={13} />
                   <span>Register Provider</span>
@@ -446,7 +446,7 @@ export const LlmSetupTab: React.FC = () => {
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
                     <label className="block text-xs font-bold text-[var(--text-normal)] uppercase font-mono tracking-wide flex items-center space-x-1.5">
-                      <Key size={13} className="text-violet-400" />
+                      <Key size={13} className="text-[var(--color-secondary)]" />
                       <span>API Authorization Key</span>
                     </label>
                     {authType !== "none" && (
@@ -493,7 +493,7 @@ export const LlmSetupTab: React.FC = () => {
                     </span>
                   )}
                   {selectedProvider.id === "github-models" && !apiKey && (
-                    <span className="text-[10px] text-amber-400/80 leading-relaxed italic block mt-1 font-mono flex items-center space-x-1">
+                    <span className="text-[10px] text-[var(--color-status-warning)] leading-relaxed italic block mt-1 font-mono flex items-center space-x-1">
                       <GitBranch size={10} className="flex-shrink-0" />
                       <span>Enter a PAT with <strong>models:read</strong>, or provide GITHUB_TOKEN to the sidecar environment.</span>
                     </span>
@@ -503,7 +503,7 @@ export const LlmSetupTab: React.FC = () => {
                 {/* 2. Base URL Input */}
                 <div className="space-y-2">
                   <label className="block text-xs font-bold text-[var(--text-normal)] uppercase font-mono tracking-wide flex items-center space-x-1.5">
-                    <Globe size={13} className="text-violet-400" />
+                    <Globe size={13} className="text-[var(--color-secondary)]" />
                     <span>Connection Base URL</span>
                   </label>
                   
@@ -526,7 +526,7 @@ export const LlmSetupTab: React.FC = () => {
                 {/* 3. Model catalog URL */}
                 <div className="space-y-2">
                   <label className="block text-xs font-bold text-[var(--text-normal)] uppercase font-mono tracking-wide flex items-center space-x-1.5">
-                    <Layers size={13} className="text-violet-400" />
+                    <Layers size={13} className="text-[var(--color-secondary)]" />
                     <span>Model Catalog URL</span>
                   </label>
                   <input
@@ -564,7 +564,7 @@ export const LlmSetupTab: React.FC = () => {
                 {/* 4. Default Target Model Dropdown */}
                 <div className="space-y-2 pt-2">
                   <label className="block text-xs font-bold text-[var(--text-normal)] uppercase font-mono tracking-wide flex items-center space-x-1.5">
-                    <Layers size={13} className="text-violet-400" />
+                    <Layers size={13} className="text-[var(--color-secondary)]" />
                     <span>Default Target Model</span>
                   </label>
                   <CustomSelect
@@ -589,7 +589,7 @@ export const LlmSetupTab: React.FC = () => {
                 {/* Save and Fetch buttons */}
                 <div className="pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-[var(--border-color)]/30">
                   <div className="flex items-center space-x-1.5 text-[10px] font-mono text-[var(--text-muted)]">
-                    <ShieldCheck size={14} className="text-emerald-400" />
+                    <ShieldCheck size={14} className="text-[var(--color-status-success)]" />
                     <span>Active: {activeModel}</span>
                   </div>
 
@@ -609,16 +609,16 @@ export const LlmSetupTab: React.FC = () => {
                       type="button"
                       onClick={handleTestConnection}
                       disabled={fetchingModels || testingConnection}
-                      className="border border-[var(--border-color)] hover:border-emerald-400 bg-[var(--bg-app)] hover:bg-emerald-500/10 text-[var(--text-normal)] hover:text-[var(--text-light)] font-mono font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer flex items-center space-x-1.5 disabled:opacity-50"
+                      className="border border-[var(--border-color)] hover:border-[var(--color-status-success-border)] bg-[var(--bg-app)] hover:bg-[var(--color-status-success-bg)] text-[var(--text-normal)] hover:text-[var(--text-light)] font-mono font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer flex items-center space-x-1.5 disabled:opacity-50"
                     >
-                      <ShieldCheck size={13} className={testingConnection ? "animate-pulse text-emerald-400" : ""} />
+                      <ShieldCheck size={13} className={testingConnection ? "animate-pulse text-[var(--color-status-success)]" : ""} />
                       <span>{testingConnection ? "Testing..." : "Test"}</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={handleSaveSettings}
-                      className="bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/85 text-white font-mono font-bold px-4 py-2.5 rounded-xl transition-all shadow-lg hover:shadow-[var(--accent-color)]/20 cursor-pointer flex items-center space-x-1.5"
+                      className="bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/85 text-[var(--color-primary-foreground)] font-mono font-bold px-4 py-2.5 rounded-xl transition-all shadow-lg hover:shadow-[var(--accent-color)]/20 cursor-pointer flex items-center space-x-1.5"
                     >
                       <Save size={13} />
                       <span>Save Configuration</span>

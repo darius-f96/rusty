@@ -22,9 +22,9 @@ export const EdgeInspectorHeader: React.FC<EdgeInspectorHeaderProps> = ({
   onDelete
 }) => {
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-color)] bg-gradient-to-r from-rose-500/10 to-transparent flex-shrink-0">
+    <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-color)] bg-gradient-to-r from-[var(--color-status-danger-bg)] to-transparent flex-shrink-0">
       <div className="flex flex-col">
-        <span className="font-mono text-xs text-rose-400 uppercase tracking-wider flex items-center space-x-1.5">
+        <span className="font-mono text-xs text-[var(--color-status-danger)] uppercase tracking-wider flex items-center space-x-1.5">
           <AlertTriangle size={12} />
           <span>Edge Inspector</span>
         </span>
@@ -37,7 +37,7 @@ export const EdgeInspectorHeader: React.FC<EdgeInspectorHeaderProps> = ({
           <button
             onClick={onDelete}
             title="Delete Connection"
-            className="text-rose-400 hover:text-rose-300 transition-colors p-1 rounded-lg hover:bg-rose-500/10 cursor-pointer"
+            className="text-[var(--color-status-danger)] hover:text-[var(--color-status-danger)] transition-colors p-1 rounded-lg hover:bg-[var(--color-status-danger-bg)] cursor-pointer"
           >
             <Trash2 size={15} />
           </button>

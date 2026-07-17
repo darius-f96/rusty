@@ -23,7 +23,7 @@ export const EdgeInspectorTabs: React.FC<EdgeInspectorTabsProps> = ({
         onClick={() => setActiveTab("conflicts")}
         className={`flex items-center space-x-1.5 px-4 py-2.5 border-b-2 transition-all ${
           activeTab === "conflicts"
-            ? "border-rose-400 text-[var(--text-light)] bg-rose-500/5 font-semibold"
+            ? "border-[var(--color-status-danger-border)] text-[var(--text-light)] bg-[var(--color-status-danger-bg)] font-semibold"
             : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-light)]"
         }`}
       >
@@ -34,7 +34,7 @@ export const EdgeInspectorTabs: React.FC<EdgeInspectorTabsProps> = ({
         onClick={() => setActiveTab("diff")}
         className={`flex items-center space-x-1.5 px-4 py-2.5 border-b-2 transition-all ${
           activeTab === "diff"
-            ? "border-rose-400 text-[var(--text-light)] bg-rose-500/5 font-semibold"
+            ? "border-[var(--color-status-danger-border)] text-[var(--text-light)] bg-[var(--color-status-danger-bg)] font-semibold"
             : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-light)]"
         }`}
       >
@@ -45,7 +45,7 @@ export const EdgeInspectorTabs: React.FC<EdgeInspectorTabsProps> = ({
         onClick={() => setActiveTab("chat")}
         className={`flex items-center space-x-1.5 px-4 py-2.5 border-b-2 transition-all ${
           activeTab === "chat"
-            ? "border-rose-400 text-[var(--text-light)] bg-rose-500/5 font-semibold"
+            ? "border-[var(--color-status-danger-border)] text-[var(--text-light)] bg-[var(--color-status-danger-bg)] font-semibold"
             : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-light)]"
         }`}
       >

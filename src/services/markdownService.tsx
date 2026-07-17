@@ -70,7 +70,7 @@ export function parseInlineMarkdown(text: string): React.ReactNode[] {
       parts.push(<em key={tokenKey} className="italic text-[var(--text-normal)]">{firstMatch.content}</em>);
     } else if (firstMatch.type === "code") {
       parts.push(
-        <code key={tokenKey} className="px-1.5 py-0.5 rounded bg-[var(--bg-sidebar)] border border-[var(--border-color)] text-rose-400 font-mono text-[11px]">
+        <code key={tokenKey} className="px-1.5 py-0.5 rounded bg-[var(--bg-sidebar)] border border-[var(--border-color)] text-[var(--color-status-danger)] font-mono text-[11px]">
           {firstMatch.content}
         </code>
       );
@@ -82,7 +82,7 @@ export function parseInlineMarkdown(text: string): React.ReactNode[] {
           href={url} 
           target="_blank" 
           rel="noopener noreferrer" 
-          className="text-violet-400 hover:text-violet-300 underline font-semibold transition-colors"
+          className="text-[var(--color-secondary)] hover:text-[var(--color-secondary)] underline font-semibold transition-colors"
         >
           {firstMatch.content}
         </a>
@@ -168,7 +168,7 @@ export function formatMarkdownBlocks(text: string): React.ReactNode[] {
   const flushQuote = () => {
     if (currentQuote) {
       elements.push(
-        <blockquote key={`quote-${keyIdx++}`} className="border-l-4 border-violet-500/50 pl-3 py-1 my-2 bg-[var(--bg-sidebar)]/20 rounded-r text-[var(--text-muted)] italic space-y-1 text-left">
+        <blockquote key={`quote-${keyIdx++}`} className="border-l-4 border-[var(--color-secondary-border)] pl-3 py-1 my-2 bg-[var(--bg-sidebar)]/20 rounded-r text-[var(--text-muted)] italic space-y-1 text-left">
           {currentQuote.map((lineContent, idx) => (
             <p key={idx} className="leading-relaxed text-[11px] my-1">
               {lineContent}
@@ -310,10 +310,10 @@ export function formatMessageText(text: string): React.ReactNode[] {
       parts.push(
         <div 
           key={`code-${matchIndex}`} 
-          className="my-3 border border-[var(--border-color)] rounded-lg overflow-hidden bg-black/40 w-full flex flex-col font-sans"
+          className="my-3 border border-[var(--border-color)] rounded-lg overflow-hidden bg-[var(--color-surface-sunken)] w-full flex flex-col font-sans"
         >
           <div className="flex items-center justify-between px-3 py-1.5 bg-[var(--bg-sidebar)]/80 border-b border-[var(--border-color)] select-none flex-shrink-0">
-            <span className="text-[10px] uppercase font-mono font-bold text-violet-400">{lang}</span>
+            <span className="text-[10px] uppercase font-mono font-bold text-[var(--color-secondary)]">{lang}</span>
             <button
               className="text-[10px] font-mono text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer bg-transparent border-none p-0"
               onClick={() => { navigator.clipboard.writeText(code); }}

@@ -59,10 +59,10 @@ export const ConsoleTabContent: React.FC<ConsoleTabContentProps> = ({ selectedNo
     <div
       ref={consoleScrollRef}
       onScroll={handleScroll}
-      className="flex flex-col h-full p-4 font-mono text-xs bg-black text-zinc-400 overflow-y-auto space-y-1"
+      className="flex flex-col h-full p-4 font-mono text-xs bg-[var(--color-log-background)] text-[var(--color-log-foreground)] overflow-y-auto space-y-1"
     >
       {nodeLogs.length === 0 ? (
-        <span className="text-zinc-600">// No execution logs yet.</span>
+        <span className="text-[var(--color-log-muted)]">// No execution logs yet.</span>
       ) : (
         nodeLogs.map((log: string, idx: number) => (
           <div key={idx} className="whitespace-pre-wrap leading-relaxed">

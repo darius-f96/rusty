@@ -260,7 +260,7 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, onStopExec
                       }
                     }
                   }}
-                  className="p-1 text-[var(--text-muted)] hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors cursor-pointer"
+                  className="p-1 text-[var(--text-muted)] hover:text-[var(--color-status-danger)] hover:bg-[var(--color-status-danger-bg)] rounded transition-colors cursor-pointer"
                   title="Delete this file from VFS"
                 >
                   <Trash2 size={14} />
@@ -281,7 +281,7 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, onStopExec
                     }
                   }
                 }}
-                className="flex items-center space-x-1 px-1.5 py-0.5 text-[10px] text-[var(--text-muted)] hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors cursor-pointer animate-fade-in"
+                className="flex items-center space-x-1 px-1.5 py-0.5 text-[10px] text-[var(--text-muted)] hover:text-[var(--color-status-danger)] hover:bg-[var(--color-status-danger-bg)] rounded transition-colors cursor-pointer animate-fade-in"
                 title="Delete all files from VFS"
               >
                 <Trash2 size={12} />
@@ -315,7 +315,7 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, onStopExec
             <button
               onClick={handleSave}
               disabled={!isDirty || isSaving}
-              className="flex items-center space-x-1 px-2 py-1 text-[10px] font-mono bg-emerald-600/80 hover:bg-emerald-600 disabled:bg-[var(--bg-sidebar)] disabled:text-[var(--text-muted)] text-white rounded transition-colors"
+              className="flex items-center space-x-1 px-2 py-1 text-[10px] font-mono bg-[var(--color-status-success-bg)] hover:bg-[var(--color-status-success-solid)] text-[var(--color-status-success)] hover:text-[var(--color-status-success-solid-foreground)] disabled:bg-[var(--bg-sidebar)] disabled:text-[var(--text-muted)] rounded transition-colors"
               title="Save changes to VFS"
             >
               <Save size={11} />
@@ -363,9 +363,9 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, onStopExec
           )}
 
           {taskSubTab === "console" && (
-            <div className="flex flex-col h-full p-4 font-mono text-xs bg-black text-zinc-400 overflow-y-auto space-y-1">
+            <div className="flex flex-col h-full p-4 font-mono text-xs bg-[var(--color-log-background)] text-[var(--color-log-foreground)] overflow-y-auto space-y-1">
               {nodeLogs.length === 0 ? (
-                <span className="text-zinc-600">// No execution logs yet.</span>
+                <span className="text-[var(--color-log-muted)]">// No execution logs yet.</span>
               ) : (
                 nodeLogs.map((log, idx) => (
                   <div key={idx} className="whitespace-pre-wrap leading-relaxed">
@@ -429,7 +429,7 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, onStopExec
             {nodeStatus === "running" ? (
               <button
                 onClick={() => onStopExecution(taskNodeId)}
-                className="bg-rose-600 hover:bg-rose-500 text-white text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer"
+                className="bg-[var(--color-status-danger-solid)] hover:bg-[var(--color-status-danger-solid)] text-[var(--color-status-danger-solid-foreground)] text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer"
               >
                 <Octagon size={14} />
                 <span>Stop</span>
@@ -437,7 +437,7 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, onStopExec
             ) : (
               <button
                 onClick={() => onExecuteNode(taskNodeId)}
-                className="bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 text-white text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all glow-btn shadow-md cursor-pointer"
+                className="bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 text-[var(--color-primary-foreground)] text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all glow-btn shadow-md cursor-pointer"
               >
                 <Sparkles size={14} />
                 <span>Run Executor</span>

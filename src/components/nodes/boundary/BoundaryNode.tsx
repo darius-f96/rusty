@@ -226,13 +226,13 @@ export const BoundaryNode: React.FC<{ id: string; data: any }> = memo(({ id, dat
 
       {/* Boundary rectangle - click-through, visual only */}
       <div
-        className="w-full h-full border-2 border-dashed border-violet-400/50 bg-violet-500/[0.08] rounded-lg"
+        className="w-full h-full border-2 border-dashed border-[var(--color-secondary-border)] bg-[var(--color-secondary-bg)]/[0.08] rounded-lg"
         style={{ pointerEvents: "none" }}
       />
 
       {/* Drag bar at top edge - the only part that moves the boundary */}
       <div
-        className="nodrag nopan absolute top-0 left-0 right-0 h-5 flex items-center justify-center cursor-move rounded-t-lg hover:bg-violet-500/20 transition-colors group"
+        className="nodrag nopan absolute top-0 left-0 right-0 h-5 flex items-center justify-center cursor-move rounded-t-lg hover:bg-[var(--color-secondary-bg)] transition-colors group"
         style={{ pointerEvents: "auto" }}
         onMouseDown={handleDragMouseDown}
         onPointerDown={(e) => e.stopPropagation()}
@@ -240,7 +240,7 @@ export const BoundaryNode: React.FC<{ id: string; data: any }> = memo(({ id, dat
       >
         <GripHorizontal
           size={14}
-          className="text-violet-400/40 group-hover:text-violet-400/80 transition-colors pointer-events-none"
+          className="text-[var(--color-secondary)] group-hover:text-[var(--color-secondary)] transition-colors pointer-events-none"
         />
       </div>
 
@@ -251,7 +251,7 @@ export const BoundaryNode: React.FC<{ id: string; data: any }> = memo(({ id, dat
         onPointerDown={(e) => e.stopPropagation()}
         style={{ pointerEvents: "auto" }}
       >
-        <div className="w-2.5 h-2.5 bg-violet-300/80 rounded-sm border border-violet-500 shadow-sm hover:bg-violet-200 transition-colors" />
+        <div className="w-2.5 h-2.5 bg-[var(--color-secondary-bg)] rounded-sm border border-[var(--color-secondary-border)] shadow-sm hover:bg-[var(--color-secondary-bg)] transition-colors" />
       </div>
       <div
         className="nodrag nopan resize-handle absolute -top-1.5 -right-1.5 w-4 h-4 cursor-ne-resize flex items-center justify-center"
@@ -259,7 +259,7 @@ export const BoundaryNode: React.FC<{ id: string; data: any }> = memo(({ id, dat
         onPointerDown={(e) => e.stopPropagation()}
         style={{ pointerEvents: "auto" }}
       >
-        <div className="w-2.5 h-2.5 bg-violet-300/80 rounded-sm border border-violet-500 shadow-sm hover:bg-violet-200 transition-colors" />
+        <div className="w-2.5 h-2.5 bg-[var(--color-secondary-bg)] rounded-sm border border-[var(--color-secondary-border)] shadow-sm hover:bg-[var(--color-secondary-bg)] transition-colors" />
       </div>
       <div
         className="nodrag nopan resize-handle absolute -bottom-1.5 -left-1.5 w-4 h-4 cursor-sw-resize flex items-center justify-center"
@@ -267,7 +267,7 @@ export const BoundaryNode: React.FC<{ id: string; data: any }> = memo(({ id, dat
         onPointerDown={(e) => e.stopPropagation()}
         style={{ pointerEvents: "auto" }}
       >
-        <div className="w-2.5 h-2.5 bg-violet-300/80 rounded-sm border border-violet-500 shadow-sm hover:bg-violet-200 transition-colors" />
+        <div className="w-2.5 h-2.5 bg-[var(--color-secondary-bg)] rounded-sm border border-[var(--color-secondary-border)] shadow-sm hover:bg-[var(--color-secondary-bg)] transition-colors" />
       </div>
       <div
         className="nodrag nopan resize-handle absolute -bottom-1.5 -right-1.5 w-4 h-4 cursor-se-resize flex items-center justify-center"
@@ -275,7 +275,7 @@ export const BoundaryNode: React.FC<{ id: string; data: any }> = memo(({ id, dat
         onPointerDown={(e) => e.stopPropagation()}
         style={{ pointerEvents: "auto" }}
       >
-        <div className="w-2.5 h-2.5 bg-violet-300/80 rounded-sm border border-violet-500 shadow-sm hover:bg-violet-200 transition-colors" />
+        <div className="w-2.5 h-2.5 bg-[var(--color-secondary-bg)] rounded-sm border border-[var(--color-secondary-border)] shadow-sm hover:bg-[var(--color-secondary-bg)] transition-colors" />
       </div>
 
       {/* Delete button */}
@@ -283,7 +283,7 @@ export const BoundaryNode: React.FC<{ id: string; data: any }> = memo(({ id, dat
         onClick={handleDelete}
         onPointerDown={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
-        className="nodrag nopan absolute -top-2.5 -right-2.5 w-5 h-5 bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-full flex items-center justify-center text-[var(--text-muted)] hover:text-rose-400 hover:border-rose-400 transition-colors shadow-md z-30 cursor-pointer"
+        className="nodrag nopan absolute -top-2.5 -right-2.5 w-5 h-5 bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-full flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--color-status-danger)] hover:border-[var(--color-status-danger-border)] transition-colors shadow-md z-30 cursor-pointer"
         style={{ pointerEvents: "auto" }}
         title="Delete boundary"
       >

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { GitBranch, Plus, Minus, RotateCcw, Check, AlertCircle, ArrowUp, ArrowDown, GitCommit, ChevronDown } from "lucide-react";
 import { useWorkspaceStore } from "../store";
 import { invoke } from "@tauri-apps/api/core";
@@ -25,6 +25,7 @@ export const SourceControl: React.FC = () => {
   const [isHistoryExpanded, setIsHistoryExpanded] = useState(true);
   const [historyCommits, setHistoryCommits] = useState<any[]>([]);
   const [showBranchPopover, setShowBranchPopover] = useState(false);
+  const branchLoadIdRef = useRef(0);
 
   const lastRename = useWorkspaceStore((state) => state.lastRename);
   const setLastRename = useWorkspaceStore((state) => state.setLastRename);
@@ -54,6 +55,31 @@ export const SourceControl: React.FC = () => {
     }
   }, [rootPath]);
 
+  const loadBranches = async (rootDir: string, fetchRemote = true) => {
+    if (!rootDir) return;
+
+    // Only the newest branch read is allowed to update the IntelliJ-style
+    // popup model. A slower fetch started before a create/delete must never
+    // overwrite the post-operation branch list.
+    const loadId = ++branchLoadIdRef.current;
+    try {
+      if (fetchRemote) {
+        try {
+          await invoke("git_fetch", { rootDir });
+        } catch (e) {
+          console.warn("Failed to refresh remote branches; using local refs:", e);
+        }
+      }
+
+      const res: { local: string[]; remote: string[] } = await invoke("git_get_all_branches", { rootDir });
+      if (loadId !== branchLoadIdRef.current) return;
+      setLocalBranches(res.local || []);
+      setRemoteBranches(res.remote || []);
+    } catch (e) {
+      console.warn("Failed to load branches for current repo:", e);
+    }
+  };
+
   // Load Git status, branches, and history on repository switch
   const loadRepoData = async () => {
     if (activeRepo) {
@@ -68,17 +94,7 @@ export const SourceControl: React.FC = () => {
           console.warn("Failed to load history commits for current repo:", e);
         }
 
-        // Fetch branches
-        try {
-          try {
-            await invoke("git_fetch", { rootDir: activeRepo });
-          } catch {}
-          const res: { local: string[]; remote: string[] } = await invoke("git_get_all_branches", { rootDir: activeRepo });
-          setLocalBranches(res.local || []);
-          setRemoteBranches(res.remote || []);
-        } catch (e) {
-          console.warn("Failed to load branches for current repo:", e);
-        }
+        await loadBranches(activeRepo);
       } catch (err) {
         console.error("Failed to load repo data:", err);
       }
@@ -86,6 +102,9 @@ export const SourceControl: React.FC = () => {
   };
 
   useEffect(() => {
+    branchLoadIdRef.current += 1;
+    setLocalBranches([]);
+    setRemoteBranches([]);
     loadRepoData();
   }, [activeRepo]);
 
@@ -93,7 +112,7 @@ export const SourceControl: React.FC = () => {
   if (!rootPath) {
     return (
       <div className="flex flex-col items-center justify-center p-6 h-full text-center text-[var(--text-muted)] font-mono text-xs select-none">
-        <AlertCircle size={20} className="text-amber-500 mb-2" />
+        <AlertCircle size={20} className="text-[var(--color-status-warning)] mb-2" />
         <span>Open a folder first to view Source Control</span>
       </div>
     );
@@ -128,7 +147,7 @@ export const SourceControl: React.FC = () => {
         <button
           onClick={handleInitializeRepo}
           disabled={initLoading}
-          className="w-full bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/85 disabled:bg-[var(--border-color)] text-white text-xs font-mono font-bold py-2 rounded-lg transition-all shadow-md cursor-pointer flex items-center justify-center"
+          className="w-full bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/85 disabled:bg-[var(--border-color)] text-[var(--color-primary-foreground)] text-xs font-mono font-bold py-2 rounded-lg transition-all shadow-md cursor-pointer flex items-center justify-center"
         >
           {initLoading ? "Initializing..." : "Initialize Repository"}
         </button>
@@ -257,9 +276,28 @@ export const SourceControl: React.FC = () => {
   const handleDeleteBranch = async (branchName: string, force: boolean) => {
     try {
       await gitPresenter.deleteBranch(activeRepo, branchName, force);
-      await loadRepoData();
+
+      // Reflect the successful ref mutation synchronously. The subsequent
+      // authoritative read covers external Git changes without letting an
+      // older in-flight request put the deleted row back.
+      branchLoadIdRef.current += 1;
+      if (branchName.startsWith("origin/")) {
+        setRemoteBranches((branches) => branches.filter((branch) => branch !== branchName));
+      } else {
+        setLocalBranches((branches) => branches.filter((branch) => branch !== branchName));
+      }
+      await loadBranches(activeRepo, false);
     } catch (err) {
       console.error(err);
+      throw err;
+    }
+  };
+
+  const handleBranchPopoverToggle = () => {
+    const opening = !showBranchPopover;
+    setShowBranchPopover(opening);
+    if (opening) {
+      void loadBranches(activeRepo);
     }
   };
 
@@ -317,16 +355,16 @@ export const SourceControl: React.FC = () => {
   const getStatusIndicator = (statusType: string) => {
     switch (statusType) {
       case "added":
-        return { char: "A", colorClass: "text-emerald-400 font-bold" };
+        return { char: "A", colorClass: "text-[var(--color-status-success)] font-bold" };
       case "deleted":
-        return { char: "D", colorClass: "text-rose-500 font-bold" };
+        return { char: "D", colorClass: "text-[var(--color-status-danger)] font-bold" };
       case "untracked":
-        return { char: "U", colorClass: "text-emerald-400 opacity-80" };
+        return { char: "U", colorClass: "text-[var(--color-status-success)] opacity-80" };
       case "renamed":
-        return { char: "R", colorClass: "text-sky-400 font-bold" };
+        return { char: "R", colorClass: "text-[var(--color-status-info)] font-bold" };
       case "modified":
       default:
-        return { char: "M", colorClass: "text-amber-400 font-bold" };
+        return { char: "M", colorClass: "text-[var(--color-status-warning)] font-bold" };
     }
   };
 
@@ -360,7 +398,7 @@ export const SourceControl: React.FC = () => {
     <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-[var(--bg-sidebar)] font-sans text-xs select-none relative">
       {/* Subproject Selector (Only if nested repositories are present) */}
       {subprojects.length > 1 && (
-        <div className="px-4 py-2 border-b border-[var(--border-color)]/60 bg-black/10 flex items-center justify-between flex-shrink-0">
+        <div className="px-4 py-2 border-b border-[var(--border-color)]/60 bg-[var(--color-surface-sunken)] flex items-center justify-between flex-shrink-0">
           <span className="text-[9px] font-mono text-[var(--text-muted)] uppercase font-semibold">Repository:</span>
           <select
             value={activeRepo}
@@ -380,7 +418,7 @@ export const SourceControl: React.FC = () => {
       )}
 
       {/* Header Info */}
-      <div className="px-4 py-3 border-b border-[var(--border-color)] flex items-center justify-between flex-shrink-0 bg-black/5">
+      <div className="px-4 py-3 border-b border-[var(--border-color)] flex items-center justify-between flex-shrink-0 bg-[var(--color-surface-sunken)]">
         <div className="flex items-center space-x-2">
           <span className="font-bold text-[var(--text-light)] uppercase tracking-wider text-[10px] font-mono">Source Control</span>
           <button
@@ -398,13 +436,13 @@ export const SourceControl: React.FC = () => {
             <button
               type="button"
               onClick={handleAbortPending}
-              className="p-1 rounded hover:bg-rose-500/10 text-[var(--text-muted)] hover:text-rose-400 transition-colors cursor-pointer"
+              className="p-1 rounded hover:bg-[var(--color-status-danger-bg)] text-[var(--text-muted)] hover:text-[var(--color-status-danger)] transition-colors cursor-pointer"
               title="Abort Merge/Rebase"
             >
               <RotateCcw size={12} />
             </button>
             <button
-              onClick={() => setShowBranchPopover(!showBranchPopover)}
+              onClick={handleBranchPopoverToggle}
               className="flex items-center space-x-1 bg-[var(--accent-bg)]/35 text-[var(--accent-color)] px-2 py-1 rounded font-mono text-[10px] border border-[var(--accent-color)]/25 hover:border-[var(--accent-color)]/50 transition-all cursor-pointer font-bold"
             >
               <GitBranch size={10} className="flex-shrink-0 mr-1" />
@@ -431,7 +469,7 @@ export const SourceControl: React.FC = () => {
       </div>
 
       {/* Commit Box Form */}
-      <div className="p-3 border-b border-[var(--border-color)] flex-shrink-0 bg-black/10">
+      <div className="p-3 border-b border-[var(--border-color)] flex-shrink-0 bg-[var(--color-surface-sunken)]">
         <form onSubmit={handleCommit} className="space-y-2">
           <textarea
             placeholder={`Commit message (Cmd+Enter to commit)`}
@@ -449,7 +487,7 @@ export const SourceControl: React.FC = () => {
           <button
             type="submit"
             disabled={isCommitting || !commitMsg.trim() || totalChanges === 0}
-            className="w-full bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/85 disabled:bg-[var(--border-color)] disabled:opacity-50 text-white text-[11px] font-mono font-bold py-1.5 rounded-lg transition-all shadow-md flex items-center justify-center space-x-1.5 cursor-pointer glow-btn"
+            className="w-full bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/85 disabled:bg-[var(--border-color)] disabled:opacity-50 text-[var(--color-primary-foreground)] text-[11px] font-mono font-bold py-1.5 rounded-lg transition-all shadow-md flex items-center justify-center space-x-1.5 cursor-pointer glow-btn"
           >
             <Check size={12} />
             <span>{isCommitting ? "Committing..." : "Commit"}</span>
@@ -518,7 +556,7 @@ export const SourceControl: React.FC = () => {
                     <div className="flex items-center space-x-2.5">
                       <button
                         onClick={(e) => handleUnstageFile(e, file.path)}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-[var(--text-muted)] hover:text-rose-400 hover:bg-black/20 rounded transition-all cursor-pointer"
+                        className="opacity-0 group-hover:opacity-100 p-1 text-[var(--text-muted)] hover:text-[var(--color-status-danger)] hover:bg-[var(--color-surface-sunken)] rounded transition-all cursor-pointer"
                         title="Unstage changes"
                       >
                         <Minus size={11} />
@@ -547,7 +585,7 @@ export const SourceControl: React.FC = () => {
               <button
                 type="button"
                 onClick={handleDiscardAllChanges}
-                className="p-1 rounded hover:bg-rose-500/10 text-[var(--text-muted)] hover:text-rose-400 transition-colors cursor-pointer"
+                className="p-1 rounded hover:bg-[var(--color-status-danger-bg)] text-[var(--text-muted)] hover:text-[var(--color-status-danger)] transition-colors cursor-pointer"
                 title="Discard All Unstaged Changes"
               >
                 <RotateCcw size={12} />
@@ -583,7 +621,7 @@ export const SourceControl: React.FC = () => {
                       {isRenamed && (
                         <button
                           onClick={(e) => { e.stopPropagation(); handleUndoRename(); }}
-                          className="opacity-0 group-hover:opacity-100 p-1 text-[var(--text-muted)] hover:text-sky-400 hover:bg-black/20 rounded transition-all cursor-pointer"
+                          className="opacity-0 group-hover:opacity-100 p-1 text-[var(--text-muted)] hover:text-[var(--color-status-info)] hover:bg-[var(--color-surface-sunken)] rounded transition-all cursor-pointer"
                           title="Undo rename/move"
                         >
                           <RotateCcw size={11} />
@@ -593,7 +631,7 @@ export const SourceControl: React.FC = () => {
                       {!isRenamed && file.status_type !== "untracked" && (
                         <button
                           onClick={(e) => handleDiscardChanges(e, file.path, file.name)}
-                          className="opacity-0 group-hover:opacity-100 p-1 text-[var(--text-muted)] hover:text-amber-400 hover:bg-black/20 rounded transition-all cursor-pointer"
+                          className="opacity-0 group-hover:opacity-100 p-1 text-[var(--text-muted)] hover:text-[var(--color-status-warning)] hover:bg-[var(--color-surface-sunken)] rounded transition-all cursor-pointer"
                           title="Discard changes"
                         >
                           <RotateCcw size={11} />
@@ -603,7 +641,7 @@ export const SourceControl: React.FC = () => {
                       {!isRenamed && (
                         <button
                           onClick={(e) => handleStageFile(e, file.path)}
-                          className="opacity-0 group-hover:opacity-100 p-1 text-[var(--text-muted)] hover:text-emerald-400 hover:bg-black/20 rounded transition-all cursor-pointer"
+                          className="opacity-0 group-hover:opacity-100 p-1 text-[var(--text-muted)] hover:text-[var(--color-status-success)] hover:bg-[var(--color-surface-sunken)] rounded transition-all cursor-pointer"
                           title="Stage changes"
                         >
                           <Plus size={11} />
@@ -635,7 +673,7 @@ export const SourceControl: React.FC = () => {
         <div className="flex-shrink-0 border-t border-[var(--border-color)]/40">
           <div
             onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}
-            className="px-3 py-2 flex items-center justify-between text-[10px] font-mono font-bold text-[var(--text-muted)] uppercase tracking-wider cursor-pointer hover:text-[var(--text-light)] select-none bg-black/5"
+            className="px-3 py-2 flex items-center justify-between text-[10px] font-mono font-bold text-[var(--text-muted)] uppercase tracking-wider cursor-pointer hover:text-[var(--text-light)] select-none bg-[var(--color-surface-sunken)]"
           >
             <div className="flex items-center space-x-1.5">
               <ChevronDown size={11} className={`transform transition-transform duration-200 ${isHistoryExpanded ? "" : "-rotate-90"}`} />
@@ -672,7 +710,7 @@ export const SourceControl: React.FC = () => {
                   >
                     <div className="flex flex-col min-w-0 flex-1 space-y-0.5">
                       <div className="flex items-center space-x-1.5">
-                        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${commit.is_unpushed ? "bg-amber-500 animate-pulse" : "bg-[var(--accent-color)]"}`} />
+                        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${commit.is_unpushed ? "bg-[var(--color-status-warning-solid)] animate-pulse" : "bg-[var(--accent-color)]"}`} />
                         <span className="text-[var(--text-normal)] group-hover:text-[var(--text-light)] truncate font-mono text-[10.5px]">
                           {commit.subject}
                         </span>
@@ -687,7 +725,7 @@ export const SourceControl: React.FC = () => {
                     </div>
                     {commit.is_unpushed && (
                       <span title="Outgoing commit">
-                        <ArrowUp size={10} className="text-amber-500 flex-shrink-0 ml-1.5" />
+                        <ArrowUp size={10} className="text-[var(--color-status-warning)] flex-shrink-0 ml-1.5" />
                       </span>
                     )}
                   </div>

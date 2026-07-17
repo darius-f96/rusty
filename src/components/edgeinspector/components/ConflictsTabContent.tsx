@@ -16,8 +16,8 @@ export const ConflictsTabContent: React.FC<ConflictsTabContentProps> = ({
 }) => {
   return (
     <div className="p-4 space-y-4 overflow-y-auto h-full">
-      <div className="bg-rose-500/5 border border-rose-500/20 rounded-xl p-4">
-        <div className="text-[10px] uppercase font-bold text-rose-400 font-mono mb-2">
+      <div className="bg-[var(--color-status-danger-bg)] border border-[var(--color-status-danger-border)] rounded-xl p-4">
+        <div className="text-[10px] uppercase font-bold text-[var(--color-status-danger)] font-mono mb-2">
           Conflict Analysis
         </div>
         <pre className="text-xs font-sans text-[var(--text-normal)] whitespace-pre-wrap leading-relaxed">

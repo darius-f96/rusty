@@ -199,14 +199,14 @@ export const ContextNode: React.FC<{ id: string; data: any }> = memo(({ id, data
       onDrop={handleDrop}
       className={`w-72 rounded-xl border text-[var(--text-normal)] overflow-hidden transition-all duration-300 ${
         dragOver 
-          ? "border-emerald-500 bg-[var(--bg-sidebar)] shadow-[rgba(16,185,129,0.15)] shadow-lg" 
+          ? "border-[var(--color-status-success-border)] bg-[var(--bg-sidebar)] shadow-[0_0_15px_var(--color-status-success-bg)]"
           : "border-[var(--border-color)] bg-[var(--bg-sidebar)] hover:border-[var(--border-active)] shadow-lg"
       }`}
     >
       {/* Node Header (Draggable surface) */}
-      <div className="flex items-center justify-between border-b border-[var(--border-color)] bg-black/15 px-3 py-2 select-none cursor-move">
+      <div className="flex items-center justify-between border-b border-[var(--border-color)] bg-[var(--color-surface-sunken)] px-3 py-2 select-none cursor-move">
         <div className="flex items-center space-x-2 flex-1 mr-2 min-w-0">
-          <Info size={14} className="text-emerald-400 flex-shrink-0" />
+          <Info size={14} className="text-[var(--color-status-success)] flex-shrink-0" />
           
           {isEditing ? (
             <input
@@ -234,7 +234,7 @@ export const ContextNode: React.FC<{ id: string; data: any }> = memo(({ id, data
               onClick={handleNameSave}
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
-              className="nodrag text-emerald-400 hover:text-emerald-300 p-0.5 rounded transition-colors"
+              className="nodrag text-[var(--color-status-success)] hover:text-[var(--color-status-success)] p-0.5 rounded transition-colors"
             >
               <Check size={13} />
             </button>
@@ -245,7 +245,7 @@ export const ContextNode: React.FC<{ id: string; data: any }> = memo(({ id, data
                   onClick={(e) => { e.stopPropagation(); setShowSearch(true); }}
                   onPointerDown={(e) => e.stopPropagation()}
                   onMouseDown={(e) => e.stopPropagation()}
-                  className="nodrag text-[var(--text-muted)] hover:text-emerald-400 p-0.5 rounded transition-colors"
+                  className="nodrag text-[var(--text-muted)] hover:text-[var(--color-status-success)] p-0.5 rounded transition-colors"
                   title="Search and attach file"
                 >
                   <Search size={12} />
@@ -270,7 +270,7 @@ export const ContextNode: React.FC<{ id: string; data: any }> = memo(({ id, data
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
-                className="nodrag text-[var(--text-muted)] hover:text-rose-400 p-0.5 rounded transition-colors"
+                className="nodrag text-[var(--text-muted)] hover:text-[var(--color-status-danger)] p-0.5 rounded transition-colors"
                 title="Delete node"
               >
                 <Trash2 size={12} />
@@ -291,7 +291,7 @@ export const ContextNode: React.FC<{ id: string; data: any }> = memo(({ id, data
             }`}
           >
             <div className="flex items-center space-x-2.5 min-w-0">
-              <span className="flex-shrink-0 text-emerald-400">
+              <span className="flex-shrink-0 text-[var(--color-status-success)]">
                 {data.isDir ? <Folder size={15} /> : <FileIcon fileName={data.fileName} size={15} />}
               </span>
               <div className="flex flex-col min-w-0">
@@ -349,8 +349,8 @@ export const ContextNode: React.FC<{ id: string; data: any }> = memo(({ id, data
       {/* File Search Overlay */}
       {showSearch && (
         <div className="absolute inset-0 z-50 bg-[var(--bg-sidebar)]/98 backdrop-blur-sm flex flex-col rounded-xl overflow-hidden">
-          <div className="flex items-center space-x-2 px-3 py-2 border-b border-[var(--border-color)] bg-black/20">
-            <Search size={13} className="text-emerald-400 flex-shrink-0" />
+          <div className="flex items-center space-x-2 px-3 py-2 border-b border-[var(--border-color)] bg-[var(--color-surface-sunken)]">
+            <Search size={13} className="text-[var(--color-status-success)] flex-shrink-0" />
             <input
               ref={searchInputRef}
               type="text"
@@ -358,7 +358,7 @@ export const ContextNode: React.FC<{ id: string; data: any }> = memo(({ id, data
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={handleSearchKeyDown}
-              className="flex-1 bg-[var(--bg-app)] border border-[var(--border-color)] rounded px-2 py-1 text-xs text-[var(--text-light)] focus:border-emerald-400 focus:outline-none"
+              className="flex-1 bg-[var(--bg-app)] border border-[var(--border-color)] rounded px-2 py-1 text-xs text-[var(--text-light)] focus:border-[var(--color-status-success-border)] focus:outline-none"
             />
             <button
               onClick={handleSearchClose}
@@ -391,7 +391,7 @@ export const ContextNode: React.FC<{ id: string; data: any }> = memo(({ id, data
                   onClick={() => handleSearchSelect(match)}
                   className={`w-full text-left px-2.5 py-2 rounded-lg text-[11px] flex items-center space-x-2 transition-colors ${
                     selectedIndex === idx
-                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                      ? "bg-[var(--color-status-success-bg)] text-[var(--color-status-success)] border border-[var(--color-status-success-border)]"
                       : "text-[var(--text-normal)] hover:bg-[var(--accent-bg)]"
                   }`}
                 >
@@ -404,7 +404,7 @@ export const ContextNode: React.FC<{ id: string; data: any }> = memo(({ id, data
               );
             })}
           </div>
-          <div className="px-3 py-1.5 border-t border-[var(--border-color)] bg-black/10 text-[9px] text-[var(--text-muted)] flex items-center justify-between">
+          <div className="px-3 py-1.5 border-t border-[var(--border-color)] bg-[var(--color-surface-sunken)] text-[9px] text-[var(--text-muted)] flex items-center justify-between">
             <span>↑↓ navigate</span>
             <span>↵ select</span>
             <span>esc close</span>
@@ -418,7 +418,7 @@ export const ContextNode: React.FC<{ id: string; data: any }> = memo(({ id, data
           type="source"
           position={Position.Top}
           id="context-out-top"
-          style={{ background: "#10b981", width: 14, height: 14, border: "2.5px solid var(--bg-sidebar)" }}
+          style={{ background: "var(--color-status-success-solid)", width: 14, height: 14, border: "2.5px solid var(--color-surface-sidebar)" }}
         />
       )}
       {!isTopConnected && (
@@ -426,7 +426,7 @@ export const ContextNode: React.FC<{ id: string; data: any }> = memo(({ id, data
           type="source"
           position={Position.Bottom}
           id="context-out-bottom"
-          style={{ background: "#10b981", width: 14, height: 14, border: "2.5px solid var(--bg-sidebar)" }}
+          style={{ background: "var(--color-status-success-solid)", width: 14, height: 14, border: "2.5px solid var(--color-surface-sidebar)" }}
         />
       )}
     </div>

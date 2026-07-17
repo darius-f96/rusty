@@ -3,10 +3,10 @@ import { CheckCircle2, AlertCircle, Info, AlertTriangle } from "lucide-react";
 import { Modal } from "./Modal";
 
 export const variantConfig = {
-  success: { Icon: CheckCircle2, iconClass: "text-emerald-400", titleDefault: "Success" },
-  error: { Icon: AlertCircle, iconClass: "text-rose-400", titleDefault: "Error" },
+  success: { Icon: CheckCircle2, iconClass: "text-[var(--color-status-success)]", titleDefault: "Success" },
+  error: { Icon: AlertCircle, iconClass: "text-[var(--color-status-danger)]", titleDefault: "Error" },
   info: { Icon: Info, iconClass: "text-[var(--accent-color)]", titleDefault: "Info" },
-  danger: { Icon: AlertTriangle, iconClass: "text-rose-400", titleDefault: "Warning" },
+  danger: { Icon: AlertTriangle, iconClass: "text-[var(--color-status-danger)]", titleDefault: "Warning" },
 } as const;
 
 export type NotificationVariant = keyof typeof variantConfig;
@@ -37,7 +37,7 @@ export const AlertModalView: React.FC<AlertModalViewProps> = ({ notification, cl
       variant={isDanger ? "danger" : "default"}
       width="w-[420px]"
     >
-      <div className={`flex items-start space-x-3 text-xs font-mono leading-relaxed ${isDanger ? "text-rose-200" : "text-[var(--text-normal)]"}`}>
+      <div className={`flex items-start space-x-3 text-xs font-mono leading-relaxed ${isDanger ? "text-[var(--color-status-danger)]" : "text-[var(--text-normal)]"}`}>
         <cfg.Icon size={18} className={`flex-shrink-0 mt-0.5 ${cfg.iconClass}`} />
         <span className="whitespace-pre-wrap">{notification.message}</span>
       </div>

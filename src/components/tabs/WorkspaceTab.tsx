@@ -113,14 +113,14 @@ export const WorkspaceTab: React.FC = () => {
             {rootPath && (
               <div
                 onClick={() => useWorkspaceStore.getState().createCanvasTab()}
-                className="group flex flex-col justify-between p-6 h-48 rounded-2xl bg-[var(--bg-sidebar)] border border-[var(--border-color)] hover:border-emerald-500 hover:shadow-xl cursor-pointer transition-all duration-300 relative overflow-hidden"
+                className="group flex flex-col justify-between p-6 h-48 rounded-2xl bg-[var(--bg-sidebar)] border border-[var(--border-color)] hover:border-[var(--color-status-success-border)] hover:shadow-xl cursor-pointer transition-all duration-300 relative overflow-hidden"
               >
-                <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-bl-full pointer-events-none group-hover:bg-emerald-500/10 transition-colors" />
-                <div className="w-10 h-10 rounded-xl bg-[var(--bg-app)] border border-[var(--border-color)] flex items-center justify-center text-emerald-400 group-hover:scale-110 transition-transform">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-[var(--color-status-success-bg)] rounded-bl-full pointer-events-none group-hover:bg-[var(--color-status-success-bg)] transition-colors" />
+                <div className="w-10 h-10 rounded-xl bg-[var(--bg-app)] border border-[var(--border-color)] flex items-center justify-center text-[var(--color-status-success)] group-hover:scale-110 transition-transform">
                   <Plus size={20} />
                 </div>
                 <div>
-                  <div className="text-sm font-bold text-[var(--text-light)] flex items-center gap-1.5 group-hover:text-emerald-400 transition-colors">
+                  <div className="text-sm font-bold text-[var(--text-light)] flex items-center gap-1.5 group-hover:text-[var(--color-status-success)] transition-colors">
                     New Axiom <ArrowRight size={14} className="opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
                   </div>
                   <p className="text-[11px] text-[var(--text-muted)] mt-1.5 leading-relaxed font-mono">
@@ -189,7 +189,7 @@ export const WorkspaceTab: React.FC = () => {
 
                     <button
                       onClick={(e) => handleRemoveRecent(e, path)}
-                      className="p-2 rounded-lg text-[var(--text-muted)] hover:text-rose-400 hover:bg-rose-500/10 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                      className="p-2 rounded-lg text-[var(--text-muted)] hover:text-[var(--color-status-danger)] hover:bg-[var(--color-status-danger-bg)] opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
                       title="Remove from Recents"
                     >
                       <Trash2 size={14} />

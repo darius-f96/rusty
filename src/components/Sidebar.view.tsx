@@ -43,7 +43,7 @@ export const SidebarView: React.FC<SidebarViewProps> = ({
       style={{ width: `${isExplorerOpen ? sidebarWidth : 56}px` }}
     >
       {/* 1. Left Icon Dock (Activity Bar) */}
-      <div className={`w-14 bg-black/15 flex flex-col items-center py-4 justify-between h-full border-r border-[var(--border-color)] flex-shrink-0 rounded-l-[19px] relative z-20 ${!isExplorerOpen ? "rounded-r-[19px]" : ""}`}>
+      <div className={`w-14 bg-[var(--color-surface-sunken)] flex flex-col items-center py-4 justify-between h-full border-r border-[var(--border-color)] flex-shrink-0 rounded-l-[19px] relative z-20 ${!isExplorerOpen ? "rounded-r-[19px]" : ""}`}>
         <div className="flex flex-col items-center space-y-4 w-full">
           {topIcons.map((item) => {
             const Icon = item.icon;
@@ -61,11 +61,11 @@ export const SidebarView: React.FC<SidebarViewProps> = ({
               >
                 <Icon size={20} />
                 {badge > 0 && (
-                  <span className="absolute top-1 right-1 bg-indigo-600 text-white font-mono text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center border border-[var(--bg-sidebar)] shadow-md select-none">
+                  <span className="absolute top-1 right-1 bg-[var(--color-status-info-solid)] text-[var(--color-status-info-solid-foreground)] font-mono text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center border border-[var(--bg-sidebar)] shadow-md select-none">
                     {badge}
                   </span>
                 )}
-                <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-zinc-950 text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-zinc-800 whitespace-nowrap">
+                <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-[var(--color-surface-sunken)] text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-[var(--color-border-subtle)] whitespace-nowrap">
                   {item.label}
                 </span>
               </button>
@@ -87,7 +87,7 @@ export const SidebarView: React.FC<SidebarViewProps> = ({
               }`}
             >
               <Icon size={20} />
-              <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-zinc-950 text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-zinc-800 whitespace-nowrap">
+              <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-[var(--color-surface-sunken)] text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-[var(--color-border-subtle)] whitespace-nowrap">
                 {settingsIcon.label}
               </span>
             </button>
@@ -102,7 +102,7 @@ export const SidebarView: React.FC<SidebarViewProps> = ({
             <>
               {/* Dynamic Explorer Sidebar Tree */}
               <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 min-w-0">
-                <div className="sticky top-0 z-10 flex items-center justify-between mb-3 text-zinc-400 border-b border-[var(--border-color)]/30 pb-2 bg-[var(--bg-sidebar)]">
+                <div className="sticky top-0 z-10 flex items-center justify-between mb-3 text-[var(--color-fg-default)] border-b border-[var(--border-color)]/30 pb-2 bg-[var(--bg-sidebar)]">
                   <span className="text-[10px] uppercase tracking-wider font-mono font-bold">Project Explorer</span>
                   <div className="flex items-center space-x-2">
                     <button

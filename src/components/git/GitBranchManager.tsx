@@ -7,11 +7,11 @@ interface GitBranchManagerProps {
   currentBranch: string;
   localBranches: string[];
   remoteBranches: string[];
-  onCheckout: (branch: string) => void;
-  onCreateBranch: (branch: string) => void;
-  onDeleteBranch: (branch: string, force: boolean) => void;
-  onMergeBranch: (branch: string) => void;
-  onRebaseBranch: (branch: string) => void;
+  onCheckout: (branch: string) => Promise<void>;
+  onCreateBranch: (branch: string) => Promise<void>;
+  onDeleteBranch: (branch: string, force: boolean) => Promise<void>;
+  onMergeBranch: (branch: string) => Promise<void>;
+  onRebaseBranch: (branch: string) => Promise<void>;
   onClose: () => void;
 }
 
@@ -30,6 +30,7 @@ export const GitBranchManager: React.FC<GitBranchManagerProps> = ({
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const [showCreateInput, setShowCreateInput] = useState(false);
   const [newBranchName, setNewBranchName] = useState("");
+  const [deletingBranch, setDeletingBranch] = useState<string | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -42,6 +43,13 @@ export const GitBranchManager: React.FC<GitBranchManagerProps> = ({
         // Also verify clicking is not inside the portal overlay sub-menu
         const portalMenu = document.querySelector(".branch-actions-portal");
         if (portalMenu && portalMenu.contains(e.target as Node)) {
+          return;
+        }
+        // Confirmation dialogs are rendered into document.body. Keep this
+        // popover mounted until the dialog resolves, otherwise its promise and
+        // the requested branch action are abandoned on mouse-down.
+        const confirmModal = document.querySelector(".confirm-modal-portal");
+        if (confirmModal && confirmModal.contains(e.target as Node)) {
           return;
         }
         onClose();
@@ -149,7 +157,16 @@ export const GitBranchManager: React.FC<GitBranchManagerProps> = ({
       kind: "danger",
     });
     if (confirmed) {
-      onDeleteBranch(branch, false);
+      setDeletingBranch(branch);
+      try {
+        await onDeleteBranch(branch, false);
+        setSelectedBranch(null);
+      } catch {
+        // GitPresenter already reports the command error. Keep the branch
+        // selected so the user can retry or choose another action.
+      } finally {
+        setDeletingBranch(null);
+      }
     }
   };
 
@@ -177,7 +194,7 @@ export const GitBranchManager: React.FC<GitBranchManagerProps> = ({
             onClick={() => { onCheckout(branch); setSelectedBranch(null); }}
             className="w-full text-left px-2.5 py-1.5 hover:bg-[var(--accent-bg)] text-xs font-sans text-[var(--text-normal)] hover:text-[var(--text-light)] rounded transition-colors flex items-center space-x-2 cursor-pointer border-none bg-transparent outline-none"
           >
-            <Check size={12} className="text-emerald-400" />
+            <Check size={12} className="text-[var(--color-status-success)]" />
             <span>Checkout</span>
           </button>
         )}
@@ -186,7 +203,7 @@ export const GitBranchManager: React.FC<GitBranchManagerProps> = ({
             onClick={() => { handleMerge(branch); setSelectedBranch(null); }}
             className="w-full text-left px-2.5 py-1.5 hover:bg-[var(--accent-bg)] text-xs font-sans text-[var(--text-normal)] hover:text-[var(--text-light)] rounded transition-colors flex items-center space-x-2 cursor-pointer border-none bg-transparent outline-none"
           >
-            <CornerDownLeft size={12} className="text-violet-400" />
+            <CornerDownLeft size={12} className="text-[var(--color-secondary)]" />
             <span>Merge into Current</span>
           </button>
         )}
@@ -195,17 +212,18 @@ export const GitBranchManager: React.FC<GitBranchManagerProps> = ({
             onClick={() => { handleRebase(branch); setSelectedBranch(null); }}
             className="w-full text-left px-2.5 py-1.5 hover:bg-[var(--accent-bg)] text-xs font-sans text-[var(--text-normal)] hover:text-[var(--text-light)] rounded transition-colors flex items-center space-x-2 cursor-pointer border-none bg-transparent outline-none"
           >
-            <Play size={12} className="text-amber-400" />
+            <Play size={12} className="text-[var(--color-status-warning)]" />
             <span>Rebase Current onto Selected</span>
           </button>
         )}
         {!isCurrent && (
           <button
-            onClick={() => { handleDelete(branch); setSelectedBranch(null); }}
-            className="w-full text-left px-2.5 py-1.5 hover:bg-rose-500/10 hover:text-rose-400 text-xs font-sans text-rose-500 rounded transition-colors flex items-center space-x-2 cursor-pointer border-none bg-transparent outline-none"
+            onClick={() => { void handleDelete(branch); }}
+            disabled={deletingBranch !== null}
+            className="w-full text-left px-2.5 py-1.5 hover:bg-[var(--color-status-danger-bg)] hover:text-[var(--color-status-danger)] text-xs font-sans text-[var(--color-status-danger)] rounded transition-colors flex items-center space-x-2 cursor-pointer border-none bg-transparent outline-none"
           >
             <Trash2 size={12} />
-            <span>Delete Branch</span>
+            <span>{deletingBranch === branch ? "Deleting…" : "Delete Branch"}</span>
           </button>
         )}
         {isCurrent && (
@@ -235,7 +253,7 @@ export const GitBranchManager: React.FC<GitBranchManagerProps> = ({
 
       {/* New Branch Trigger */}
       {showCreateInput ? (
-        <form onSubmit={handleCreateSubmit} className="flex items-center space-x-2 mb-2 p-1.5 bg-black/10 rounded-lg">
+        <form onSubmit={handleCreateSubmit} className="flex items-center space-x-2 mb-2 p-1.5 bg-[var(--color-surface-sunken)] rounded-lg">
           <input
             type="text"
             placeholder="New branch name..."
@@ -244,10 +262,10 @@ export const GitBranchManager: React.FC<GitBranchManagerProps> = ({
             className="flex-1 bg-[var(--bg-app)] border border-[var(--border-color)] rounded px-2 py-1 text-xs text-[var(--text-light)] focus:outline-none focus:border-[var(--accent-color)] font-mono"
             autoFocus
           />
-          <button type="submit" className="text-emerald-400 hover:text-emerald-300 p-1 border-none bg-transparent cursor-pointer">
+          <button type="submit" className="text-[var(--color-status-success)] hover:text-[var(--color-status-success)] p-1 border-none bg-transparent cursor-pointer">
             <Check size={14} />
           </button>
-          <button type="button" onClick={() => setShowCreateInput(false)} className="text-rose-400 hover:text-rose-300 p-1 border-none bg-transparent cursor-pointer">
+          <button type="button" onClick={() => setShowCreateInput(false)} className="text-[var(--color-status-danger)] hover:text-[var(--color-status-danger)] p-1 border-none bg-transparent cursor-pointer">
             <X size={14} />
           </button>
         </form>
@@ -281,8 +299,8 @@ export const GitBranchManager: React.FC<GitBranchManagerProps> = ({
                   isCurrent
                     ? "bg-[var(--accent-bg)]/35 text-[var(--accent-color)] font-semibold"
                     : isSelected
-                    ? "bg-zinc-800 text-[var(--text-light)]"
-                    : "text-[var(--text-normal)] hover:bg-zinc-800/50"
+                    ? "bg-[var(--color-surface-sunken)] text-[var(--text-light)]"
+                    : "text-[var(--text-normal)] hover:bg-[var(--color-surface-sunken)]"
                 }`}
               >
                 <span className="flex items-center space-x-2 truncate">
@@ -310,11 +328,11 @@ export const GitBranchManager: React.FC<GitBranchManagerProps> = ({
             >
               <button
                 className={`w-full text-left px-2 py-1.5 rounded-md text-xs transition-colors flex items-center justify-between cursor-pointer border-none bg-transparent outline-none ${
-                  isSelected ? "bg-zinc-800 text-[var(--text-light)]" : "text-[var(--text-muted)] hover:bg-zinc-800/50"
+                  isSelected ? "bg-[var(--color-surface-sunken)] text-[var(--text-light)]" : "text-[var(--text-muted)] hover:bg-[var(--color-surface-sunken)]"
                 }`}
               >
                 <span className="flex items-center space-x-2 truncate">
-                  <GitBranch size={11} className="text-sky-500 opacity-70" />
+                  <GitBranch size={11} className="text-[var(--color-status-info)] opacity-70" />
                   <span className="truncate font-mono text-[11px]">{branch.replace("origin/", "")}</span>
                 </span>
                 <ChevronRight size={11} className="text-[var(--text-muted)] opacity-60" />

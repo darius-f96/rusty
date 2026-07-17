@@ -131,9 +131,9 @@ export const EdgeInspectorPane: React.FC<EdgeInspectorPaneProps> = ({ onClose })
           <span
             className={`font-bold ${
               edgeStatus === "reconciled"
-                ? "text-emerald-400"
+                ? "text-[var(--color-status-success)]"
                 : edgeStatus === "unreconciled"
-                ? "text-rose-400"
+                ? "text-[var(--color-status-danger)]"
                 : "text-[var(--text-normal)]"
             }`}
           >
@@ -142,7 +142,7 @@ export const EdgeInspectorPane: React.FC<EdgeInspectorPaneProps> = ({ onClose })
         </span>
         <button
           onClick={handleApproveReconciliation}
-          className="bg-emerald-500 hover:bg-emerald-400 text-white text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer"
+          className="bg-[var(--color-status-success-solid)] hover:bg-[var(--color-status-success-solid)] text-[var(--color-status-success-solid-foreground)] text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer"
         >
           <CheckCircle2 size={14} />
           <span>Approve Reconciliation</span>

@@ -68,14 +68,14 @@ function renderInline(text: string): React.ReactNode {
         break;
       case "code":
         parts.push(
-          <code key={k} className="px-1.5 py-0.5 rounded bg-[var(--bg-sidebar)] border border-[var(--border-color)] text-rose-400 font-mono text-[11px]">
+          <code key={k} className="px-1.5 py-0.5 rounded bg-[var(--bg-sidebar)] border border-[var(--border-color)] text-[var(--color-status-danger)] font-mono text-[11px]">
             {best.cap[1]}
           </code>
         );
         break;
       case "link":
         parts.push(
-          <span key={k} className="text-violet-400 font-semibold">
+          <span key={k} className="text-[var(--color-secondary)] font-semibold">
             {best.cap[1]}
           </span>
         );
@@ -240,9 +240,9 @@ function renderBlocks(blocks: ParsedBlock[]): React.ReactNode[] {
 
       case "code":
         return (
-          <div key={k} className="my-3 border border-[var(--border-color)] rounded-lg overflow-hidden bg-black/40 w-full flex flex-col font-sans">
+          <div key={k} className="my-3 border border-[var(--border-color)] rounded-lg overflow-hidden bg-[var(--color-surface-sunken)] w-full flex flex-col font-sans">
             <div className="flex items-center justify-between px-3 py-1.5 bg-[var(--bg-sidebar)]/80 border-b border-[var(--border-color)] select-none flex-shrink-0">
-              <span className="text-[10px] uppercase font-mono font-bold text-violet-400">{block.language}</span>
+              <span className="text-[10px] uppercase font-mono font-bold text-[var(--color-secondary)]">{block.language}</span>
               <button
                 className="text-[10px] font-mono text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer bg-transparent border-none p-0"
                 onClick={() => { navigator.clipboard.writeText(block.content); }}
@@ -295,7 +295,7 @@ function renderBlocks(blocks: ParsedBlock[]): React.ReactNode[] {
 
       case "quote":
         return (
-          <blockquote key={k} className="border-l-4 border-violet-500/50 pl-3 py-1 my-2 bg-[var(--bg-sidebar)]/20 rounded-r text-[var(--text-muted)] italic space-y-1 text-left">
+          <blockquote key={k} className="border-l-4 border-[var(--color-secondary-border)] pl-3 py-1 my-2 bg-[var(--bg-sidebar)]/20 rounded-r text-[var(--text-muted)] italic space-y-1 text-left">
             {(block.lines || [block.content]).map((line, li) => (
               <p key={li} className="leading-relaxed text-[11px] my-1">{renderInline(line)}</p>
             ))}

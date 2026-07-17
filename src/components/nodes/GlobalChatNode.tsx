@@ -70,10 +70,10 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
   }, []);
 
   const statusBorder = {
-    idle: "border-[var(--border-color)] hover:border-red-700/50",
-    running: "border-red-700/70 shadow-[0_0_15px_rgba(127,29,29,0.28)] animate-pulse",
-    success: "border-emerald-500/60 shadow-[0_0_10px_rgba(16,185,129,0.15)]",
-    error: "border-rose-500/60 shadow-[0_0_10px_rgba(244,63,94,0.15)]"
+    idle: "border-[var(--border-color)] hover:border-[var(--color-status-danger-border)]",
+    running: "border-[var(--color-status-info-border)] shadow-[0_0_15px_var(--color-status-info-bg)] animate-pulse",
+    success: "border-[var(--color-status-success-border)] shadow-[0_0_10px_var(--color-status-success-bg)]",
+    error: "border-[var(--color-status-danger-border)] shadow-[0_0_10px_var(--color-status-danger-bg)]"
   };
 
   const summaryText = data.summary;
@@ -94,9 +94,9 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
       className={`rounded-lg border bg-[var(--bg-sidebar)] text-[var(--text-normal)] overflow-hidden flex flex-col transition-[border-color,box-shadow] duration-300 shadow-lg relative ${statusBorder[nodeStatus]}`}
     >
       {/* Node Header */}
-      <div className="flex items-center justify-between border-b border-[var(--border-color)]/70 bg-black/15 px-3 py-2 select-none cursor-move flex-shrink-0">
+      <div className="flex items-center justify-between border-b border-[var(--border-color)]/70 bg-[var(--color-surface-sunken)] px-3 py-2 select-none cursor-move flex-shrink-0">
         <div className="flex items-center space-x-2 flex-1 mr-2 min-w-0">
-          <Lightbulb size={14} className={`text-amber-400 flex-shrink-0 ${nodeStatus === "running" ? "animate-spin" : ""}`} />
+          <Lightbulb size={14} className={`text-[var(--color-status-warning)] flex-shrink-0 ${nodeStatus === "running" ? "animate-spin" : ""}`} />
           {isEditing ? (
             <input
               type="text"
@@ -109,7 +109,7 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
                 if (e.key === "Enter") handleNameSave();
                 if (e.key === "Escape") setIsEditing(false);
               }}
-              className="nodrag bg-[var(--bg-app)] border border-[var(--border-color)] rounded px-1.5 py-0.5 font-sans text-xs text-[var(--text-light)] focus:outline-none focus:border-amber-400 w-full"
+              className="nodrag bg-[var(--bg-app)] border border-[var(--border-color)] rounded px-1.5 py-0.5 font-sans text-xs text-[var(--text-light)] focus:outline-none focus:border-[var(--color-status-warning-border)] w-full"
               autoFocus
             />
           ) : (
@@ -123,7 +123,7 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
               onClick={handleNameSave}
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
-              className="nodrag text-emerald-400 hover:text-emerald-300 p-0.5 rounded transition-colors cursor-pointer"
+              className="nodrag text-[var(--color-status-success)] hover:text-[var(--color-status-success)] p-0.5 rounded transition-colors cursor-pointer"
             >
               <Check size={13} />
             </button>
@@ -142,7 +142,7 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
                 onClick={(e) => { e.stopPropagation(); deleteNode(id); }}
                 onPointerDown={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
-                className="nodrag text-[var(--text-muted)] hover:text-rose-400 p-0.5 rounded transition-colors cursor-pointer"
+                className="nodrag text-[var(--text-muted)] hover:text-[var(--color-status-danger)] p-0.5 rounded transition-colors cursor-pointer"
                 title="Delete node"
               >
                 <Trash2 size={12} />
@@ -152,9 +152,9 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
 
           {/* Status indicator */}
           <div className="flex-shrink-0 pl-1">
-            {nodeStatus === "running" && <Loader2 size={14} className="text-red-400 animate-spin" />}
-            {nodeStatus === "success" && <Sparkles size={14} className="text-emerald-400" />}
-            {nodeStatus === "error" && <X size={14} className="text-rose-400" />}
+            {nodeStatus === "running" && <Loader2 size={14} className="text-[var(--color-status-danger)] animate-spin" />}
+            {nodeStatus === "success" && <Sparkles size={14} className="text-[var(--color-status-success)]" />}
+            {nodeStatus === "error" && <X size={14} className="text-[var(--color-status-danger)]" />}
           </div>
         </div>
       </div>
@@ -175,7 +175,7 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
               title="Select a skill to use its system prompt, tools, and MCP servers"
             >
               <span className="flex items-center space-x-1.5 min-w-0">
-                <BookOpen size={11} className="text-amber-400 flex-shrink-0" />
+                <BookOpen size={11} className="text-[var(--color-status-warning)] flex-shrink-0" />
                 <span className={data.skillId ? "text-[var(--text-light)] truncate" : "text-[var(--text-muted)] truncate"}>
                   {data.skillId
                     ? (skills.find((s: any) => s.id === data.skillId)?.name || data.skillId)
@@ -200,7 +200,7 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
                   >
                     <span className="truncate">{s.name}</span>
                     {Array.isArray(s.mcpServers) && s.mcpServers.length > 0 && (
-                      <span className="text-[8px] font-mono ml-2 text-sky-400 flex-shrink-0">
+                      <span className="text-[8px] font-mono ml-2 text-[var(--color-status-info)] flex-shrink-0">
                         <Plug size={8} className="inline mr-0.5" />{s.mcpServers.length} MCP
                       </span>
                     )}
@@ -222,7 +222,7 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
               title="Route requests through an MCP server (Jira, Confluence, etc)"
             >
               <span className="flex items-center space-x-1.5 min-w-0">
-                <Plug size={11} className="text-sky-400 flex-shrink-0" />
+                <Plug size={11} className="text-[var(--color-status-info)] flex-shrink-0" />
                 <span className={data.mcpServerName ? "text-[var(--text-light)] truncate" : "text-[var(--text-muted)] truncate"}>
                   {data.mcpServerName ? (mcpServers[data.mcpServerName]?.displayName || data.mcpServerName) : "MCP override: none"}
                 </span>
@@ -262,11 +262,11 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
 
         {summaryText ? (
           <div className="flex flex-col flex-1 min-h-0 space-y-1.5">
-            <div className="text-[9px] uppercase font-bold text-amber-400 font-mono tracking-wide flex-shrink-0">
+            <div className="text-[9px] uppercase font-bold text-[var(--color-status-warning)] font-mono tracking-wide flex-shrink-0">
               Background Context
             </div>
             <div
-              className="nodrag text-[11px] font-mono text-[var(--text-normal)] leading-relaxed flex-1 min-h-0 whitespace-pre-wrap bg-black/20 rounded-md p-2.5 border border-[var(--border-color)]/70 w-full antialiased subpixel-antialiased select-text overflow-y-auto scrollbar-wider"
+              className="nodrag text-[11px] font-mono text-[var(--text-normal)] leading-relaxed flex-1 min-h-0 whitespace-pre-wrap bg-[var(--color-surface-sunken)] rounded-md p-2.5 border border-[var(--border-color)]/70 w-full antialiased subpixel-antialiased select-text overflow-y-auto scrollbar-wider"
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
             >
@@ -275,14 +275,14 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
           </div>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-center text-xs font-sans text-[var(--text-muted)] p-4 select-none">
-            <Lightbulb size={24} className="mx-auto text-amber-500/40 mb-2" />
+            <Lightbulb size={24} className="mx-auto text-[var(--color-status-warning)] mb-2" />
             <span>Select this node to discuss tasks and build context for TaskNodes.</span>
           </div>
         )}
       </div>
 
       {/* Node Footer */}
-      <div className="bg-black/10 px-3 py-1.5 border-t border-[var(--border-color)] flex items-center justify-between text-[10px] select-none flex-shrink-0">
+      <div className="bg-[var(--color-surface-sunken)] px-3 py-1.5 border-t border-[var(--border-color)] flex items-center justify-between text-[10px] select-none flex-shrink-0">
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -300,7 +300,7 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
           }}
           onPointerDown={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
-          className="nodrag text-[var(--text-muted)] hover:text-amber-400 hover:scale-110 active:scale-95 transition-all p-0.5 rounded cursor-pointer flex items-center space-x-1 group"
+          className="nodrag text-[var(--text-muted)] hover:text-[var(--color-status-warning)] hover:scale-110 active:scale-95 transition-all p-0.5 rounded cursor-pointer flex items-center space-x-1 group"
           title="Open Explorer Pane"
         >
           <Settings size={13} className="group-hover:rotate-45 transition-transform duration-300 pointer-events-none" />

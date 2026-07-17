@@ -477,14 +477,14 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
           let title = "No language server for this file type";
           let pulse = false;
           if (s.state === "connecting" || s.state === "initializing") {
-            dot = "bg-amber-400"; label = "LSP: starting"; title = "Starting language server"; pulse = true;
+            dot = "bg-[var(--color-status-warning-solid)]"; label = "LSP: starting"; title = "Starting language server"; pulse = true;
           } else if (s.state === "indexing") {
-            dot = "bg-sky-400"; label = s.percent != null ? `LSP: indexing ${s.percent}%` : "LSP: indexing";
+            dot = "bg-[var(--color-status-info-solid)]"; label = s.percent != null ? `LSP: indexing ${s.percent}%` : "LSP: indexing";
             title = s.message || "Indexing workspace"; pulse = true;
           } else if (s.state === "ready") {
-            dot = "bg-emerald-500"; label = "LSP: ready"; title = "Language server ready";
+            dot = "bg-[var(--color-status-success-solid)]"; label = "LSP: ready"; title = "Language server ready";
           } else if (s.state === "error") {
-            dot = "bg-rose-500"; label = "LSP: error"; title = s.message || "Language server error";
+            dot = "bg-[var(--color-status-danger-solid)]"; label = "LSP: error"; title = s.message || "Language server error";
           }
           return (
             <div
@@ -512,7 +512,7 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
           onClick={() => setShowBlame(!showBlame)}
           className={`flex items-center space-x-1 px-2.5 py-1 rounded-md text-[10px] font-mono font-bold border transition-all shadow-md cursor-pointer ${
             showBlame
-              ? "bg-[var(--accent-color)] border-[var(--accent-color)] text-white font-semibold"
+              ? "bg-[var(--accent-color)] border-[var(--accent-color)] text-[var(--color-primary-foreground)] font-semibold"
               : "bg-[var(--bg-sidebar)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-light)] hover:border-[var(--border-active)]"
           }`}
           title="Toggle Git Blame (or click line numbers)"
@@ -538,7 +538,7 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
           style={{ left: definitionMenu.x, top: definitionMenu.y, width: DEFINITION_MENU_WIDTH }}
           onMouseDown={(e) => e.stopPropagation()}
         >
-          <div className="px-3 py-2 border-b border-[var(--border-color)] bg-black/20 flex items-center justify-between">
+          <div className="px-3 py-2 border-b border-[var(--border-color)] bg-[var(--color-surface-sunken)] flex items-center justify-between">
             <div className="flex items-center space-x-2 min-w-0">
               <FileSearch size={13} className="text-[var(--accent-color)] flex-shrink-0" />
               <span className="text-[10px] text-[var(--text-muted)] uppercase font-bold flex-shrink-0">Definitions</span>

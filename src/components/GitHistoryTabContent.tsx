@@ -256,7 +256,7 @@ export const GitHistoryTabContent: React.FC<{ tab?: any }> = ({ tab }) => {
         {/* Action Controls */}
         <div className="flex items-center space-x-2">
           {!isFileHistory && unpushedCommitsCount > 0 && (
-            <div className="flex items-center space-x-1.5 bg-amber-500/10 border border-amber-500/30 text-amber-400 px-3 py-1.5 rounded-lg text-[10px] font-mono font-semibold mr-2 select-none">
+            <div className="flex items-center space-x-1.5 bg-[var(--color-status-warning-bg)] border border-[var(--color-status-warning-border)] text-[var(--color-status-warning)] px-3 py-1.5 rounded-lg text-[10px] font-mono font-semibold mr-2 select-none">
               <ArrowUp size={11} className="animate-bounce" />
               <span>{unpushedCommitsCount} outgoing commit{unpushedCommitsCount > 1 ? "s" : ""}</span>
             </div>
@@ -277,7 +277,7 @@ export const GitHistoryTabContent: React.FC<{ tab?: any }> = ({ tab }) => {
               <button
                 onClick={handlePush}
                 disabled={loading || isPulling || isPushing}
-                className="bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/85 text-white disabled:bg-[var(--border-color)] disabled:opacity-50 px-3.5 py-1.5 rounded-lg font-mono font-bold transition-all shadow-md hover:shadow-indigo-500/10 flex items-center space-x-1.5 cursor-pointer glow-btn"
+                className="bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/85 text-[var(--color-primary-foreground)] disabled:bg-[var(--border-color)] disabled:opacity-50 px-3.5 py-1.5 rounded-lg font-mono font-bold transition-all shadow-md hover:shadow-indigo-500/10 flex items-center space-x-1.5 cursor-pointer glow-btn"
                 title="Push local commits"
               >
                 <ArrowUp size={12} className={isPushing ? "animate-bounce" : ""} />
@@ -306,8 +306,8 @@ export const GitHistoryTabContent: React.FC<{ tab?: any }> = ({ tab }) => {
           </div>
         ) : error ? (
           <div className="p-8 max-w-lg mx-auto text-center space-y-3 font-mono">
-            <span className="text-rose-400 font-bold block text-sm">Failed to retrieve commit history</span>
-            <div className="bg-black/20 border border-[var(--border-color)] p-4 rounded-lg text-left text-xs break-all text-[var(--text-muted)] select-text">
+            <span className="text-[var(--color-status-danger)] font-bold block text-sm">Failed to retrieve commit history</span>
+            <div className="bg-[var(--color-surface-sunken)] border border-[var(--border-color)] p-4 rounded-lg text-left text-xs break-all text-[var(--text-muted)] select-text">
               {error}
             </div>
             <button
@@ -348,7 +348,7 @@ export const GitHistoryTabContent: React.FC<{ tab?: any }> = ({ tab }) => {
                             y1="0"
                             x2="24"
                             y2="28"
-                            stroke={commit.is_unpushed ? "#d08770" : "var(--border-color)"}
+                            stroke={commit.is_unpushed ? "var(--color-status-warning)" : "var(--color-border-default)"}
                             strokeWidth="2"
                           />
                         )}
@@ -358,7 +358,7 @@ export const GitHistoryTabContent: React.FC<{ tab?: any }> = ({ tab }) => {
                             y1="28"
                             x2="24"
                             y2="56"
-                            stroke={commits[index + 1].is_unpushed ? "#d08770" : "var(--border-color)"}
+                            stroke={commits[index + 1].is_unpushed ? "var(--color-status-warning)" : "var(--color-border-default)"}
                             strokeWidth="2"
                           />
                         )}
@@ -368,8 +368,8 @@ export const GitHistoryTabContent: React.FC<{ tab?: any }> = ({ tab }) => {
                           cx="24"
                           cy="28"
                           r={commit.is_unpushed ? "6" : "4.5"}
-                          fill={commit.is_unpushed ? "#d08770" : "var(--bg-app)"}
-                          stroke={commit.is_unpushed ? "#ebcb8b" : "var(--accent-color)"}
+                          fill={commit.is_unpushed ? "var(--color-status-warning-solid)" : "var(--color-surface-app)"}
+                          stroke={commit.is_unpushed ? "var(--color-status-warning)" : "var(--color-primary)"}
                           strokeWidth="2"
                         />
                       </svg>
@@ -387,10 +387,10 @@ export const GitHistoryTabContent: React.FC<{ tab?: any }> = ({ tab }) => {
                         <div className="flex items-center space-x-1.5 flex-wrap">
                           {decorations.map((dec, i) => {
                             const colors = {
-                              head: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
-                              remote: "bg-rose-500/10 text-rose-400 border-rose-500/30",
-                              tag: "bg-yellow-500/10 text-yellow-400 border-yellow-500/30",
-                              branch: "bg-sky-500/10 text-sky-400 border-sky-500/30",
+                              head: "bg-[var(--color-status-success-bg)] text-[var(--color-status-success)] border-[var(--color-status-success-border)]",
+                              remote: "bg-[var(--color-status-danger-bg)] text-[var(--color-status-danger)] border-[var(--color-status-danger-border)]",
+                              tag: "bg-[var(--color-status-warning-bg)] text-[var(--color-status-warning)] border-[var(--color-status-warning-border)]",
+                              branch: "bg-[var(--color-status-info-bg)] text-[var(--color-status-info)] border-[var(--color-status-info-border)]",
                             };
                             const icons = {
                               head: <GitBranch size={9} />,
@@ -411,7 +411,7 @@ export const GitHistoryTabContent: React.FC<{ tab?: any }> = ({ tab }) => {
 
                           {/* Outgoing Commit Badge */}
                           {commit.is_unpushed && (
-                            <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                            <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-[var(--color-status-warning-bg)] text-[var(--color-status-warning)] border border-[var(--color-status-warning-border)]">
                               <ArrowUp size={9} />
                               <span>Outgoing</span>
                             </span>
@@ -442,7 +442,7 @@ export const GitHistoryTabContent: React.FC<{ tab?: any }> = ({ tab }) => {
                             title="Copy commit SHA"
                           >
                             {copiedHash === commit.hash ? (
-                              <Check size={9} className="text-emerald-400" />
+                              <Check size={9} className="text-[var(--color-status-success)]" />
                             ) : (
                               <Copy size={9} />
                             )}
@@ -454,7 +454,7 @@ export const GitHistoryTabContent: React.FC<{ tab?: any }> = ({ tab }) => {
 
                   {/* Expanded Changed Files List */}
                   {isExpanded && (
-                    <div className="flex items-stretch bg-black/10">
+                    <div className="flex items-stretch bg-[var(--color-surface-sunken)]">
                       {/* Timeline vertical line extension */}
                       <div className="w-12 flex-shrink-0 flex items-center justify-center relative">
                         <svg className="w-full h-full" viewBox="0 0 48 100" preserveAspectRatio="none">
@@ -464,7 +464,7 @@ export const GitHistoryTabContent: React.FC<{ tab?: any }> = ({ tab }) => {
                               y1="0"
                               x2="24"
                               y2="100"
-                              stroke={commits[index + 1].is_unpushed ? "#d08770" : "var(--border-color)"}
+                              stroke={commits[index + 1].is_unpushed ? "var(--color-status-warning)" : "var(--color-border-default)"}
                               strokeWidth="2"
                             />
                           )}
@@ -487,7 +487,7 @@ export const GitHistoryTabContent: React.FC<{ tab?: any }> = ({ tab }) => {
                                 e.stopPropagation();
                                 handleRevertCommit(commit.hash);
                               }}
-                              className="text-[9px] hover:text-amber-400 text-[var(--text-muted)] hover:underline cursor-pointer flex items-center space-x-1 font-bold"
+                              className="text-[9px] hover:text-[var(--color-status-warning)] text-[var(--text-muted)] hover:underline cursor-pointer flex items-center space-x-1 font-bold"
                               title="Revert changes made by this commit"
                             >
                               <span>[ revert commit ]</span>
@@ -498,7 +498,7 @@ export const GitHistoryTabContent: React.FC<{ tab?: any }> = ({ tab }) => {
                                 e.stopPropagation();
                                 handleResetToCommit(commit.hash);
                               }}
-                              className="text-[9px] hover:text-rose-400 text-[var(--text-muted)] hover:underline cursor-pointer flex items-center space-x-1 font-bold"
+                              className="text-[9px] hover:text-[var(--color-status-danger)] text-[var(--text-muted)] hover:underline cursor-pointer flex items-center space-x-1 font-bold"
                               title="Hard reset branch to this commit point"
                             >
                               <span>[ reset branch to here ]</span>
@@ -518,9 +518,9 @@ export const GitHistoryTabContent: React.FC<{ tab?: any }> = ({ tab }) => {
                           <div className="space-y-0.5">
                             {commitFiles.map((file) => {
                               const statusColors = {
-                                added: "text-emerald-400 font-bold",
-                                deleted: "text-rose-500 font-bold",
-                                modified: "text-amber-400 font-bold",
+                                added: "text-[var(--color-status-success)] font-bold",
+                                deleted: "text-[var(--color-status-danger)] font-bold",
+                                modified: "text-[var(--color-status-warning)] font-bold",
                               };
                               const statusLabels = {
                                 added: "A",
@@ -539,7 +539,7 @@ export const GitHistoryTabContent: React.FC<{ tab?: any }> = ({ tab }) => {
                                   className="group/file flex items-center justify-between px-2 py-1 rounded hover:bg-[var(--accent-bg)]/25 cursor-pointer transition-colors border border-transparent hover:border-[var(--border-color)]/30"
                                 >
                                   <div className="flex items-center space-x-2 truncate">
-                                    <span className={`w-4 text-center text-[10px] font-bold ${statusColors[file.status_type as keyof typeof statusColors] || "text-zinc-400"}`}>
+                                    <span className={`w-4 text-center text-[10px] font-bold ${statusColors[file.status_type as keyof typeof statusColors] || "text-[var(--color-fg-default)]"}`}>
                                       {statusLabels[file.status_type as keyof typeof statusLabels] || "M"}
                                     </span>
                                     <span className="text-[var(--text-normal)] group-hover/file:text-[var(--text-light)] truncate">

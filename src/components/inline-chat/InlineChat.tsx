@@ -129,7 +129,7 @@ export const InlineChat = ({ sessionId, context, position, onClose }: InlineChat
       onMouseDown={(event) => event.stopPropagation()}
       aria-label="Inline chat"
     >
-      <header className="flex shrink-0 items-center justify-between border-b border-[var(--border-color)] bg-black/20 px-3 py-2">
+      <header className="flex shrink-0 items-center justify-between border-b border-[var(--border-color)] bg-[var(--color-surface-sunken)] px-3 py-2">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <MessageSquareCode size={14} className="shrink-0 text-[var(--accent-color)]" />
           <span className="text-[10px] font-bold uppercase text-[var(--text-muted)]">Inline Chat</span>
@@ -167,7 +167,7 @@ export const InlineChat = ({ sessionId, context, position, onClose }: InlineChat
         </div>
       )}
 
-      {error && <div className="border-t border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[10px] text-rose-300">{error}</div>}
+      {error && <div className="border-t border-[var(--color-status-danger-border)] bg-[var(--color-status-danger-bg)] px-3 py-2 text-[10px] text-[var(--color-status-danger)]">{error}</div>}
 
       <form onSubmit={submit} className="shrink-0 border-t border-[var(--border-color)] p-2">
         <div className="flex items-end gap-2 rounded-md border border-[var(--border-color)] bg-[var(--bg-app)] p-2 focus-within:border-[var(--border-active)]">
@@ -194,7 +194,7 @@ export const InlineChat = ({ sessionId, context, position, onClose }: InlineChat
               <Square size={13} fill="currentColor" />
             </button>
           ) : (
-            <button type="submit" disabled={!input.trim()} className="rounded bg-[var(--accent-color)] p-1.5 text-white disabled:cursor-not-allowed disabled:opacity-40" title="Send (Enter)">
+            <button type="submit" disabled={!input.trim()} className="rounded bg-[var(--accent-color)] p-1.5 text-[var(--color-primary-foreground)] disabled:cursor-not-allowed disabled:opacity-40" title="Send (Enter)">
               <CornerDownLeft size={13} />
             </button>
           )}
