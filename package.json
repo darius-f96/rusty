@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "theme:check": "node scripts/check-theme-usage.mjs",
+    "icons:generate": "tauri icon public/axiom-dark.png && node scripts/prune-mobile-icons.mjs",
     "build:sidecar": "npm --prefix agent-sidecar run build && node scripts/prepare-sidecar-runtime.mjs",
     "preview": "vite preview",
     "tauri": "tauri"
