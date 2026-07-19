@@ -18,6 +18,7 @@ const emitChanged = (tabId: string) => {
 
 const clearOverlayContents = async (tabId: string) => {
   const overlay = VfsRegistry.getOrCreate(reconciliationOverlayService.getOverlayTabId(tabId));
+  await overlay.deleteAllFiles();
   const snapshot = await overlay.snapshot();
   for (const filePath of Object.keys(snapshot.contents)) {
     await overlay.removeFile(filePath);
@@ -26,6 +27,8 @@ const clearOverlayContents = async (tabId: string) => {
 
 export const reconciliationOverlayService = {
   getOverlayTabId: (tabId: string) => `__reconciliation_overlay__:${tabId}`,
+
+  getReconciliationNodeId: (tabId: string) => `__reconciliation_node__:${tabId}`,
 
   hasSession: (tabId: string) => sessions.has(tabId),
 

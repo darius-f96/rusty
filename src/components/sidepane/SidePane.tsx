@@ -37,6 +37,8 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
   const modifiedFiles = (selectedNode?.data?.modifiedFiles as string[]) || EMPTY_ARRAY;
+  const originalFileContents = (selectedNode?.data?.originalFileContents as Record<string, string>) || {};
+  const generatedFileContents = (selectedNode?.data?.generatedFileContents as Record<string, string>) || {};
 
   const [activeTab, setActiveTab] = useState<"diff" | "chat" | "console" | "vfs">("diff");
   const [activeDiffFile, setActiveDiffFile] = useState<string>("");
@@ -62,12 +64,28 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
         const trackedFiles = await VfsRegistry.getOrCreate(tabId).getNodeFiles(selectedNodeId);
         if (cancelled) return;
 
-        const currentFiles = (selectedNode.data?.modifiedFiles as string[]) || [];
+        const latestNode = useWorkspaceStore.getState().canvasContexts[tabId]?.nodes
+          .find((node) => node.id === selectedNodeId);
+        const currentFiles = (latestNode?.data?.modifiedFiles as string[]) || [];
+        const originalFileContents = (latestNode?.data?.originalFileContents as Record<string, string>) || {};
+        const generatedFileContents = (latestNode?.data?.generatedFileContents as Record<string, string>) || {};
         if (
           trackedFiles.length !== currentFiles.length ||
           trackedFiles.some((file, index) => file !== currentFiles[index])
         ) {
-          useWorkspaceStore.getState().updateTaskNode(selectedNodeId, { modifiedFiles: trackedFiles });
+          useWorkspaceStore.getState().updateTaskNode(selectedNodeId, {
+            modifiedFiles: trackedFiles,
+            originalFileContents: Object.fromEntries(
+              trackedFiles
+                .filter((file) => originalFileContents[file] !== undefined)
+                .map((file) => [file, originalFileContents[file]])
+            ),
+            generatedFileContents: Object.fromEntries(
+              trackedFiles
+                .filter((file) => generatedFileContents[file] !== undefined)
+                .map((file) => [file, generatedFileContents[file]])
+            ),
+          });
         }
       } catch (err) {
         console.error("[SidePane] Failed to sync task files from VFS:", err);
@@ -85,10 +103,24 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
       cancelled = true;
       window.removeEventListener(VFS_CHANGED_EVENT, handleVfsChanged);
     };
-  }, [tabId, selectedNodeId, selectedNode?.type, selectedNode?.data?.modifiedFiles]);
+  }, [
+    tabId,
+    selectedNodeId,
+    selectedNode?.type,
+    selectedNode?.data?.modifiedFiles,
+    selectedNode?.data?.originalFileContents,
+    selectedNode?.data?.generatedFileContents,
+  ]);
 
   // Diff content hook
-  const { originalCode, modifiedCode, isLoading: isDiffLoading } = useDiffContent(selectedNodeId, activeDiffFile, nodeStatus, tabId);
+  const { originalCode, modifiedCode, isLoading: isDiffLoading } = useDiffContent(
+    selectedNodeId,
+    activeDiffFile,
+    nodeStatus,
+    tabId,
+    originalFileContents[activeDiffFile],
+    generatedFileContents[activeDiffFile]
+  );
 
   // Sync width when storageKey changes (different node type selected)
   useEffect(() => {

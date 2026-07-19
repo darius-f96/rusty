@@ -8,6 +8,7 @@ import type { AgentQuestion } from "../ui/ChatInput";
 import { commandPermissionService, handleCommandPermissionMessage } from "../../services/commandPermissionService";
 import { scheduleTreeRefresh } from "../filetree/FileTreePresenter";
 import { appendBoundedText } from "../../services/boundedTextBuffer";
+import { invoke } from "@tauri-apps/api/core";
 export interface GeneratedTaskDraft { title: string; description: string; selected: boolean }
 
 const activeExplorerSockets = new Map<string, WebSocket>();
@@ -303,40 +304,92 @@ export const useExplorerWebSocket = (selectedNode: any) => {
 
         if (msg.type === "read_file") {
           console.log(`[SidePane] Tool request: read_file ${msg.path}`);
-          VfsRegistry.getOrCreate(tabId).readFile(msg.path).then((content: unknown) => {
-            if (socket.readyState === WebSocket.OPEN) {
-              socket.send(JSON.stringify({
-                type: "read_file_response",
-                requestId: msg.requestId,
-                content: content as string
-              }));
-            } else {
-              console.warn(`[SidePane] Socket closed before read_file_response could be sent for ${msg.path}`);
+          void (async () => {
+            try {
+              let content: string;
+              if (selectedNode?.type === "taskNode" && tabId) {
+                const canvasContext = useWorkspaceStore.getState().canvasContexts[tabId];
+                const currentNode = canvasContext?.nodes.find((node) => node.id === selectedNodeId);
+                const ownFiles = (currentNode?.data?.generatedFileContents as Record<string, string>) || {};
+                const connectedUpstreamFiles = new Map<string, string>();
+                for (const edge of canvasContext?.edges || []) {
+                  if (
+                    edge.target !== selectedNodeId ||
+                    edge.sourceHandle !== "task-out" ||
+                    edge.targetHandle !== "task-in"
+                  ) continue;
+                  const upstreamNode = canvasContext?.nodes.find((node) => node.id === edge.source);
+                  const upstreamFiles = (upstreamNode?.data?.generatedFileContents as Record<string, string>) || {};
+                  Object.entries(upstreamFiles).forEach(([filePath, fileContent]) => {
+                    connectedUpstreamFiles.set(filePath, fileContent);
+                  });
+                }
+                content = ownFiles[msg.path] !== undefined
+                  ? ownFiles[msg.path]
+                  : connectedUpstreamFiles.has(msg.path)
+                    ? connectedUpstreamFiles.get(msg.path)!
+                    : await invoke<string>("read_file_disk", { path: msg.path });
+              } else {
+                content = await VfsRegistry.getOrCreate(tabId).readFile(msg.path);
+              }
+              if (socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({
+                  type: "read_file_response",
+                  requestId: msg.requestId,
+                  content,
+                }));
+              }
+            } catch (err: any) {
+              if (socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({
+                  type: "read_file_response",
+                  requestId: msg.requestId,
+                  error: err.message || String(err),
+                }));
+              }
             }
-          }).catch((err: any) => {
-            if (socket.readyState === WebSocket.OPEN) {
-              socket.send(JSON.stringify({
-                type: "read_file_response",
-                requestId: msg.requestId,
-                error: err.message || String(err)
-              }));
-            } else {
-              console.warn(`[SidePane] Socket closed before read_file error could be sent for ${msg.path}`);
-            }
-          });
+          })();
           return;
         }
 
         if (msg.type === "write_file") {
-          VfsRegistry.getOrCreate(tabId).writeFile(msg.path, msg.content, selectedNodeId || undefined).then(() => {
-            if (socket.readyState === WebSocket.OPEN) {
-              socket.send(JSON.stringify({ type: "write_file_response", requestId: msg.requestId }));
+          void (async () => {
+            try {
+              const store = useWorkspaceStore.getState();
+              const currentNode = tabId
+                ? store.canvasContexts[tabId]?.nodes.find((node) => node.id === selectedNodeId)
+                : undefined;
+              const originalFileContents = (currentNode?.data?.originalFileContents as Record<string, string>) || {};
+              const generatedFileContents = (currentNode?.data?.generatedFileContents as Record<string, string>) || {};
+              let original = originalFileContents[msg.path];
+              if (selectedNode?.type === "taskNode" && original === undefined) {
+                try {
+                  original = await invoke<string>("read_file_disk", { path: msg.path });
+                } catch {
+                  original = "";
+                }
+              }
+
+              await VfsRegistry.getOrCreate(tabId).writeFile(msg.path, msg.content, selectedNodeId || undefined);
+              if (selectedNode?.type === "taskNode" && selectedNodeId) {
+                store.updateTaskNode(selectedNodeId, {
+                  modifiedFiles: Array.from(new Set([
+                    ...(((currentNode?.data?.modifiedFiles as string[]) || [])),
+                    msg.path,
+                  ])),
+                  originalFileContents: { ...originalFileContents, [msg.path]: original || "" },
+                  generatedFileContents: { ...generatedFileContents, [msg.path]: msg.content },
+                });
+              }
+              if (socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: "write_file_response", requestId: msg.requestId }));
+              }
+            } catch (err: any) {
+              if (socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: "write_file_response", requestId: msg.requestId, error: err.message || String(err) }));
+              }
             }
-          }).catch((err: any) => {
-            if (socket.readyState === WebSocket.OPEN) {
-              socket.send(JSON.stringify({ type: "write_file_response", requestId: msg.requestId, error: err.message || String(err) }));
-            }
-          });
+          })();
           return;
         }
 

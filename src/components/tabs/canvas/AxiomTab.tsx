@@ -75,6 +75,11 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
   const edges = context.edges || [];
   const isPipelineApplied = !!context.isPipelineApplied;
   const isReconciliationRunning = context.nodeStatus?.[`__reconciliation__:${tab.id}`] === "running";
+  const hasGlobalChatNode = useWorkspaceStore((state) =>
+    Object.values(state.canvasContexts).some((canvasContext) =>
+      canvasContext.nodes.some((node) => node.type === "globalChatNode")
+    )
+  );
 
   const flowNodes = useMemo(() => {
     return nodes.map((n) => {
@@ -637,10 +642,16 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
                       addGlobalChatNode(center.x - 75, center.y - 30, tab.id);
                       setNodeMenuOpen(false);
                     }}
-                    className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
+                    disabled={hasGlobalChatNode}
+                    title={hasGlobalChatNode ? "Only one Global Explorer can be added to a workspace" : undefined}
+                    className={`w-full text-left px-3 py-2 text-[var(--text-normal)] transition-colors flex items-center space-x-2 ${
+                      hasGlobalChatNode
+                        ? "cursor-not-allowed opacity-50"
+                        : "hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] cursor-pointer"
+                    }`}
                   >
                     <Globe size={13} className="text-[var(--color-status-danger)]" />
-                    <span>Create Global Explorer</span>
+                    <span>{hasGlobalChatNode ? "Global Explorer already added" : "Create Global Explorer"}</span>
                   </button>
                 </div>
               )}
@@ -797,10 +808,16 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
                   addGlobalChatNode(flowPosition.x - 75, flowPosition.y - 30, tab.id);
                   setContextMenu(null);
                 }}
-                className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
+                disabled={hasGlobalChatNode}
+                title={hasGlobalChatNode ? "Only one Global Explorer can be added to a workspace" : undefined}
+                className={`w-full text-left px-3 py-2 text-[var(--text-normal)] transition-colors flex items-center space-x-2 ${
+                  hasGlobalChatNode
+                    ? "cursor-not-allowed opacity-50"
+                    : "hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] cursor-pointer"
+                }`}
               >
                 <Globe size={13} className="text-[var(--color-status-danger)]" />
-                <span>Add Global Explorer</span>
+                <span>{hasGlobalChatNode ? "Global Explorer already added" : "Add Global Explorer"}</span>
               </button>
             </div>
           )}

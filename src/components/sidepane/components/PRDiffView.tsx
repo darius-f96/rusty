@@ -11,6 +11,10 @@ import { getMonacoLanguageId } from "../../../services/lspLanguage";
 interface PRDiffViewProps {
   tabId: string;
   modifiedFiles: string[];
+  ownerNodeId?: string;
+  persistenceTabId?: string;
+  refreshKey?: number;
+  onFileSaved?: (filePath: string) => void;
 }
 
 interface FileDiffState {
@@ -167,7 +171,14 @@ const FileDiffCard: React.FC<FileDiffCardProps> = ({
   );
 };
 
-export const PRDiffView: React.FC<PRDiffViewProps> = ({ tabId, modifiedFiles }) => {
+export const PRDiffView: React.FC<PRDiffViewProps> = ({
+  tabId,
+  modifiedFiles,
+  ownerNodeId,
+  persistenceTabId,
+  refreshKey = 0,
+  onFileSaved,
+}) => {
   const [filesState, setFilesState] = useState<Record<string, FileDiffState>>({});
   const [loading, setLoading] = useState(false);
   const [renderSideBySide, setRenderSideBySide] = useState(true);
@@ -189,7 +200,7 @@ export const PRDiffView: React.FC<PRDiffViewProps> = ({ tabId, modifiedFiles }) 
         try {
           original = await invoke("read_file_disk", { path: file });
         } catch {
-          original = "[New file generated during execution - not present on disk]";
+          original = "";
         }
         const parts = file.split("/");
         const name = parts[parts.length - 1];
@@ -219,7 +230,7 @@ export const PRDiffView: React.FC<PRDiffViewProps> = ({ tabId, modifiedFiles }) 
 
   useEffect(() => {
     loadAllDiffs();
-  }, [tabId, modifiedFiles.join(",")]);
+  }, [tabId, modifiedFiles.join(","), refreshKey]);
 
   const toggleCollapse = (filePath: string) => {
     setFilesState((prev) => {
@@ -260,7 +271,8 @@ export const PRDiffView: React.FC<PRDiffViewProps> = ({ tabId, modifiedFiles }) 
     }));
 
     try {
-      await VfsRegistry.getOrCreate(tabId).writeFile(filePath, file.edited);
+      await VfsRegistry.getOrCreate(tabId).writeFile(filePath, file.edited, ownerNodeId);
+      onFileSaved?.(filePath);
       setFilesState((prev) => {
         const current = prev[filePath];
         return {
@@ -275,7 +287,7 @@ export const PRDiffView: React.FC<PRDiffViewProps> = ({ tabId, modifiedFiles }) 
       });
       // Save canvas
       const { canvasFileService } = await import("../../tabs/canvas/services/canvasFileService");
-      canvasFileService.autoSaveCanvas(tabId);
+      canvasFileService.autoSaveCanvas(persistenceTabId || tabId);
       notify("Saved", `${file.name} saved successfully to VFS.`, "success");
     } catch (err: any) {
       console.error(`Failed to save VFS file:`, err);

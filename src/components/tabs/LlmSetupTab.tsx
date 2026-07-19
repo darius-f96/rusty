@@ -587,18 +587,13 @@ export const LlmSetupTab: React.FC = () => {
                 </div>
 
                 {/* Save and Fetch buttons */}
-                <div className="pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-[var(--border-color)]/30">
-                  <div className="flex items-center space-x-1.5 text-[10px] font-mono text-[var(--text-muted)]">
-                    <ShieldCheck size={14} className="text-[var(--color-status-success)]" />
-                    <span>Active: {activeModel}</span>
-                  </div>
-
-                  <div className="flex items-center space-x-2">
+                <div className="pt-4 flex flex-col space-y-3.5 border-t border-[var(--border-color)]/30">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
                       onClick={handleFetchModels}
                       disabled={fetchingModels || testingConnection}
-                      className="border border-[var(--border-color)] hover:border-[var(--accent-color)] bg-[var(--bg-app)] hover:bg-[var(--accent-bg)]/10 text-[var(--text-normal)] hover:text-[var(--text-light)] font-mono font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer flex items-center space-x-1.5 disabled:opacity-50"
+                      className="whitespace-nowrap border border-[var(--border-color)] hover:border-[var(--accent-color)] bg-[var(--bg-app)] hover:bg-[var(--accent-bg)]/10 text-[var(--text-normal)] hover:text-[var(--text-light)] font-mono font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer flex items-center space-x-1.5 disabled:opacity-50"
                       title="Discover and normalize the provider's model catalog"
                     >
                       <RefreshCw size={13} className={fetchingModels ? "animate-spin text-[var(--accent-color)]" : ""} />
@@ -609,7 +604,7 @@ export const LlmSetupTab: React.FC = () => {
                       type="button"
                       onClick={handleTestConnection}
                       disabled={fetchingModels || testingConnection}
-                      className="border border-[var(--border-color)] hover:border-[var(--color-status-success-border)] bg-[var(--bg-app)] hover:bg-[var(--color-status-success-bg)] text-[var(--text-normal)] hover:text-[var(--text-light)] font-mono font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer flex items-center space-x-1.5 disabled:opacity-50"
+                      className="whitespace-nowrap border border-[var(--border-color)] hover:border-[var(--color-status-success-border)] bg-[var(--bg-app)] hover:bg-[var(--color-status-success-bg)] text-[var(--text-normal)] hover:text-[var(--text-light)] font-mono font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer flex items-center space-x-1.5 disabled:opacity-50"
                     >
                       <ShieldCheck size={13} className={testingConnection ? "animate-pulse text-[var(--color-status-success)]" : ""} />
                       <span>{testingConnection ? "Testing..." : "Test"}</span>
@@ -618,11 +613,16 @@ export const LlmSetupTab: React.FC = () => {
                     <button
                       type="button"
                       onClick={handleSaveSettings}
-                      className="bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/85 text-[var(--color-primary-foreground)] font-mono font-bold px-4 py-2.5 rounded-xl transition-all shadow-lg hover:shadow-[var(--accent-color)]/20 cursor-pointer flex items-center space-x-1.5"
+                      className="whitespace-nowrap bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/85 text-[var(--color-primary-foreground)] font-mono font-bold px-4 py-2.5 rounded-xl transition-all shadow-lg hover:shadow-[var(--accent-color)]/20 cursor-pointer flex items-center space-x-1.5"
                     >
                       <Save size={13} />
                       <span>Save Configuration</span>
                     </button>
+                  </div>
+
+                  <div className="flex items-center space-x-1.5 text-[10px] font-mono text-[var(--text-muted)] bg-[var(--bg-app)]/50 border border-[var(--border-color)]/40 rounded-lg px-2.5 py-1.5 w-fit">
+                    <ShieldCheck size={14} className="text-[var(--color-status-success)]" />
+                    <span>Active Model: {activeModel}</span>
                   </div>
                 </div>
               </div>

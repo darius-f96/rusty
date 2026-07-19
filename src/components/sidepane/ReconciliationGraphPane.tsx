@@ -75,6 +75,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
   const [rollbackAvailable, setRollbackAvailable] = useState(false);
   const [isRollingBack, setIsRollingBack] = useState(false);
   const [reconciledFiles, setReconciledFiles] = useState<string[]>([]);
+  const [reconciliationRevision, setReconciliationRevision] = useState(0);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<WebSocket | null>(null);
@@ -102,17 +103,18 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
       prompt: node.data?.prompt || "",
       chatHistory: globalChatHistory[node.id] || [],
       modifiedFiles: (node.data?.modifiedFiles as string[]) || [],
+      originalFileContents: (node.data?.originalFileContents as Record<string, string>) || {},
+      generatedFileContents: (node.data?.generatedFileContents as Record<string, string>) || {},
     }));
   }, [taskNodes, globalChatHistory]);
 
-  const allModifiedFiles = useMemo(() => {
+  const taskModifiedFiles = useMemo(() => {
     const files = new Set<string>();
     formattedNodes.forEach((n) => {
       n.modifiedFiles.forEach((f) => files.add(f));
     });
-    reconciledFiles.forEach((filePath) => files.add(filePath));
     return Array.from(files);
-  }, [formattedNodes, reconciledFiles]);
+  }, [formattedNodes]);
 
   // Load duplicates from VFS
   const loadDuplicates = async () => {
@@ -126,7 +128,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
 
   useEffect(() => {
     loadDuplicates();
-  }, [tabId, allModifiedFiles]);
+  }, [tabId, taskModifiedFiles.join(",")]);
 
   // Sync scroll on chat messages update
   useEffect(() => {
@@ -266,6 +268,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
       if (detail?.tabId !== tabId) return;
       setReconciledFiles(detail.changedPaths || []);
       setRollbackAvailable((detail.changedPaths || []).length > 0);
+      setReconciliationRevision((revision) => revision + 1);
     };
     window.addEventListener(RECONCILIATION_OVERLAY_CHANGED_EVENT, handleOverlayChanged);
     return () => window.removeEventListener(RECONCILIATION_OVERLAY_CHANGED_EVENT, handleOverlayChanged);
@@ -376,7 +379,11 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
 
         if (msg.type === "write_file") {
           console.log(`[ReconciliateGraph] Sidecar writing file: ${msg.path}`);
-          VfsRegistry.getOrCreate(reconciliationVfsId).writeFile(msg.path, msg.content)
+          VfsRegistry.getOrCreate(reconciliationVfsId).writeFile(
+            msg.path,
+            msg.content,
+            reconciliationOverlayService.getReconciliationNodeId(tabId)
+          )
             .then(() => {
               reconciliationOverlayService.markChanged(tabId, msg.path);
               useWorkspaceStore.getState().updateCanvasContext(tabId, { isPipelineApplied: false });
@@ -586,7 +593,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
           }`}
         >
           <FileCode size={13} />
-          <span>Reconciled Files ({allModifiedFiles.length})</span>
+          <span>Reconciled Files ({reconciledFiles.length})</span>
         </button>
       </div>
 
@@ -742,8 +749,12 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
 
         {activeTab === "files" && (
           <PRDiffView
-            tabId={reconciliationOverlayService.hasSession(tabId) ? reconciliationVfsId : tabId}
-            modifiedFiles={allModifiedFiles}
+            tabId={reconciliationVfsId}
+            modifiedFiles={reconciledFiles}
+            ownerNodeId={reconciliationOverlayService.getReconciliationNodeId(tabId)}
+            persistenceTabId={tabId}
+            refreshKey={reconciliationRevision}
+            onFileSaved={(filePath) => reconciliationOverlayService.markChanged(tabId, filePath)}
           />
         )}
       </div>

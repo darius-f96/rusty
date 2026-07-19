@@ -380,6 +380,11 @@ const getOrCreateContext = (state: WorkspaceState, tabId: string): CanvasContext
   return state.canvasContexts[tabId];
 };
 
+const workspaceHasGlobalChatNode = (state: WorkspaceState): boolean =>
+  Object.values(state.canvasContexts).some((ctx) =>
+    ctx.nodes.some((node) => node.type === "globalChatNode")
+  );
+
 // Helper to find tabId containing a node
 const findTabIdByNodeId = (state: WorkspaceState, nodeId: string): string => {
   if (nodeId.startsWith(RECONCILIATION_STREAM_PREFIX)) {
@@ -1323,6 +1328,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   },
 
   addGlobalChatNode: (x, y, tabId) => set((state) => {
+    if (workspaceHasGlobalChatNode(state)) return {};
+
     const targetTabId = tabId || getActiveCanvasTabId(state);
     const id = `global_chat_${Date.now()}`;
     const targetCtx = getOrCreateContext(state, targetTabId);

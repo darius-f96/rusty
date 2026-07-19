@@ -88,7 +88,19 @@ export const DiffTabContent: React.FC<DiffTabContentProps> = ({
     if (!activeDiffFile || !isDirty) return;
     setIsSaving(true);
     try {
-      await VfsRegistry.getOrCreate(tabId).writeFile(activeDiffFile, editedCode);
+      await VfsRegistry.getOrCreate(tabId).writeFile(activeDiffFile, editedCode, selectedNode.id);
+      const originalFileContents = (selectedNode.data?.originalFileContents as Record<string, string>) || {};
+      const generatedFileContents = (selectedNode.data?.generatedFileContents as Record<string, string>) || {};
+      updateTaskNode(selectedNode.id, {
+        originalFileContents: {
+          ...originalFileContents,
+          [activeDiffFile]: originalFileContents[activeDiffFile] ?? originalCode,
+        },
+        generatedFileContents: {
+          ...generatedFileContents,
+          [activeDiffFile]: editedCode,
+        },
+      });
       setIsDirty(false);
       if (tabId) {
         const { canvasFileService } = await import("../../tabs/canvas/services/canvasFileService");
@@ -162,7 +174,19 @@ export const DiffTabContent: React.FC<DiffTabContentProps> = ({
                     try {
                       await VfsRegistry.getOrCreate(tabId).deleteNodeFile(selectedNode.id, activeDiffFile);
                       const newFiles = modifiedFiles.filter((f) => f !== activeDiffFile);
-                      updateTaskNode(selectedNode.id, { modifiedFiles: newFiles });
+                      const nextOriginalFileContents = {
+                        ...((selectedNode.data?.originalFileContents as Record<string, string>) || {}),
+                      };
+                      const nextGeneratedFileContents = {
+                        ...((selectedNode.data?.generatedFileContents as Record<string, string>) || {}),
+                      };
+                      delete nextOriginalFileContents[activeDiffFile];
+                      delete nextGeneratedFileContents[activeDiffFile];
+                      updateTaskNode(selectedNode.id, {
+                        modifiedFiles: newFiles,
+                        originalFileContents: nextOriginalFileContents,
+                        generatedFileContents: nextGeneratedFileContents,
+                      });
                       if (tabId) {
                         const { canvasFileService } = await import("../../tabs/canvas/services/canvasFileService");
                         await canvasFileService.autoSaveCanvas(tabId);
@@ -183,7 +207,11 @@ export const DiffTabContent: React.FC<DiffTabContentProps> = ({
                 if (confirm("Are you sure you want to delete all files modified by this task node from the VFS?")) {
                   try {
                     await VfsRegistry.getOrCreate(tabId).deleteNodeFiles(selectedNode.id);
-                    updateTaskNode(selectedNode.id, { modifiedFiles: [] });
+                    updateTaskNode(selectedNode.id, {
+                      modifiedFiles: [],
+                      originalFileContents: {},
+                      generatedFileContents: {},
+                    });
                     if (tabId) {
                       const { canvasFileService } = await import("../../tabs/canvas/services/canvasFileService");
                       await canvasFileService.autoSaveCanvas(tabId);

@@ -22,6 +22,7 @@ import { CommandPermissionPresenter } from "./permissions/CommandPermissionPrese
 import { commandPermissionService, handleCommandPermissionMessage } from "../services/commandPermissionService";
 import { scheduleTreeRefresh } from "./filetree/FileTreePresenter";
 import { appendBoundedText } from "../services/boundedTextBuffer";
+import { invoke } from "@tauri-apps/api/core";
 
 export const Workspace: React.FC = () => {
   const rootPath = useWorkspaceStore((state) => state.rootPath);
@@ -125,7 +126,11 @@ export const Workspace: React.FC = () => {
     let initialNodeFiles: string[] = [];
     try {
       initialNodeFiles = await vfs.prepareForExecution(nodeId);
-      storeState.updateTaskNode(nodeId, { modifiedFiles: [] });
+      storeState.updateTaskNode(nodeId, {
+        modifiedFiles: [],
+        originalFileContents: {},
+        generatedFileContents: {},
+      });
     } catch (err) {
       console.error("Failed to prepare VFS for execution:", err);
     }
@@ -253,6 +258,18 @@ export const Workspace: React.FC = () => {
         files,
       });
     }
+
+    // A task may only see pending VFS code from directly connected upstream
+    // tasks. All other reads must reflect the physical workspace. Files written
+    // during this execution are added as they are created so the task can read
+    // back its own pending changes.
+    const connectedUpstreamVfsFiles = new Map(
+      upstreamTaskContext.flatMap((task) =>
+        task.files.map((file) => [file.path, file.content] as const)
+      )
+    );
+    const currentExecutionVfsFiles = new Map<string, string>();
+    const currentExecutionOriginalFiles = new Map<string, string>();
 
     console.log("WebSocket [executeNode] starting task execution", { nodeId, inputFiles, mcpContext: mcpContext.length, upstreamTasks: upstreamTaskContext.length });
 
@@ -439,7 +456,11 @@ export const Workspace: React.FC = () => {
         if (data.type === "read_file") {
           try {
             console.log(`WebSocket [read_file] intercept for: ${data.path}`);
-            const content: string = await vfs.readFile(data.path);
+            const content: string = currentExecutionVfsFiles.has(data.path)
+              ? currentExecutionVfsFiles.get(data.path)!
+              : connectedUpstreamVfsFiles.has(data.path)
+                ? connectedUpstreamVfsFiles.get(data.path)!
+                : await invoke<string>("read_file_disk", { path: data.path });
             socket.send(
               JSON.stringify({ type: "read_file_response", requestId: data.requestId, content })
             );
@@ -459,7 +480,16 @@ export const Workspace: React.FC = () => {
         if (data.type === "write_file") {
           try {
             console.log(`WebSocket [write_file] intercept for: ${data.path}`);
+            if (!currentExecutionOriginalFiles.has(data.path)) {
+              try {
+                const original = await invoke<string>("read_file_disk", { path: data.path });
+                currentExecutionOriginalFiles.set(data.path, original);
+              } catch {
+                currentExecutionOriginalFiles.set(data.path, "");
+              }
+            }
             await vfs.writeFile(data.path, data.content, nodeId);
+            currentExecutionVfsFiles.set(data.path, data.content);
             socket.send(JSON.stringify({ type: "write_file_response", requestId: data.requestId }));
           } catch (err: any) {
             console.error("WebSocket [write_file] intercept error:", err);
@@ -495,7 +525,19 @@ export const Workspace: React.FC = () => {
           useWorkspaceStore.getState().updateGlobalChatMessage(nodeId, consoleMessageId, "");
 
           const uniqueModified: string[] = Array.from(new Set(modified)) as string[];
-          useWorkspaceStore.getState().updateTaskNode(nodeId, { modifiedFiles: uniqueModified });
+          const originalFileContents = Object.fromEntries(
+            uniqueModified.map((filePath) => [filePath, currentExecutionOriginalFiles.get(filePath) || ""])
+          );
+          const generatedFileContents = Object.fromEntries(
+            uniqueModified
+              .filter((filePath) => currentExecutionVfsFiles.has(filePath))
+              .map((filePath) => [filePath, currentExecutionVfsFiles.get(filePath)!])
+          );
+          useWorkspaceStore.getState().updateTaskNode(nodeId, {
+            modifiedFiles: uniqueModified,
+            originalFileContents,
+            generatedFileContents,
+          });
           setNodeStatus(nodeId, "success");
           socket.close();
 

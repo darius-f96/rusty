@@ -57,6 +57,8 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, onStopExec
   const [isSaving, setIsSaving] = useState(false);
 
   const modifiedFiles = (taskNode?.data?.modifiedFiles as string[]) || EMPTY_ARRAY;
+  const originalFileContents = (taskNode?.data?.originalFileContents as Record<string, string>) || {};
+  const generatedFileContents = (taskNode?.data?.generatedFileContents as Record<string, string>) || {};
   const [activeDiffFile, setActiveDiffFile] = useState<string>("");
 
   const diffEditorRef = useRef<any>(null);
@@ -81,13 +83,17 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, onStopExec
     const fetchDiffContent = async () => {
       setLoadingDiff(true);
       try {
-        const modified: string = await VfsRegistry.getOrCreate(canvasTabId).readFile(activeDiffFile);
+        const modified: string = generatedFileContents[activeDiffFile] !== undefined
+          ? generatedFileContents[activeDiffFile]
+          : await VfsRegistry.getOrCreate(canvasTabId).readFile(activeDiffFile);
         
-        let original = "";
-        try {
-          original = await invoke("read_file_disk", { path: activeDiffFile });
-        } catch (e) {
-          original = "";
+        let original = originalFileContents[activeDiffFile];
+        if (original === undefined) {
+          try {
+            original = await invoke("read_file_disk", { path: activeDiffFile });
+          } catch (e) {
+            original = "";
+          }
         }
 
         setOriginalCode(original);
@@ -102,7 +108,13 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, onStopExec
     };
 
     fetchDiffContent();
-  }, [activeDiffFile, nodeStatus]);
+  }, [
+    activeDiffFile,
+    nodeStatus,
+    canvasTabId,
+    originalFileContents[activeDiffFile],
+    generatedFileContents[activeDiffFile],
+  ]);
 
   // Adjust editor size when active state changes
   useEffect(() => {
@@ -133,7 +145,17 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, onStopExec
     if (!activeDiffFile || !isDirty) return;
     setIsSaving(true);
     try {
-      await VfsRegistry.getOrCreate(canvasTabId).writeFile(activeDiffFile, editedCode);
+      await VfsRegistry.getOrCreate(canvasTabId).writeFile(activeDiffFile, editedCode, taskNodeId);
+      updateTaskNode(taskNodeId, {
+        originalFileContents: {
+          ...originalFileContents,
+          [activeDiffFile]: originalFileContents[activeDiffFile] ?? originalCode,
+        },
+        generatedFileContents: {
+          ...generatedFileContents,
+          [activeDiffFile]: editedCode,
+        },
+      });
       setIsDirty(false);
       if (canvasTabId) {
         const { canvasFileService } = await import("./canvas/services/canvasFileService");
@@ -250,7 +272,15 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, onStopExec
                       try {
                         await VfsRegistry.getOrCreate(canvasTabId).deleteNodeFile(taskNodeId, activeDiffFile);
                         const newFiles = modifiedFiles.filter((f) => f !== activeDiffFile);
-                        updateTaskNode(taskNodeId, { modifiedFiles: newFiles });
+                        const nextOriginalFileContents = { ...originalFileContents };
+                        const nextGeneratedFileContents = { ...generatedFileContents };
+                        delete nextOriginalFileContents[activeDiffFile];
+                        delete nextGeneratedFileContents[activeDiffFile];
+                        updateTaskNode(taskNodeId, {
+                          modifiedFiles: newFiles,
+                          originalFileContents: nextOriginalFileContents,
+                          generatedFileContents: nextGeneratedFileContents,
+                        });
                         if (canvasTabId) {
                           const { canvasFileService } = await import("./canvas/services/canvasFileService");
                           await canvasFileService.autoSaveCanvas(canvasTabId);
@@ -271,7 +301,11 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, onStopExec
                   if (confirm("Are you sure you want to delete all files modified by this task node from the VFS?")) {
                     try {
                       await VfsRegistry.getOrCreate(canvasTabId).deleteNodeFiles(taskNodeId);
-                      updateTaskNode(taskNodeId, { modifiedFiles: [] });
+                      updateTaskNode(taskNodeId, {
+                        modifiedFiles: [],
+                        originalFileContents: {},
+                        generatedFileContents: {},
+                      });
                       if (canvasTabId) {
                         const { canvasFileService } = await import("./canvas/services/canvasFileService");
                         await canvasFileService.autoSaveCanvas(canvasTabId);

@@ -6,7 +6,9 @@ export const useDiffContent = (
   selectedNodeId: string | null,
   activeDiffFile: string,
   nodeStatus: string,
-  tabId?: string
+  tabId?: string,
+  originalSnapshot?: string,
+  generatedSnapshot?: string
 ) => {
   const [originalCode, setOriginalCode] = useState("// Loading original content...");
   const [modifiedCode, setModifiedCode] = useState("// Loading modified content...");
@@ -22,17 +24,21 @@ export const useDiffContent = (
 
     try {
       console.log(`SidePane [fetchDiffContent] loading paths`, { activeDiffFile });
-      const modified: string = await VfsRegistry.getOrCreate(tabId).readFile(activeDiffFile);
+      const modified: string = generatedSnapshot !== undefined
+        ? generatedSnapshot
+        : await VfsRegistry.getOrCreate(tabId).readFile(activeDiffFile);
 
-      let original = "";
-      try {
-        original = await invoke("read_file_disk", { path: activeDiffFile });
-      } catch (diskErr) {
-        console.log(`SidePane [fetchDiffContent] File not on disk yet (treating as new file)`);
-        original = "";
+      let original = originalSnapshot;
+      if (original === undefined) {
+        try {
+          original = await invoke("read_file_disk", { path: activeDiffFile });
+        } catch (diskErr) {
+          console.log(`SidePane [fetchDiffContent] File not on disk yet (treating as new file)`);
+          original = "";
+        }
       }
 
-      setOriginalCode(original);
+      setOriginalCode(original ?? "");
       setModifiedCode(modified);
       setIsLoading(false);
     } catch (e: any) {
@@ -41,7 +47,7 @@ export const useDiffContent = (
       setModifiedCode(`// Error reading file: ${e.message}`);
       setIsLoading(false);
     }
-  }, [selectedNodeId, activeDiffFile]);
+  }, [selectedNodeId, activeDiffFile, tabId, originalSnapshot, generatedSnapshot]);
 
   useEffect(() => {
     let active = true;
@@ -53,18 +59,22 @@ export const useDiffContent = (
 
       try {
         console.log(`SidePane [fetchDiffContent] loading paths`, { activeDiffFile });
-        const modified: string = await VfsRegistry.getOrCreate(tabId).readFile(activeDiffFile);
+        const modified: string = generatedSnapshot !== undefined
+          ? generatedSnapshot
+          : await VfsRegistry.getOrCreate(tabId).readFile(activeDiffFile);
 
-        let original = "";
-        try {
-          original = await invoke("read_file_disk", { path: activeDiffFile });
-        } catch (diskErr) {
-          console.log(`SidePane [fetchDiffContent] File not on disk yet (treating as new file)`);
-          original = "";
+        let original = originalSnapshot;
+        if (original === undefined) {
+          try {
+            original = await invoke("read_file_disk", { path: activeDiffFile });
+          } catch (diskErr) {
+            console.log(`SidePane [fetchDiffContent] File not on disk yet (treating as new file)`);
+            original = "";
+          }
         }
 
         if (active && loadingFileRef.current === activeDiffFile) {
-          setOriginalCode(original);
+          setOriginalCode(original ?? "");
           setModifiedCode(modified);
           setIsLoading(false);
         }
@@ -82,7 +92,7 @@ export const useDiffContent = (
     return () => {
       active = false;
     };
-  }, [selectedNodeId, activeDiffFile, nodeStatus]);
+  }, [selectedNodeId, activeDiffFile, nodeStatus, tabId, originalSnapshot, generatedSnapshot]);
 
   useEffect(() => {
     if (prevNodeStatusRef.current === "running" && nodeStatus === "success") {
