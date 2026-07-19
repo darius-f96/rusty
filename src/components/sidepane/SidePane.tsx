@@ -214,7 +214,10 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
         onClose={onClose}
         isMaximized={isMaximized}
         onToggleMaximize={() => setIsMaximized(!isMaximized)}
-        onGenerateTasks={explorer.handleGenerateTaskDraft}
+        onGenerateTasks={() => {
+          setActiveTab("chat");
+          explorer.handleOpenTaskGeneration();
+        }}
         onStopGenerateTasks={explorer.handleStopTaskGeneration}
         onSummarize={explorer.handleExplorerSummarize}
         isGeneratingTasks={explorer.isGeneratingTasks}
@@ -262,6 +265,14 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
               handleExplorerSendMessage={explorer.handleExplorerSendMessage}
               generatedTaskDraft={explorer.generatedTaskDraft}
               setGeneratedTaskDraft={explorer.setGeneratedTaskDraft}
+              isTaskGenerationPromptOpen={explorer.isTaskGenerationPromptOpen}
+              setIsTaskGenerationPromptOpen={explorer.setIsTaskGenerationPromptOpen}
+              taskGenerationInstructions={explorer.taskGenerationInstructions}
+              setTaskGenerationInstructions={explorer.setTaskGenerationInstructions}
+              taskGenerationFailure={explorer.taskGenerationFailure}
+              taskGenerationModel={explorer.taskGenerationModel}
+              isGeneratingTasks={explorer.isGeneratingTasks}
+              handleGenerateTaskDraft={explorer.handleGenerateTaskDraft}
               onCreateTaskNodes={async (tasks) => {
                 if (!tabId) return;
                 const created = useWorkspaceStore.getState().addTaskNodesBatch(tabId, selectedNode.id, tasks);

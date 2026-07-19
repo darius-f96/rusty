@@ -198,11 +198,6 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
       }
 
       if (sourceNode.type === "contextNode" || sourceNode.type === "mcpNode") {
-        const hasExisting = edges.some(
-          (e) => e.source === source && e.target !== target
-        );
-        if (hasExisting) return false;
-
         if (targetNode.type !== "taskNode" || !targetHandle?.startsWith("context-in")) {
           return false;
         }
@@ -216,7 +211,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
 
       return true;
     },
-    [nodes, edges]
+    [nodes]
   );
 
   const getPossibleConnection = useCallback((node1: any, node2: any) => {

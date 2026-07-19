@@ -1,23 +1,15 @@
-import React, { useState, memo, useContext } from "react";
+import React, { useState, memo } from "react";
 import { Handle, Position } from "@xyflow/react";
 import { Plug, Pencil, Check, Trash2, ChevronDown } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
-import { CanvasTabContext } from "../tabs/canvas/CanvasTabContext";
 
 export const McpNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) => {
-  const { tabId } = useContext(CanvasTabContext);
   const updateNode = useWorkspaceStore((state) => state.updateTaskNode);
   const deleteNode = useWorkspaceStore((state) => state.deleteNode);
   const mcpServers = useWorkspaceStore((state) => state.mcpServers);
-  const edges = useWorkspaceStore((state) => (state.canvasContexts[tabId] || { edges: [] }).edges);
-
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(data.name || "MCP Context");
   const [menuOpen, setMenuOpen] = useState(false);
-
-  const activeEdges = edges.filter((e) => e.source === id);
-  const isTopConnected = activeEdges.some((e) => e.sourceHandle === "context-out-top");
-  const isBottomConnected = activeEdges.some((e) => e.sourceHandle === "context-out-bottom");
 
   const serverNames = Object.keys(mcpServers);
   const selectedServer = data.mcpServerName ? mcpServers[data.mcpServerName] : null;
@@ -176,22 +168,18 @@ export const McpNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) 
       </div>
 
       {/* Handles — same as ContextNode so it wires into task nodes */}
-      {!isBottomConnected && (
-        <Handle
-          type="source"
-          position={Position.Top}
-          id="context-out-top"
-          style={{ background: "var(--color-status-info-solid)", width: 14, height: 14, border: "2.5px solid var(--color-surface-sidebar)" }}
-        />
-      )}
-      {!isTopConnected && (
-        <Handle
-          type="source"
-          position={Position.Bottom}
-          id="context-out-bottom"
-          style={{ background: "var(--color-status-info-solid)", width: 14, height: 14, border: "2.5px solid var(--color-surface-sidebar)" }}
-        />
-      )}
+      <Handle
+        type="source"
+        position={Position.Top}
+        id="context-out-top"
+        style={{ background: "var(--color-status-info-solid)", width: 14, height: 14, border: "2.5px solid var(--color-surface-sidebar)" }}
+      />
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        id="context-out-bottom"
+        style={{ background: "var(--color-status-info-solid)", width: 14, height: 14, border: "2.5px solid var(--color-surface-sidebar)" }}
+      />
     </div>
   );
 });

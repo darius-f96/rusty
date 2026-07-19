@@ -16,6 +16,7 @@ import { createMcpTools, McpServerConfig } from "../services/mcpClient";
 import { createWebSearchTool } from "../services/webSearchTool";
 import { DeferredUserQuestion, hasActiveBackgroundSubagents, runPiAgentChat } from "../services/piAgentChat";
 import { createRunCommandTool } from "./tools/runCommandTool";
+import { resolveAgentChatToolNames } from "./agentChatPolicy";
 
 type AgentTool = {
   name: string;
@@ -25,7 +26,7 @@ type AgentTool = {
 };
 
 export async function agentChat(ws: WebSocket, data: any): Promise<void> {
-  const { tabId, message, model, workspaceRoot, chatHistory, customProvider, skill, lspSettings, mcpServers, planOnly } = data;
+  const { tabId, message, model, workspaceRoot, chatHistory, customProvider, skill, lspSettings, mcpServers, planOnly, vfsOnly } = data;
   (ws as any).__activeAgentTabId = tabId;
   console.log(`WebSocket [Server] agent_chat starting`, { tabId, workspaceRoot, model, hasSkill: !!skill, lspEnabled: lspSettings?.enabled, mcpCount: mcpServers?.length || 0 });
 
@@ -236,12 +237,7 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
       "run_command",
       ...(lspSettings?.enabled ? ["lsp_get_definition", "lsp_get_references", "lsp_get_diagnostics"] : [])
     ];
-    const enabledToolNames = planOnly
-      ? Array.from(new Set([
-          ...requestedToolNames.filter((name: string) => name !== "write_file" && name !== "run_command"),
-          "write_plan",
-        ]))
-      : requestedToolNames.filter((name: string) => name !== "write_plan");
+    const enabledToolNames = resolveAgentChatToolNames(requestedToolNames, { planOnly, vfsOnly });
     const tools: AgentTool[] = allTools.filter((t) => enabledToolNames.includes(t.name));
     // Observability is always available, including when a restrictive skill is selected.
     tools.push(progressTool);
@@ -314,7 +310,16 @@ Global Chat planning policy (this overrides any conflicting skill instruction):
 - Any persisted plan MUST use 'write_plan' with a descriptive Markdown filename. Never store a plan in the VFS or anywhere outside the project-root 'plans' folder.
 ` : "";
 
-    const systemPrompt = `${skill?.systemPrompt || defaultSystemPrompt}${planningPolicy}
+    const taskNodePolicy = vfsOnly ? `
+
+TaskNode VFS policy (this overrides any conflicting skill instruction):
+- Follow the user-selected skill while staying inside the TaskNode's virtual workspace.
+- You may read workspace files, but every file creation or modification MUST use 'write_file'. That tool writes only to this TaskNode's VFS for later review and reconciliation; it does not modify the physical workspace.
+- Continue iterating on the current VFS versions of files when the user requests refinements.
+- Physical command execution is unavailable. Do not attempt shell commands or ask another agent to bypass this boundary.
+` : "";
+
+    const systemPrompt = `${skill?.systemPrompt || defaultSystemPrompt}${planningPolicy}${taskNodePolicy}
 
 User-visible reasoning updates:
 - Before the first substantive action, call 'report_progress' with a concise summary of your approach and the next action.
@@ -322,14 +327,16 @@ User-visible reasoning updates:
 - Base updates on concrete context and tool results. Do not reveal private chain-of-thought or hidden reasoning; keep each update to 1-3 clear sentences.
 
 Delegation:
-- When two or more investigations, reviews, or implementation steps are independent, delegate them concurrently by issuing multiple 'Agent' tool calls in the same turn.
+${vfsOnly
+  ? "- TaskNodes work directly and cannot delegate to other agents."
+  : `- When two or more investigations, reviews, or implementation steps are independent, delegate them concurrently by issuing multiple 'Agent' tool calls in the same turn.
 - Use background subagents for independent long-running work, and continue with work that does not depend on their results.
 - Keep dependent work sequential and wait for subagent results only when later work depends on them.
 - Never ask the user a refining question or present a final recommendation while delegated subagents are active. First retrieve every delegated result with get_subagent_result (use wait: true when necessary), then aggregate the findings.
 - Every delegated task must be narrowly scoped with a concrete deliverable. Ask for a concise findings memo, not an open-ended investigation.
 - Always set max_turns when delegating: use 3 for codebase mapping and 4 for web research or implementation analysis. Stop once the requested evidence is sufficient.
 - For codebase discovery, use the Explore agent with only the smallest relevant set of files. For product research, use at most three web searches and summarize the sources; do not keep browsing for marginal detail.
-- Do not delegate verification, retries, or follow-up exploration unless the user explicitly requests deeper research.
+- Do not delegate verification, retries, or follow-up exploration unless the user explicitly requests deeper research.`}
 
 Questions:
 - When a material product, UX, or architecture decision cannot be inferred safely, call 'ask_user_question' instead of guessing. Keep questions focused and offer concrete options with their trade-offs.`;
@@ -354,6 +361,7 @@ Questions:
       sendLog,
       sendToken,
       sendSubagentUpdate: (subagent) => safeSend(ws, { type: "subagent_update", tabId, subagent }),
+      enableSubagents: !vfsOnly,
       consumeDeferredQuestion: () => {
         const question = deferredQuestion;
         deferredQuestion = undefined;

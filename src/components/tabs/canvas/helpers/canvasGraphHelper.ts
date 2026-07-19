@@ -1,7 +1,7 @@
 import { Node, Edge, Connection } from "@xyflow/react";
 
 export const canvasGraphHelper = {
-  isValidConnection: (connection: Connection, nodes: Node[], edges: Edge[]): boolean => {
+  isValidConnection: (connection: Connection, nodes: Node[]): boolean => {
     const { source, target, sourceHandle, targetHandle } = connection;
     if (source === target) return false;
 
@@ -14,14 +14,8 @@ export const canvasGraphHelper = {
       return false;
     }
 
-    // Context node is not allowed to connect to more than one TaskNode
-    if (sourceNode.type === "contextNode") {
-      const hasExisting = edges.some(
-        (e) => e.source === source && e.target !== target
-      );
-      if (hasExisting) return false;
-
-      // Must connect to task node context-in handles
+    if (sourceNode.type === "contextNode" || sourceNode.type === "mcpNode") {
+      // Context and MCP nodes may fan out, but can only feed task context handles.
       if (targetNode.type !== "taskNode" || !targetHandle?.startsWith("context-in")) {
         return false;
       }

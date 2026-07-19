@@ -295,6 +295,7 @@ export const createCanvasSlice: WorkspaceSliceCreator = (set, get) => ({
       const context = getOrCreateContext(state, tabId);
       const anchor = context.nodes.find((node) => node.id === anchorNodeId);
       if (!anchor || tasks.length === 0) return {};
+      const taskSpecs = tasks.slice(0, 20);
       const taskWidth = 320;
       const taskHeight = 190;
       const gapX = 56;
@@ -314,7 +315,13 @@ export const createCanvasSlice: WorkspaceSliceCreator = (set, get) => ({
           && candidate.y < box.y + box.height + gapY
           && candidate.y + candidate.height + gapY > box.y);
       const newNodes: Node[] = [];
-      tasks.slice(0, 20).forEach((task, index) => {
+      const taskEntries = taskSpecs.map((task, index) => ({
+        task,
+        key: task.key || `task-${index + 1}`,
+        id: `task_${crypto.randomUUID()}`,
+      }));
+      const idByKey = new Map(taskEntries.map(({ key, id }) => [key, id]));
+      taskEntries.forEach(({ task, id }, index) => {
         let slot = index;
         let candidate = { x: 0, y: 0, width: taskWidth, height: taskHeight };
         do {
@@ -328,7 +335,6 @@ export const createCanvasSlice: WorkspaceSliceCreator = (set, get) => ({
           };
           slot++;
         } while (intersects(candidate) && slot < 500);
-        const id = `task_${crypto.randomUUID()}`;
         createdIds.push(id);
         occupied.push(candidate);
         newNodes.push({
@@ -346,8 +352,26 @@ export const createCanvasSlice: WorkspaceSliceCreator = (set, get) => ({
           },
         });
       });
+      const seenConnections = new Set<string>();
+      const dependencyEdges: Edge[] = [];
+      taskEntries.forEach(({ task, id: target }) => {
+        for (const dependencyKey of task.dependsOn || []) {
+          const source = idByKey.get(dependencyKey);
+          const connectionKey = `${source}->${target}`;
+          if (!source || source === target || seenConnections.has(connectionKey)) continue;
+          seenConnections.add(connectionKey);
+          dependencyEdges.push({
+            id: `edge_${crypto.randomUUID()}`,
+            source,
+            sourceHandle: "task-out",
+            target,
+            targetHandle: "task-in",
+          });
+        }
+      });
       return updateContextAndSync(state, tabId, () => ({
         nodes: [...context.nodes, ...newNodes],
+        edges: [...context.edges, ...dependencyEdges],
       }), true);
     });
     return createdIds;

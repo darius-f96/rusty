@@ -16,10 +16,72 @@ import { scheduleTreeRefresh } from "../filetree/FileTreePresenter";
 import { appendBoundedText } from "../../services/boundedTextBuffer";
 import { invoke } from "@tauri-apps/api/core";
 import { selectableModelProviders } from "../../store/providerHelpers";
-export interface GeneratedTaskDraft { title: string; description: string; selected: boolean }
+export interface GeneratedTaskDraft {
+  key: string;
+  title: string;
+  description: string;
+  dependsOn: string[];
+  selected: boolean;
+}
+
+export interface TaskGenerationFailure {
+  code?: string;
+  message: string;
+  attempts?: number;
+}
 
 const activeExplorerSockets = new Map<string, WebSocket>();
 const activeExplorerSubagents = new Map<string, SubagentActivity[]>();
+
+interface ActiveTaskGeneration {
+  socket: WebSocket;
+  requestId: string;
+}
+
+interface TaskGenerationViewState {
+  promptOpen: boolean;
+  instructions: string;
+  failure: TaskGenerationFailure | null;
+  draft: GeneratedTaskDraft[];
+}
+
+const TASK_GENERATION_CHANGED_EVENT = "axiom-task-generation-changed";
+const activeTaskGenerations = new Map<string, ActiveTaskGeneration>();
+const taskGenerationViewStates = new Map<string, TaskGenerationViewState>();
+
+const getTaskGenerationViewState = (nodeId: string): TaskGenerationViewState =>
+  taskGenerationViewStates.get(nodeId) || {
+    promptOpen: false,
+    instructions: "",
+    failure: null,
+    draft: [],
+  };
+
+const publishTaskGenerationChange = (nodeId: string) => {
+  window.dispatchEvent(new CustomEvent(TASK_GENERATION_CHANGED_EVENT, { detail: { nodeId } }));
+};
+
+const updateTaskGenerationViewState = (nodeId: string, updates: Partial<TaskGenerationViewState>) => {
+  taskGenerationViewStates.set(nodeId, { ...getTaskGenerationViewState(nodeId), ...updates });
+  publishTaskGenerationChange(nodeId);
+};
+
+const setActiveTaskGeneration = (nodeId: string, generation: ActiveTaskGeneration | null) => {
+  if (generation) activeTaskGenerations.set(nodeId, generation);
+  else activeTaskGenerations.delete(nodeId);
+  publishTaskGenerationChange(nodeId);
+};
+
+const finishTaskGeneration = (
+  nodeId: string,
+  socket: WebSocket,
+  updates: Partial<TaskGenerationViewState> = {},
+) => {
+  const active = activeTaskGenerations.get(nodeId);
+  if (active?.socket === socket) activeTaskGenerations.delete(nodeId);
+  taskGenerationViewStates.set(nodeId, { ...getTaskGenerationViewState(nodeId), ...updates });
+  publishTaskGenerationChange(nodeId);
+};
 
 type IncomingSubagent = SubagentActivity & { previousId?: string; appendLog?: string };
 
@@ -66,6 +128,9 @@ export const useExplorerWebSocket = (selectedNode: any) => {
   const [explorerInput, setExplorerInput] = useState("");
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [isGeneratingTasks, setIsGeneratingTasks] = useState(false);
+  const [isTaskGenerationPromptOpen, setIsTaskGenerationPromptOpen] = useState(false);
+  const [taskGenerationInstructions, setTaskGenerationInstructions] = useState("");
+  const [taskGenerationFailure, setTaskGenerationFailure] = useState<TaskGenerationFailure | null>(null);
   const [generatedTaskDraft, setGeneratedTaskDraft] = useState<GeneratedTaskDraft[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
@@ -121,6 +186,45 @@ export const useExplorerWebSocket = (selectedNode: any) => {
   }, [selectedNodeId]);
 
   useEffect(() => {
+    const syncTaskGeneration = () => {
+      if (!selectedNodeId) {
+        taskGenerationSocketRef.current = null;
+        taskGenerationRequestIdRef.current = null;
+        setIsGeneratingTasks(false);
+        setIsTaskGenerationPromptOpen(false);
+        setTaskGenerationInstructions("");
+        setTaskGenerationFailure(null);
+        setGeneratedTaskDraft([]);
+        return;
+      }
+
+      const active = activeTaskGenerations.get(selectedNodeId);
+      const isActive = !!active && (
+        active.socket.readyState === WebSocket.CONNECTING || active.socket.readyState === WebSocket.OPEN
+      );
+      if (active && !isActive) activeTaskGenerations.delete(selectedNodeId);
+      taskGenerationSocketRef.current = isActive ? active!.socket : null;
+      taskGenerationRequestIdRef.current = isActive ? active!.requestId : null;
+      setIsGeneratingTasks(isActive);
+
+      const viewState = getTaskGenerationViewState(selectedNodeId);
+      setIsTaskGenerationPromptOpen(viewState.promptOpen);
+      setTaskGenerationInstructions(viewState.instructions);
+      setTaskGenerationFailure(viewState.failure);
+      setGeneratedTaskDraft(viewState.draft);
+    };
+
+    const handleTaskGenerationChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ nodeId: string }>).detail;
+      if (detail?.nodeId === selectedNodeId) syncTaskGeneration();
+    };
+
+    syncTaskGeneration();
+    window.addEventListener(TASK_GENERATION_CHANGED_EVENT, handleTaskGenerationChanged);
+    return () => window.removeEventListener(TASK_GENERATION_CHANGED_EVENT, handleTaskGenerationChanged);
+  }, [selectedNodeId]);
+
+  useEffect(() => {
     const handleSubagentUpdate = (event: Event) => {
       const detail = (event as CustomEvent<{ nodeId: string; subagent: SubagentActivity }>).detail;
       if (detail?.nodeId !== selectedNodeId || !detail.subagent?.id) return;
@@ -151,7 +255,8 @@ export const useExplorerWebSocket = (selectedNode: any) => {
 
   useEffect(() => {
     return () => {
-      // Do NOT close the WebSocket connection on unmount so the sidecar exploration keeps running!
+      // Explorer and task-generation sockets are intentionally module-scoped and
+      // remain open when the side pane unmounts. Reopening the pane reattaches its UI.
     };
   }, []);
 
@@ -238,12 +343,17 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       ) || currentProviders.find((provider) => provider.id === currentActiveProviderId);
       const chatHistory = useWorkspaceStore.getState().globalChatHistory[selectedNodeId] || [];
 
-      // Global Chat only honors planning/analysis skills, including for older canvases.
+      const isTaskNodeChat = selectedNode?.type === "taskNode";
+
+      // TaskNode chat honors the skill selected in its pane. Other node-chat
+      // surfaces keep the planning-only behavior, including for older canvases.
       const skills = useWorkspaceStore.getState().skills;
       const requestedSkillId = selectedNode?.data?.skillId as string | undefined;
-      const nodeSkillId = requestedSkillId && GLOBAL_CHAT_SKILL_IDS.includes(requestedSkillId)
-        ? requestedSkillId
-        : GLOBAL_CHAT_DEFAULT_SKILL_ID;
+      const nodeSkillId = isTaskNodeChat
+        ? requestedSkillId || BUILT_IN_SKILL_IDS.BUILD
+        : requestedSkillId && GLOBAL_CHAT_SKILL_IDS.includes(requestedSkillId)
+          ? requestedSkillId
+          : GLOBAL_CHAT_DEFAULT_SKILL_ID;
       const resolvedSkill = resolveSkill(skills, nodeSkillId);
       const skillData = toSkillData(resolvedSkill);
 
@@ -272,7 +382,8 @@ export const useExplorerWebSocket = (selectedNode: any) => {
         mcpServers,
         customProvider: prov || null,
         skill: skillData,
-        planOnly: true,
+        planOnly: !isTaskNodeChat,
+        vfsOnly: isTaskNodeChat,
         lspSettings: { ...useWorkspaceStore.getState().lspSettings, enabled: false },
       }));
     };
@@ -728,9 +839,21 @@ export const useExplorerWebSocket = (selectedNode: any) => {
     };
   };
 
+  const handleOpenTaskGeneration = () => {
+    if (!selectedNodeId || isGeneratingTasks || activeTaskGenerations.has(selectedNodeId) || nodeStatus === "running") return;
+    const history = useWorkspaceStore.getState().globalChatHistory[selectedNodeId] || [];
+    if (!history.some((message) => message.role === "user" || message.role === "assistant")) {
+      notify("Generate Tasks", "Discuss the story before generating task nodes.", "info");
+      return;
+    }
+    updateTaskGenerationViewState(selectedNodeId, { failure: null, promptOpen: true });
+  };
+
   const handleGenerateTaskDraft = () => {
     if (!selectedNodeId || isGeneratingTasks || nodeStatus === "running") return;
-    const history = useWorkspaceStore.getState().globalChatHistory[selectedNodeId] || [];
+    const taskNodeId = selectedNodeId;
+    if (activeTaskGenerations.has(taskNodeId)) return;
+    const history = useWorkspaceStore.getState().globalChatHistory[taskNodeId] || [];
     const chatHistory = history
       .filter((message) => message.role === "user" || message.role === "assistant")
       .map((message) => ({ role: message.role, content: message.content }));
@@ -739,10 +862,26 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       return;
     }
 
-    setIsGeneratingTasks(true);
-    setGeneratedTaskDraft([]);
-    const socket = new WebSocket("ws://localhost:4000");
+    const additionalInstructions = getTaskGenerationViewState(taskNodeId).instructions.trim();
+    let socket: WebSocket;
+    try {
+      socket = new WebSocket("ws://localhost:4000");
+    } catch (error: any) {
+      updateTaskGenerationViewState(taskNodeId, {
+        failure: { message: error?.message || String(error) },
+        promptOpen: true,
+      });
+      notify("Sidecar Connection Failed", "Could not connect to the agent sidecar.", "error");
+      return;
+    }
     const requestId = `tasks_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    taskGenerationViewStates.set(taskNodeId, {
+      ...getTaskGenerationViewState(taskNodeId),
+      promptOpen: false,
+      failure: null,
+      draft: [],
+    });
+    setActiveTaskGeneration(taskNodeId, { socket, requestId });
     taskGenerationSocketRef.current = socket;
     taskGenerationRequestIdRef.current = requestId;
     socket.onopen = () => {
@@ -753,9 +892,10 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       socket.send(JSON.stringify({
         type: "generate_task_nodes",
         requestId,
-        nodeId: selectedNodeId,
+        nodeId: taskNodeId,
         model: taskGenerationModel,
         chatHistory,
+        additionalInstructions,
         customProvider: provider || null,
       }));
     };
@@ -764,43 +904,91 @@ export const useExplorerWebSocket = (selectedNode: any) => {
         const message = JSON.parse(event.data);
         if (message.requestId !== requestId) return;
         if (message.type === "generate_task_nodes_complete") {
-          setGeneratedTaskDraft(message.tasks.map((task: any) => ({ ...task, selected: true })));
-          setIsGeneratingTasks(false);
+          const draft = (Array.isArray(message.tasks) ? message.tasks : []).map((task: any, index: number) => ({
+            key: String(task.key || `task-${index + 1}`),
+            title: String(task.title || ""),
+            description: String(task.description || ""),
+            dependsOn: Array.isArray(task.dependsOn) ? task.dependsOn.map(String) : [],
+            selected: true,
+          }));
+          finishTaskGeneration(taskNodeId, socket, {
+            draft,
+            instructions: "",
+            failure: null,
+            promptOpen: false,
+          });
           socket.close();
         } else if (message.type === "generate_task_nodes_stopped") {
-          setIsGeneratingTasks(false);
+          finishTaskGeneration(taskNodeId, socket);
           socket.close();
         } else if (message.type === "generate_task_nodes_error") {
-          setIsGeneratingTasks(false);
-          notify("Task Generation Failed", message.error || "The model could not generate tasks.", "error");
+          const failure = {
+            code: typeof message.errorCode === "string" ? message.errorCode : undefined,
+            message: message.error || "The model could not generate tasks.",
+            attempts: typeof message.attempts === "number" ? message.attempts : undefined,
+          };
+          finishTaskGeneration(taskNodeId, socket, {
+            failure,
+            promptOpen: true,
+          });
+          if (failure.code === "INVALID_TASK_JSON") {
+            notify(
+              "Switch Task Generation Model",
+              "Task generation returned invalid JSON twice. The selected model may be too small to complete this task reliably. Choose a more capable model in the task-generation panel, then retry.",
+              "error"
+            );
+          } else {
+            notify("Task Generation Failed", failure.message, "error");
+          }
           socket.close();
         }
       } catch (error: any) {
-        setIsGeneratingTasks(false);
+        finishTaskGeneration(taskNodeId, socket, {
+          failure: { message: error.message || String(error) },
+          promptOpen: true,
+        });
         notify("Task Generation Failed", error.message || String(error), "error");
+        socket.close();
       }
     };
     socket.onerror = () => {
-      setIsGeneratingTasks(false);
+      finishTaskGeneration(taskNodeId, socket, { promptOpen: true });
       notify("Sidecar Connection Failed", "Could not connect to the agent sidecar.", "error");
     };
     socket.onclose = () => {
-      setIsGeneratingTasks(false);
+      finishTaskGeneration(taskNodeId, socket);
       if (taskGenerationSocketRef.current === socket) taskGenerationSocketRef.current = null;
       if (taskGenerationRequestIdRef.current === requestId) taskGenerationRequestIdRef.current = null;
     };
   };
 
   const handleStopTaskGeneration = () => {
-    const socket = taskGenerationSocketRef.current;
-    const requestId = taskGenerationRequestIdRef.current;
+    if (!selectedNodeId) return;
+    const active = activeTaskGenerations.get(selectedNodeId);
+    const socket = active?.socket || taskGenerationSocketRef.current;
+    const requestId = active?.requestId || taskGenerationRequestIdRef.current;
     if (socket?.readyState === WebSocket.OPEN && requestId) {
       socket.send(JSON.stringify({ type: "generate_task_nodes_stop", requestId, nodeId: selectedNodeId }));
     }
     window.setTimeout(() => socket?.close(), 100);
+    if (socket) finishTaskGeneration(selectedNodeId, socket);
     taskGenerationSocketRef.current = null;
     taskGenerationRequestIdRef.current = null;
-    setIsGeneratingTasks(false);
+  };
+
+  const updateGeneratedTaskDraft: typeof setGeneratedTaskDraft = (action) => {
+    if (!selectedNodeId) return;
+    const current = getTaskGenerationViewState(selectedNodeId).draft;
+    const draft = typeof action === "function" ? action(current) : action;
+    updateTaskGenerationViewState(selectedNodeId, { draft });
+  };
+
+  const updateTaskGenerationPromptOpen = (promptOpen: boolean) => {
+    if (selectedNodeId) updateTaskGenerationViewState(selectedNodeId, { promptOpen });
+  };
+
+  const updateTaskGenerationInstructions = (instructions: string) => {
+    if (selectedNodeId) updateTaskGenerationViewState(selectedNodeId, { instructions });
   };
 
   return {
@@ -809,11 +997,17 @@ export const useExplorerWebSocket = (selectedNode: any) => {
     isSummarizing,
     isGeneratingTasks,
     generatedTaskDraft,
-    setGeneratedTaskDraft,
+    setGeneratedTaskDraft: updateGeneratedTaskDraft,
+    isTaskGenerationPromptOpen,
+    setIsTaskGenerationPromptOpen: updateTaskGenerationPromptOpen,
+    taskGenerationInstructions,
+    setTaskGenerationInstructions: updateTaskGenerationInstructions,
+    taskGenerationFailure,
     showSettings,
     setShowSettings,
     handleExplorerSendMessage,
     handleExplorerSummarize,
+    handleOpenTaskGeneration,
     handleGenerateTaskDraft,
     handleStopTaskGeneration,
     handleStopExplorer,

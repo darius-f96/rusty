@@ -36,8 +36,10 @@ export interface CustomProvider {
 }
 
 export interface GeneratedTaskNodeSpec {
+  key?: string;
   title: string;
   description: string;
+  dependsOn?: string[];
 }
 
 export interface DevLog {

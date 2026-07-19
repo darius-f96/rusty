@@ -1,18 +1,15 @@
-import React, { useState, useRef, useEffect, memo, useContext } from "react";
+import React, { useState, useRef, useEffect, memo } from "react";
 import { Handle, Position } from "@xyflow/react";
 import { Folder, Pencil, Check, X, Info, Trash2, Search } from "lucide-react";
 import { FileIcon } from "../../services/fileTypeService";
 import { useWorkspaceStore } from "../../store";
-import { CanvasTabContext } from "../tabs/canvas/CanvasTabContext";
 import { searchService, SearchMatch } from "../../services/searchService";
 
 export const ContextNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) => {
-  const { tabId } = useContext(CanvasTabContext);
   const updateNode = useWorkspaceStore((state) => state.updateTaskNode); // Uses the store's update action
   const openTab = useWorkspaceStore((state) => state.openTab);
   const deleteNode = useWorkspaceStore((state) => state.deleteNode);
   const rootPath = useWorkspaceStore((state) => state.rootPath);
-  const edges = useWorkspaceStore((state) => (state.canvasContexts[tabId] || { edges: [] }).edges);
   const [isEditing, setIsEditing] = useState(false);
 
   const [showSearch, setShowSearch] = useState(false);
@@ -21,10 +18,6 @@ export const ContextNode: React.FC<{ id: string; data: any }> = memo(({ id, data
   const [searching, setSearching] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
-
-  const activeEdges = edges.filter((e) => e.source === id);
-  const isTopConnected = activeEdges.some((e) => e.sourceHandle === "context-out-top");
-  const isBottomConnected = activeEdges.some((e) => e.sourceHandle === "context-out-bottom");
 
   const handleFileClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -413,22 +406,18 @@ export const ContextNode: React.FC<{ id: string; data: any }> = memo(({ id, data
       )}
 
       {/* Handles */}
-      {!isBottomConnected && (
-        <Handle
-          type="source"
-          position={Position.Top}
-          id="context-out-top"
-          style={{ background: "var(--color-status-success-solid)", width: 14, height: 14, border: "2.5px solid var(--color-surface-sidebar)" }}
-        />
-      )}
-      {!isTopConnected && (
-        <Handle
-          type="source"
-          position={Position.Bottom}
-          id="context-out-bottom"
-          style={{ background: "var(--color-status-success-solid)", width: 14, height: 14, border: "2.5px solid var(--color-surface-sidebar)" }}
-        />
-      )}
+      <Handle
+        type="source"
+        position={Position.Top}
+        id="context-out-top"
+        style={{ background: "var(--color-status-success-solid)", width: 14, height: 14, border: "2.5px solid var(--color-surface-sidebar)" }}
+      />
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        id="context-out-bottom"
+        style={{ background: "var(--color-status-success-solid)", width: 14, height: 14, border: "2.5px solid var(--color-surface-sidebar)" }}
+      />
     </div>
   );
 });
