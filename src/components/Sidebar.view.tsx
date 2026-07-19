@@ -2,6 +2,11 @@ import React from "react";
 import { ChevronLeft, FoldHorizontal, RefreshCw } from "lucide-react";
 import { FileTree } from "./FileTree";
 import { SourceControl } from "./SourceControl";
+import type {
+  SidebarHelpers,
+  SidebarIconItem,
+  SidebarStoreState,
+} from "./sidebar/SidebarPresenter";
 
 interface SidebarViewProps {
   sidebarWidth: number;
@@ -9,10 +14,10 @@ interface SidebarViewProps {
   sidebarView: "explorer" | "git";
   fileTree: any[];
   containerRef?: React.RefObject<HTMLDivElement | null>;
-  topIcons: any[];
-  settingsIcon: any;
-  store: any;
-  helpers: any;
+  topIcons: SidebarIconItem[];
+  settingsIcon?: SidebarIconItem;
+  store: SidebarStoreState;
+  helpers: SidebarHelpers;
   isItemActive: (id: string) => boolean;
   handleRefreshExplorer: () => void;
   handleCollapseAllFolders: () => void;

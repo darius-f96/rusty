@@ -1,5 +1,6 @@
 import React from "react";
 import { useWorkspaceStore } from "../store";
+import { useShallow } from "zustand/react/shallow";
 import { invoke } from "@tauri-apps/api/core";
 import { SIDEBAR_ICONS, SidebarHelpers } from "./sidebar/SidebarPresenter";
 import { SidebarView } from "./Sidebar.view";
@@ -96,7 +97,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
-  const store = useWorkspaceStore();
+  const store = useWorkspaceStore(useShallow((state) => ({
+    openTab: state.openTab,
+    createCanvasTab: state.createCanvasTab,
+    createAgentTab: state.createAgentTab,
+    gitStatus: state.gitStatus,
+  })));
   const topIcons = SIDEBAR_ICONS.filter((item) => item.id !== "settings");
   const settingsIcon = SIDEBAR_ICONS.find((item) => item.id === "settings");
 

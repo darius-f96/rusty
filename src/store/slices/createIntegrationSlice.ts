@@ -1,0 +1,276 @@
+import { invoke } from "@tauri-apps/api/core";
+import type { McpServerConfig } from "../../components/mcp/types";
+import { BUILT_IN_SKILLS, DEFAULT_SKILL_ID } from "../../config/skillDefinitions";
+import { skillsService } from "../../services/skillsService";
+import { resolveTheme } from "../../theme";
+import {
+  normalizeStoredModelReference,
+  normalizeStoredProvider,
+  normalizedProviderId,
+} from "../providerHelpers";
+import type { WorkspaceSliceCreator } from "../sliceTypes";
+import type { CustomProvider, LspSettings, Skill, WorkspaceState } from "../types";
+
+const defaultProviders: CustomProvider[] = [
+  {
+    id: "opencode",
+    name: "OpenCode Zen",
+    baseUrl: "https://opencode.ai/zen/v1",
+    apiKey: "",
+    apiType: "openai-completions",
+    authType: "bearer",
+    catalogUrl: "https://opencode.ai/zen/v1/models",
+    models: [],
+  },
+  {
+    id: "anthropic",
+    name: "Anthropic",
+    baseUrl: "https://api.anthropic.com/v1",
+    apiKey: "",
+    apiType: "anthropic-messages",
+    authType: "anthropic",
+    catalogUrl: "https://api.anthropic.com/v1/models",
+    models: [
+      { id: "anthropic/claude-sonnet-4-6", remoteId: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", apiType: "anthropic-messages", baseUrl: "https://api.anthropic.com", supported: true },
+      { id: "anthropic/claude-opus-4-6", remoteId: "claude-opus-4-6", name: "Claude Opus 4.6", apiType: "anthropic-messages", baseUrl: "https://api.anthropic.com", supported: true },
+      { id: "anthropic/claude-haiku-4-5", remoteId: "claude-haiku-4-5", name: "Claude Haiku 4.5", apiType: "anthropic-messages", baseUrl: "https://api.anthropic.com", supported: true },
+    ],
+  },
+  {
+    id: "openai",
+    name: "OpenAI",
+    baseUrl: "https://api.openai.com/v1",
+    apiKey: "",
+    apiType: "openai-responses",
+    authType: "bearer",
+    catalogUrl: "https://api.openai.com/v1/models",
+    models: [
+      { id: "openai/gpt-5.6-sol", remoteId: "gpt-5.6-sol", name: "GPT-5.6 Sol", apiType: "openai-responses", baseUrl: "https://api.openai.com/v1", supported: true, reasoning: true, input: ["text", "image"], contextWindow: 1_050_000, maxTokens: 128_000, cost: { input: 5, output: 30, cacheRead: 0.5, cacheWrite: 6.25 } },
+      { id: "openai/gpt-5.6-terra", remoteId: "gpt-5.6-terra", name: "GPT-5.6 Terra", apiType: "openai-responses", baseUrl: "https://api.openai.com/v1", supported: true, reasoning: true, input: ["text", "image"], contextWindow: 1_050_000, maxTokens: 128_000, cost: { input: 2.5, output: 15, cacheRead: 0.25, cacheWrite: 3.125 } },
+      { id: "openai/gpt-5.6-luna", remoteId: "gpt-5.6-luna", name: "GPT-5.6 Luna", apiType: "openai-responses", baseUrl: "https://api.openai.com/v1", supported: true, reasoning: true, input: ["text", "image"], contextWindow: 1_050_000, maxTokens: 128_000, cost: { input: 1, output: 6, cacheRead: 0.1, cacheWrite: 1.25 } },
+    ],
+  },
+  {
+    id: "github-models",
+    name: "GitHub Models",
+    baseUrl: "https://models.github.ai/inference",
+    apiKey: "",
+    apiType: "openai-completions",
+    authType: "bearer",
+    catalogUrl: "https://models.github.ai/catalog/models",
+    models: [],
+  },
+];
+
+const defaultLspSettings: LspSettings = {
+  enabled: false,
+  servers: {
+    typescript: { serverPath: "typescript-language-server", args: ["--stdio"] },
+    python: { serverPath: "pyright-langserver", args: ["--stdio"] },
+    go: { serverPath: "gopls", args: [] },
+    rust: { serverPath: "rust-analyzer", args: [] },
+    java: { serverPath: "jdtls", args: [] },
+    c: { serverPath: "clangd", args: [] },
+    cpp: { serverPath: "clangd", args: [] },
+    csharp: { serverPath: "csharp-ls", args: [] },
+    ruby: { serverPath: "ruby-lsp", args: [] },
+    php: { serverPath: "intelephense", args: ["--stdio"] },
+    lua: { serverPath: "lua-language-server", args: [] },
+    bash: { serverPath: "bash-language-server", args: ["start"] },
+    json: { serverPath: "vscode-json-language-server", args: ["--stdio"] },
+    yaml: { serverPath: "yaml-language-server", args: ["--stdio"] },
+    html: { serverPath: "vscode-html-language-server", args: ["--stdio"] },
+    css: { serverPath: "vscode-css-language-server", args: ["--stdio"] },
+  },
+};
+
+function loadStoredMcpServers(): Record<string, McpServerConfig> {
+  try {
+    const raw = localStorage.getItem("axiom_mcp_config");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.mcpServers && typeof parsed.mcpServers === "object") return parsed.mcpServers;
+    }
+  } catch {
+    // Secure configuration loading will restore this later when available.
+  }
+  return {};
+}
+
+export const createIntegrationSlice: WorkspaceSliceCreator = (set, get) => ({
+  customProviders: defaultProviders,
+  activeCustomProviderId: "opencode",
+  activeModel: "",
+  lspSettings: defaultLspSettings,
+  skills: BUILT_IN_SKILLS,
+  activeSkillId: DEFAULT_SKILL_ID,
+  mcpServers: loadStoredMcpServers(),
+  activeThemeId: resolveTheme(localStorage.getItem("selected_theme") || "spaceDust").id,
+
+  updateLspSettings: (settings) => set((state) => {
+    setTimeout(() => void get().saveSecureConfig(), 0);
+    return { lspSettings: { ...state.lspSettings, ...settings } };
+  }),
+
+  loadSkills: async () => {
+    const { rootPath } = get();
+    if (!rootPath) return;
+    try {
+      const userSkills = await skillsService.loadSkills(rootPath);
+      const builtInSkills = get().skills.filter((skill) => skill.isBuiltIn);
+      const builtInIds = new Set(builtInSkills.map((skill) => skill.id));
+      const newUserSkills = userSkills
+        .filter((skill: Skill) => !builtInIds.has(skill.id))
+        .map((skill: Skill) => ({ ...skill, mcpServers: skill.mcpServers || [] }));
+      set({ skills: [...builtInSkills, ...newUserSkills] });
+    } catch (error) {
+      console.error("Failed to load skills:", error);
+    }
+  },
+
+  addSkill: (skill) => set((state) => {
+    const existing = state.skills.some((candidate) => candidate.id === skill.id);
+    return {
+      skills: existing
+        ? state.skills.map((candidate) => candidate.id === skill.id ? skill : candidate)
+        : [...state.skills, skill],
+    };
+  }),
+
+  updateSkill: (id, updates) => set((state) => ({
+    skills: state.skills.map((skill) => skill.id === id
+      ? { ...skill, ...updates, updatedAt: new Date().toISOString() }
+      : skill),
+  })),
+
+  deleteSkill: (id) => set((state) => ({
+    skills: state.skills.filter((skill) => skill.id !== id),
+    activeSkillId: state.activeSkillId === id ? null : state.activeSkillId,
+  })),
+  setActiveSkill: (activeSkillId) => set({ activeSkillId }),
+
+  setMcpServers: (mcpServers) => {
+    set({ mcpServers });
+    setTimeout(() => void get().saveSecureConfig(), 0);
+  },
+  addMcpServer: (server) => set((state) => {
+    setTimeout(() => void get().saveSecureConfig(), 0);
+    return { mcpServers: { ...state.mcpServers, [server.name]: server } };
+  }),
+  updateMcpServer: (name, updates) => set((state) => {
+    const existing = state.mcpServers[name];
+    if (!existing) return {};
+    setTimeout(() => void get().saveSecureConfig(), 0);
+    return { mcpServers: { ...state.mcpServers, [name]: { ...existing, ...updates } } };
+  }),
+  removeMcpServer: (name) => set((state) => {
+    const mcpServers = { ...state.mcpServers };
+    delete mcpServers[name];
+    setTimeout(() => void get().saveSecureConfig(), 0);
+    return { mcpServers };
+  }),
+
+  addCustomProvider: (provider) => set((state) => {
+    setTimeout(() => void get().saveSecureConfig(), 0);
+    return { customProviders: [...state.customProviders.filter((item) => item.id !== provider.id), provider] };
+  }),
+  updateProviderSettings: (providerId, settings) => set((state) => {
+    setTimeout(() => void get().saveSecureConfig(), 0);
+    return {
+      customProviders: state.customProviders.map((provider) =>
+        provider.id === providerId ? { ...provider, ...settings } : provider,
+      ),
+    };
+  }),
+  setActiveCustomProviderId: (activeCustomProviderId) => {
+    set({ activeCustomProviderId });
+    setTimeout(() => void get().saveSecureConfig(), 0);
+  },
+  setActiveModel: (activeModel) => {
+    set({ activeModel });
+    setTimeout(() => void get().saveSecureConfig(), 0);
+  },
+
+  setActiveThemeId: (themeId) => {
+    const activeThemeId = resolveTheme(themeId).id;
+    localStorage.setItem("selected_theme", activeThemeId);
+    set({ activeThemeId });
+    setTimeout(() => void get().saveSecureConfig(), 0);
+  },
+
+  saveSecureConfig: async () => {
+    const state = get();
+    const { SecureStorageService } = await import("../../services/secureStorageService");
+    await SecureStorageService.saveSecureData("axiom_secure_config", {
+      customProviders: state.customProviders,
+      activeCustomProviderId: state.activeCustomProviderId,
+      activeModel: state.activeModel,
+      activeThemeId: state.activeThemeId,
+      lastWorkspacePath: state.rootPath,
+      mcpServers: state.mcpServers,
+      lspSettings: { ...state.lspSettings, enabled: false },
+    });
+  },
+
+  loadSecureConfig: async () => {
+    const { SecureStorageService } = await import("../../services/secureStorageService");
+    const config = await SecureStorageService.loadSecureData<{
+      customProviders?: CustomProvider[];
+      activeCustomProviderId?: string | null;
+      activeModel?: string;
+      activeThemeId?: string;
+      lastWorkspacePath?: string;
+      mcpServers?: Record<string, McpServerConfig>;
+      lspSettings?: LspSettings;
+    }>("axiom_secure_config");
+    if (!config) return;
+
+    const updates: Partial<WorkspaceState> = {};
+    if (config.customProviders) {
+      const currentDefaults = get().customProviders;
+      const normalizedProviders = config.customProviders.map(normalizeStoredProvider);
+      const savedProviders = new Map(normalizedProviders.map((provider) => [provider.id, provider]));
+      const mergedProviders = currentDefaults.map((defaultProvider) => {
+        const savedProvider = savedProviders.get(defaultProvider.id);
+        return savedProvider
+          ? {
+              ...defaultProvider,
+              ...savedProvider,
+              baseUrl: savedProvider.baseUrl || defaultProvider.baseUrl,
+              catalogUrl: savedProvider.catalogUrl || defaultProvider.catalogUrl,
+              models: savedProvider.models?.length ? savedProvider.models : defaultProvider.models,
+            }
+          : defaultProvider;
+      });
+      const defaultIds = new Set(currentDefaults.map((provider) => provider.id));
+      normalizedProviders.forEach((provider) => {
+        if (!defaultIds.has(provider.id)) mergedProviders.push(provider);
+      });
+      updates.customProviders = mergedProviders;
+    }
+    if (config.activeCustomProviderId !== undefined) {
+      updates.activeCustomProviderId = config.activeCustomProviderId
+        ? normalizedProviderId(config.activeCustomProviderId)
+        : null;
+    }
+    if (config.activeModel) updates.activeModel = normalizeStoredModelReference(config.activeModel) || "";
+    if (config.mcpServers) updates.mcpServers = config.mcpServers;
+    if (config.lspSettings) updates.lspSettings = { ...config.lspSettings, enabled: false };
+    if (config.activeThemeId) {
+      const activeThemeId = resolveTheme(config.activeThemeId).id;
+      updates.activeThemeId = activeThemeId;
+      localStorage.setItem("selected_theme", activeThemeId);
+    }
+    set(updates);
+
+    if (config.lastWorkspacePath) {
+      try {
+        const fileTree: any[] = await invoke("get_directory_structure", { rootDir: config.lastWorkspacePath });
+        set({ rootPath: config.lastWorkspacePath, fileTree });
+        await get().loadGitStatus();
+      } catch (error) {
+        console.error("Failed to load last workspace folder:", error);
+      }
+    }
+  },
+});

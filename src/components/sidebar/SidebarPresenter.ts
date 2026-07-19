@@ -1,13 +1,19 @@
 import { FolderOpen, Files, GitBranch, Cpu, Settings, Bot, Wand2, Plug } from "lucide-react";
 import React from "react";
+import type { WorkspaceState } from "../../store";
 import { AxiomIcon } from "../AxiomIcon";
+
+export type SidebarStoreState = Pick<
+  WorkspaceState,
+  "openTab" | "createCanvasTab" | "createAgentTab" | "gitStatus"
+>;
 
 export interface SidebarIconItem {
   id: string;
   label: string;
   icon: React.ComponentType<any>;
-  onClick: (storeState: any, helpers: SidebarHelpers) => void;
-  badgeCount?: (storeState: any) => number;
+  onClick: (storeState: SidebarStoreState, helpers: SidebarHelpers) => void;
+  badgeCount?: (storeState: SidebarStoreState) => number;
 }
 
 export interface SidebarHelpers {
