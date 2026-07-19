@@ -24,6 +24,14 @@ export interface GeneratedTaskDraft {
   selected: boolean;
 }
 
+export interface GeneratedContextDraft {
+  key: string;
+  title: string;
+  content: string;
+  taskKeys: string[];
+  selected: boolean;
+}
+
 export interface TaskGenerationFailure {
   code?: string;
   message: string;
@@ -43,6 +51,7 @@ interface TaskGenerationViewState {
   instructions: string;
   failure: TaskGenerationFailure | null;
   draft: GeneratedTaskDraft[];
+  contextDraft: GeneratedContextDraft[];
 }
 
 const TASK_GENERATION_CHANGED_EVENT = "axiom-task-generation-changed";
@@ -55,6 +64,7 @@ const getTaskGenerationViewState = (nodeId: string): TaskGenerationViewState =>
     instructions: "",
     failure: null,
     draft: [],
+    contextDraft: [],
   };
 
 const publishTaskGenerationChange = (nodeId: string) => {
@@ -132,6 +142,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
   const [taskGenerationInstructions, setTaskGenerationInstructions] = useState("");
   const [taskGenerationFailure, setTaskGenerationFailure] = useState<TaskGenerationFailure | null>(null);
   const [generatedTaskDraft, setGeneratedTaskDraft] = useState<GeneratedTaskDraft[]>([]);
+  const [generatedContextDraft, setGeneratedContextDraft] = useState<GeneratedContextDraft[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [subagents, setSubagents] = useState<SubagentActivity[]>([]);
@@ -195,6 +206,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
         setTaskGenerationInstructions("");
         setTaskGenerationFailure(null);
         setGeneratedTaskDraft([]);
+        setGeneratedContextDraft([]);
         return;
       }
 
@@ -212,6 +224,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       setTaskGenerationInstructions(viewState.instructions);
       setTaskGenerationFailure(viewState.failure);
       setGeneratedTaskDraft(viewState.draft);
+      setGeneratedContextDraft(viewState.contextDraft);
     };
 
     const handleTaskGenerationChanged = (event: Event) => {
@@ -880,6 +893,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       promptOpen: false,
       failure: null,
       draft: [],
+      contextDraft: [],
     });
     setActiveTaskGeneration(taskNodeId, { socket, requestId });
     taskGenerationSocketRef.current = socket;
@@ -911,8 +925,16 @@ export const useExplorerWebSocket = (selectedNode: any) => {
             dependsOn: Array.isArray(task.dependsOn) ? task.dependsOn.map(String) : [],
             selected: true,
           }));
+          const contextDraft = (Array.isArray(message.contexts) ? message.contexts : []).map((context: any, index: number) => ({
+            key: String(context.key || `context-${index + 1}`),
+            title: String(context.title || `Code context ${index + 1}`),
+            content: String(context.content || ""),
+            taskKeys: Array.isArray(context.taskKeys) ? context.taskKeys.map(String) : [],
+            selected: true,
+          }));
           finishTaskGeneration(taskNodeId, socket, {
             draft,
+            contextDraft,
             instructions: "",
             failure: null,
             promptOpen: false,
@@ -983,6 +1005,13 @@ export const useExplorerWebSocket = (selectedNode: any) => {
     updateTaskGenerationViewState(selectedNodeId, { draft });
   };
 
+  const updateGeneratedContextDraft: typeof setGeneratedContextDraft = (action) => {
+    if (!selectedNodeId) return;
+    const current = getTaskGenerationViewState(selectedNodeId).contextDraft;
+    const contextDraft = typeof action === "function" ? action(current) : action;
+    updateTaskGenerationViewState(selectedNodeId, { contextDraft });
+  };
+
   const updateTaskGenerationPromptOpen = (promptOpen: boolean) => {
     if (selectedNodeId) updateTaskGenerationViewState(selectedNodeId, { promptOpen });
   };
@@ -998,6 +1027,8 @@ export const useExplorerWebSocket = (selectedNode: any) => {
     isGeneratingTasks,
     generatedTaskDraft,
     setGeneratedTaskDraft: updateGeneratedTaskDraft,
+    generatedContextDraft,
+    setGeneratedContextDraft: updateGeneratedContextDraft,
     isTaskGenerationPromptOpen,
     setIsTaskGenerationPromptOpen: updateTaskGenerationPromptOpen,
     taskGenerationInstructions,

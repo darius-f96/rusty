@@ -42,6 +42,13 @@ export interface GeneratedTaskNodeSpec {
   dependsOn?: string[];
 }
 
+export interface GeneratedContextNodeSpec {
+  key?: string;
+  title: string;
+  content: string;
+  taskKeys: string[];
+}
+
 export interface DevLog {
   id: string;
   type: "log" | "error" | "warn" | "system";
@@ -235,7 +242,12 @@ export interface WorkspaceState {
 
   addContextNode: (x: number, y: number, fileContext?: { path: string; name: string; isDir: boolean }, tabId?: string) => void;
   addTaskNode: (x: number, y: number, tabId?: string) => void;
-  addTaskNodesBatch: (tabId: string, anchorNodeId: string, tasks: GeneratedTaskNodeSpec[]) => string[];
+  addTaskNodesBatch: (
+    tabId: string,
+    anchorNodeId: string,
+    tasks: GeneratedTaskNodeSpec[],
+    contexts?: GeneratedContextNodeSpec[],
+  ) => string[];
   addGlobalChatNode: (x: number, y: number, tabId?: string) => void;
   addMcpNode: (x: number, y: number, tabId?: string) => void;
   addStickyNode: (x: number, y: number, tabId?: string, color?: string) => void;

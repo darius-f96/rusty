@@ -16,7 +16,10 @@ import { createMcpTools, McpServerConfig } from "../services/mcpClient";
 import { createWebSearchTool } from "../services/webSearchTool";
 import { DeferredUserQuestion, hasActiveBackgroundSubagents, runPiAgentChat } from "../services/piAgentChat";
 import { createRunCommandTool } from "./tools/runCommandTool";
-import { resolveAgentChatToolNames } from "./agentChatPolicy";
+import {
+  GLOBAL_CHAT_TASK_DEPENDENCY_POLICY,
+  resolveAgentChatToolNames,
+} from "./agentChatPolicy";
 
 type AgentTool = {
   name: string;
@@ -308,6 +311,7 @@ Global Chat planning policy (this overrides any conflicting skill instruction):
 - The only permitted filesystem change is saving a Markdown planning document with 'write_plan'. It stores the document in the 'plans' folder at the project root (${path.join(workspaceRoot, "plans")}).
 - Call 'write_plan' only after an explicit user request to save, write, or store the plan as a file. Even then, also show the plan in chat.
 - Any persisted plan MUST use 'write_plan' with a descriptive Markdown filename. Never store a plan in the VFS or anywhere outside the project-root 'plans' folder.
+${GLOBAL_CHAT_TASK_DEPENDENCY_POLICY}
 ` : "";
 
     const taskNodePolicy = vfsOnly ? `

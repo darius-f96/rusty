@@ -265,6 +265,8 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
               handleExplorerSendMessage={explorer.handleExplorerSendMessage}
               generatedTaskDraft={explorer.generatedTaskDraft}
               setGeneratedTaskDraft={explorer.setGeneratedTaskDraft}
+              generatedContextDraft={explorer.generatedContextDraft}
+              setGeneratedContextDraft={explorer.setGeneratedContextDraft}
               isTaskGenerationPromptOpen={explorer.isTaskGenerationPromptOpen}
               setIsTaskGenerationPromptOpen={explorer.setIsTaskGenerationPromptOpen}
               taskGenerationInstructions={explorer.taskGenerationInstructions}
@@ -273,12 +275,16 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
               taskGenerationModel={explorer.taskGenerationModel}
               isGeneratingTasks={explorer.isGeneratingTasks}
               handleGenerateTaskDraft={explorer.handleGenerateTaskDraft}
-              onCreateTaskNodes={async (tasks) => {
+              onCreateTaskNodes={async (tasks, contexts) => {
                 if (!tabId) return;
-                const created = useWorkspaceStore.getState().addTaskNodesBatch(tabId, selectedNode.id, tasks);
+                const created = useWorkspaceStore.getState().addTaskNodesBatch(tabId, selectedNode.id, tasks, contexts);
                 if (created.length > 0) {
                   await canvasFileService.autoSaveCanvas(tabId);
-                  notify("Task Nodes Created", `Added ${created.length} task node${created.length === 1 ? "" : "s"}.`, "success");
+                  notify(
+                    "Generated Nodes Created",
+                    `Added ${created.length} task node${created.length === 1 ? "" : "s"}${contexts.length ? ` and ${contexts.length} code context node${contexts.length === 1 ? "" : "s"}` : ""}.`,
+                    "success"
+                  );
                 }
               }}
               handleStopExplorer={explorer.handleStopExplorer}

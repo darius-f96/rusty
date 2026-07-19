@@ -21,6 +21,17 @@ import {
   workspaceHasGlobalChatNode,
 } from "../canvasHelpers";
 import type { WorkspaceSliceCreator } from "../sliceTypes";
+import {
+  calculateTaskDepths,
+  estimateContextNodeHeight,
+  estimateTaskNodeHeight,
+  findAvailablePosition,
+  GENERATED_CONTEXT_HEIGHT,
+  GENERATED_CONTEXT_WIDTH,
+  GENERATED_NODE_GAP_X,
+  GENERATED_TASK_WIDTH,
+  type LayoutRect,
+} from "../generatedGraphLayout";
 
 export const createCanvasSlice: WorkspaceSliceCreator = (set, get) => ({
   nodes: [],
@@ -289,55 +300,55 @@ export const createCanvasSlice: WorkspaceSliceCreator = (set, get) => ({
     }), true);
   }),
 
-  addTaskNodesBatch: (tabId, anchorNodeId, tasks) => {
+  addTaskNodesBatch: (tabId, anchorNodeId, tasks, generatedContexts = []) => {
     const createdIds: string[] = [];
     set((state) => {
       const context = getOrCreateContext(state, tabId);
       const anchor = context.nodes.find((node) => node.id === anchorNodeId);
       if (!anchor || tasks.length === 0) return {};
       const taskSpecs = tasks.slice(0, 20);
-      const taskWidth = 320;
-      const taskHeight = 190;
-      const gapX = 56;
-      const gapY = 40;
+      const contextSpecs = generatedContexts.slice(0, 30);
       const anchorWidth = Number(anchor.data?.width) || 384;
-      const occupied = context.nodes.map((node) => ({
+      const occupied: LayoutRect[] = context.nodes.map((node) => ({
         x: node.position.x,
         y: node.position.y,
         width: Number(node.measured?.width || node.width || node.data?.width)
-          || (node.type === "taskNode" ? taskWidth : 260),
+          || (node.type === "taskNode" ? GENERATED_TASK_WIDTH : node.type === "contextNode" ? GENERATED_CONTEXT_WIDTH : 260),
         height: Number(node.measured?.height || node.height || node.data?.height)
-          || (node.type === "taskNode" ? taskHeight : 160),
+          || (node.type === "taskNode"
+            ? estimateTaskNodeHeight(String(node.data?.prompt || ""), !!node.data?.isMinimized)
+            : node.type === "contextNode"
+              ? estimateContextNodeHeight(String(node.data?.description || ""), !!node.data?.isMinimized)
+              : 160),
       }));
-      const intersects = (candidate: { x: number; y: number; width: number; height: number }) =>
-        occupied.some((box) => candidate.x < box.x + box.width + gapX
-          && candidate.x + candidate.width + gapX > box.x
-          && candidate.y < box.y + box.height + gapY
-          && candidate.y + candidate.height + gapY > box.y);
-      const newNodes: Node[] = [];
+      const newTaskNodes: Node[] = [];
+      const newContextNodes: Node[] = [];
       const taskEntries = taskSpecs.map((task, index) => ({
         task,
         key: task.key || `task-${index + 1}`,
         id: `task_${crypto.randomUUID()}`,
       }));
       const idByKey = new Map(taskEntries.map(({ key, id }) => [key, id]));
-      taskEntries.forEach(({ task, id }, index) => {
-        let slot = index;
-        let candidate = { x: 0, y: 0, width: taskWidth, height: taskHeight };
-        do {
-          const column = Math.floor(slot / 4);
-          const row = slot % 4;
-          candidate = {
-            x: anchor.position.x + anchorWidth + gapX + column * (taskWidth + gapX),
-            y: anchor.position.y + row * (taskHeight + gapY),
-            width: taskWidth,
-            height: taskHeight,
-          };
-          slot++;
-        } while (intersects(candidate) && slot < 500);
+      const taskDepths = calculateTaskDepths(taskSpecs);
+      const hasContexts = contextSpecs.length > 0;
+      const contextColumnX = anchor.position.x + anchorWidth + GENERATED_NODE_GAP_X;
+      const taskColumnStartX = contextColumnX
+        + (hasContexts ? GENERATED_CONTEXT_WIDTH + GENERATED_NODE_GAP_X : 0);
+      const taskRectsByKey = new Map<string, LayoutRect>();
+
+      taskEntries.forEach(({ task, key, id }) => {
+        const depth = taskDepths.get(key) || 0;
+        const taskHeight = estimateTaskNodeHeight(task.description);
+        const candidate = findAvailablePosition(occupied, {
+          x: taskColumnStartX + depth * (GENERATED_TASK_WIDTH + GENERATED_NODE_GAP_X),
+          y: anchor.position.y,
+          width: GENERATED_TASK_WIDTH,
+          height: taskHeight,
+        });
         createdIds.push(id);
         occupied.push(candidate);
-        newNodes.push({
+        taskRectsByKey.set(key, candidate);
+        newTaskNodes.push({
           id,
           type: "taskNode",
           position: { x: candidate.x, y: candidate.y },
@@ -349,6 +360,44 @@ export const createCanvasSlice: WorkspaceSliceCreator = (set, get) => ({
             status: "idle",
             sourceGlobalChatNodeId: anchorNodeId,
             skillId: BUILT_IN_SKILL_IDS.BUILD,
+          },
+        });
+      });
+
+      const contextEntries = contextSpecs.map((snippet, index) => ({
+        snippet,
+        key: snippet.key || `context-${index + 1}`,
+        id: `context_${crypto.randomUUID()}`,
+      }));
+      const contextRectsByKey = new Map<string, LayoutRect>();
+      contextEntries.forEach(({ snippet, key, id }) => {
+        const targetRects = snippet.taskKeys
+          .map((taskKey) => taskRectsByKey.get(taskKey))
+          .filter((rect): rect is LayoutRect => rect !== undefined);
+        if (!targetRects.length || !snippet.content.trim()) return;
+        const preferredY = Math.min(...targetRects.map((rect) => rect.y));
+        const candidate = findAvailablePosition(occupied, {
+          x: contextColumnX,
+          y: preferredY,
+          width: GENERATED_CONTEXT_WIDTH,
+          height: GENERATED_CONTEXT_HEIGHT,
+        });
+        occupied.push(candidate);
+        contextRectsByKey.set(key, candidate);
+        newContextNodes.push({
+          id,
+          type: "contextNode",
+          position: { x: candidate.x, y: candidate.y },
+          data: {
+            id,
+            name: snippet.title,
+            description: snippet.content,
+            path: "",
+            fileName: "",
+            isDir: false,
+            isMinimized: true,
+            sourceGlobalChatNodeId: anchorNodeId,
+            generatedContextKey: key,
           },
         });
       });
@@ -369,9 +418,32 @@ export const createCanvasSlice: WorkspaceSliceCreator = (set, get) => ({
           });
         }
       });
+      const contextEdges: Edge[] = [];
+      contextEntries.forEach(({ snippet, key, id: source }) => {
+        const contextRect = contextRectsByKey.get(key);
+        if (!contextRect) return;
+        for (const taskKey of snippet.taskKeys) {
+          const target = idByKey.get(taskKey);
+          const taskRect = taskRectsByKey.get(taskKey);
+          const connectionKey = `${source}->${target}`;
+          if (!target || !taskRect || seenConnections.has(connectionKey)) continue;
+          seenConnections.add(connectionKey);
+          const contextCenterY = contextRect.y + contextRect.height / 2;
+          const taskCenterY = taskRect.y + taskRect.height / 2;
+          const contextIsAbove = contextCenterY <= taskCenterY;
+          contextEdges.push({
+            id: `edge_${crypto.randomUUID()}`,
+            source,
+            sourceHandle: contextIsAbove ? "context-out-bottom" : "context-out-top",
+            target,
+            targetHandle: contextIsAbove ? "context-in-top" : "context-in-bottom",
+            style: { stroke: "var(--color-status-success-solid)", strokeWidth: 2 },
+          });
+        }
+      });
       return updateContextAndSync(state, tabId, () => ({
-        nodes: [...context.nodes, ...newNodes],
-        edges: [...context.edges, ...dependencyEdges],
+        nodes: [...context.nodes, ...newContextNodes, ...newTaskNodes],
+        edges: [...context.edges, ...dependencyEdges, ...contextEdges],
       }), true);
     });
     return createdIds;

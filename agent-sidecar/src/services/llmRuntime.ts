@@ -16,6 +16,35 @@ export interface ResolvedLlmRuntime {
   headers?: Record<string, string>;
 }
 
+export class EmptyLlmResponseError extends Error {
+  readonly stopReason: string;
+  readonly contentTypes: string[];
+  readonly outputTokens?: number;
+
+  constructor(message: any) {
+    const stopReason = typeof message?.stopReason === "string" ? message.stopReason : "unknown";
+    const contentTypes = Array.isArray(message?.content)
+      ? message.content
+        .map((part: any) => typeof part?.type === "string" ? part.type : "unknown")
+        .filter((type: string, index: number, types: string[]) => types.indexOf(type) === index)
+      : [];
+    const outputTokens = typeof message?.usage?.output === "number" ? message.usage.output : undefined;
+    const reason = stopReason === "length"
+      ? "The selected model exhausted its output token budget before returning text."
+      : "The selected model returned no text.";
+    const diagnostics = [
+      `stop reason: ${stopReason}`,
+      contentTypes.length ? `response parts: ${contentTypes.join(", ")}` : "response parts: none",
+      outputTokens !== undefined ? `output tokens: ${outputTokens}` : "",
+    ].filter(Boolean).join("; ");
+    super(`${reason} (${diagnostics})`);
+    this.name = "EmptyLlmResponseError";
+    this.stopReason = stopReason;
+    this.contentTypes = contentTypes;
+    this.outputTokens = outputTokens;
+  }
+}
+
 function providerIdFromReference(modelReference: string): string {
   const separator = modelReference.indexOf("/");
   return separator === -1 ? "" : modelReference.slice(0, separator);
@@ -121,6 +150,7 @@ export async function completeLlmText(options: {
   userMessage: string;
   history?: Array<{ role: string; content: string }>;
   maxTokens?: number;
+  reasoning?: "minimal" | "low" | "medium" | "high" | "xhigh";
   signal?: AbortSignal;
 }): Promise<string> {
   const runtime = await resolveLlmRuntime(options.modelReference, options.customProvider);
@@ -133,20 +163,25 @@ export async function completeLlmText(options: {
   const content = history
     ? `Previous conversation:\n${history}\n\nCurrent request:\n${options.userMessage}`
     : options.userMessage;
+  const modelMaxTokens = Number(runtime.model?.maxTokens);
+  const maxTokens = options.maxTokens && Number.isFinite(modelMaxTokens) && modelMaxTokens > 0
+    ? Math.min(options.maxTokens, modelMaxTokens)
+    : options.maxTokens;
   const result = await completeSimple(runtime.model, {
     systemPrompt: options.systemPrompt,
     messages: [{ role: "user", content: [{ type: "text", text: content }], timestamp: Date.now() }],
   }, {
     apiKey: runtime.apiKey || undefined,
     headers: runtime.headers,
-    maxTokens: options.maxTokens,
+    maxTokens,
+    reasoning: options.reasoning,
     signal: options.signal,
   });
   if (result?.stopReason === "error" || result?.stopReason === "aborted") {
     throw new Error(result?.errorMessage || "The model request failed.");
   }
   const text = textFromPiMessage(result);
-  if (!text) throw new Error("The selected model returned no text.");
+  if (!text.trim()) throw new EmptyLlmResponseError(result);
   return text;
 }
 
@@ -211,7 +246,7 @@ export async function callLlmWithToolsPiStreaming(options: {
     const toolCalls = (result?.content || []).filter((part: any) => part?.type === "toolCall");
     if (toolCalls.length === 0) {
       const text = textFromPiMessage(result);
-      if (!text) throw new Error("The selected model returned no text.");
+      if (!text.trim()) throw new EmptyLlmResponseError(result);
       return text;
     }
 

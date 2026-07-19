@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { resolveAgentChatToolNames } from "./agentChatPolicy";
+import {
+  GLOBAL_CHAT_TASK_DEPENDENCY_POLICY,
+  resolveAgentChatToolNames,
+} from "./agentChatPolicy";
 
 const BUILD_TOOLS = [
   "read_file",
@@ -41,4 +44,11 @@ test("planning policy wins if conflicting surface flags are supplied", () => {
   assert.equal(tools.includes("write_file"), false);
   assert.equal(tools.includes("run_command"), false);
   assert.equal(tools.includes("write_plan"), true);
+});
+
+test("Global Chat planning requires a final dependency and influence section", () => {
+  assert.match(GLOBAL_CHAT_TASK_DEPENDENCY_POLICY, /final section.*Task Dependencies and Influence/i);
+  assert.match(GLOBAL_CHAT_TASK_DEPENDENCY_POLICY, /Depends on/);
+  assert.match(GLOBAL_CHAT_TASK_DEPENDENCY_POLICY, /Influences/);
+  assert.match(GLOBAL_CHAT_TASK_DEPENDENCY_POLICY, /default to implementation order/i);
 });

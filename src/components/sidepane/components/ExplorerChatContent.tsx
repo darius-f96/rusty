@@ -1,12 +1,12 @@
 import React from "react";
-import { X, Check, AlertTriangle, GitBranch, Sparkles } from "lucide-react";
+import { X, Check, AlertTriangle, GitBranch, Sparkles, Code2 } from "lucide-react";
 import { CustomSelect } from "../../CustomSelect";
 import { useWorkspaceStore } from "../../../store";
 import { Chat } from "../../ui/Chat";
 import { AgentQuestion, ChatInput } from "../../ui/ChatInput";
 import type { SubagentActivity } from "../../ui/Chat";
-import type { GeneratedTaskDraft, TaskGenerationFailure } from "../useExplorerWebSocket";
-import type { GeneratedTaskNodeSpec } from "../../../store";
+import type { GeneratedContextDraft, GeneratedTaskDraft, TaskGenerationFailure } from "../useExplorerWebSocket";
+import type { GeneratedContextNodeSpec, GeneratedTaskNodeSpec } from "../../../store";
 
 interface ExplorerChatContentProps {
   selectedNode: any;
@@ -16,6 +16,8 @@ interface ExplorerChatContentProps {
   handleExplorerSendMessage: () => void;
   generatedTaskDraft: GeneratedTaskDraft[];
   setGeneratedTaskDraft: React.Dispatch<React.SetStateAction<GeneratedTaskDraft[]>>;
+  generatedContextDraft: GeneratedContextDraft[];
+  setGeneratedContextDraft: React.Dispatch<React.SetStateAction<GeneratedContextDraft[]>>;
   isTaskGenerationPromptOpen: boolean;
   setIsTaskGenerationPromptOpen: (open: boolean) => void;
   taskGenerationInstructions: string;
@@ -24,7 +26,10 @@ interface ExplorerChatContentProps {
   taskGenerationModel: string;
   isGeneratingTasks: boolean;
   handleGenerateTaskDraft: () => void;
-  onCreateTaskNodes: (tasks: GeneratedTaskNodeSpec[]) => void | Promise<void>;
+  onCreateTaskNodes: (
+    tasks: GeneratedTaskNodeSpec[],
+    contexts: GeneratedContextNodeSpec[],
+  ) => void | Promise<void>;
   handleStopExplorer: () => void;
   streamingMessageId: string | null;
   exploreModel: string;
@@ -45,6 +50,8 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
   handleExplorerSendMessage,
   generatedTaskDraft,
   setGeneratedTaskDraft,
+  generatedContextDraft,
+  setGeneratedContextDraft,
   isTaskGenerationPromptOpen,
   setIsTaskGenerationPromptOpen,
   taskGenerationInstructions,
@@ -189,8 +196,8 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
       {generatedTaskDraft.length > 0 && (
         <div className="border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/40 p-3 max-h-[45%] overflow-y-auto flex-shrink-0">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-mono uppercase font-bold text-[var(--color-status-warning)]">Review generated tasks</span>
-            <button onClick={() => setGeneratedTaskDraft([])} className="text-[var(--text-muted)] hover:text-[var(--text-light)]"><X size={13} /></button>
+            <span className="text-[10px] font-mono uppercase font-bold text-[var(--color-status-warning)]">Review generated graph</span>
+            <button onClick={() => { setGeneratedTaskDraft([]); setGeneratedContextDraft([]); }} className="text-[var(--text-muted)] hover:text-[var(--text-light)]"><X size={13} /></button>
           </div>
           <div className="space-y-2">
             {generatedTaskDraft.map((task, index) => (
@@ -209,6 +216,42 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
               </div>
             ))}
           </div>
+          {generatedContextDraft.length > 0 && (
+            <div className="mt-3 border-t border-[var(--border-color)] pt-3">
+              <div className="mb-2 flex items-center gap-1.5 text-[10px] font-mono font-bold uppercase text-[var(--color-status-success)]">
+                <Code2 size={12} />
+                <span>Code context nodes</span>
+              </div>
+              <div className="space-y-2">
+                {generatedContextDraft.map((context, index) => (
+                  <div key={context.key} className="rounded border border-[var(--color-status-success-border)] bg-[var(--bg-app)] p-2 flex gap-2">
+                    <input
+                      type="checkbox"
+                      checked={context.selected}
+                      onChange={(event) => setGeneratedContextDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, selected: event.target.checked } : item))}
+                      className="mt-1"
+                    />
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <input
+                        value={context.title}
+                        onChange={(event) => setGeneratedContextDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value } : item))}
+                        className="w-full bg-transparent text-xs font-semibold text-[var(--text-light)] border-b border-[var(--border-color)] focus:outline-none focus:border-[var(--color-status-success-border)]"
+                      />
+                      <textarea
+                        value={context.content}
+                        onChange={(event) => setGeneratedContextDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, content: event.target.value } : item))}
+                        rows={5}
+                        className="w-full resize-y rounded bg-[var(--color-surface-sunken)] p-1.5 text-[10px] font-mono text-[var(--text-normal)] focus:outline-none"
+                      />
+                      <div className="text-[9px] font-mono text-[var(--color-status-info)]">
+                        Injects into {context.taskKeys.map((key) => taskTitlesByKey.get(key) || key).join(", ")}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <button
             onClick={async () => {
               const selectedTasks = generatedTaskDraft.filter((task) => task.selected && task.title.trim() && task.description.trim());
@@ -219,12 +262,24 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
                 description: description.trim(),
                 dependsOn: dependsOn.filter((dependency) => selectedKeys.has(dependency)),
               }));
-              await onCreateTaskNodes(tasks);
-              if (tasks.length) setGeneratedTaskDraft([]);
+              const contexts = generatedContextDraft
+                .filter((context) => context.selected && context.title.trim() && context.content.trim())
+                .map(({ key, title, content, taskKeys }) => ({
+                  key,
+                  title: title.trim(),
+                  content: content.trim(),
+                  taskKeys: taskKeys.filter((taskKey) => selectedKeys.has(taskKey)),
+                }))
+                .filter((context) => context.taskKeys.length > 0);
+              await onCreateTaskNodes(tasks, contexts);
+              if (tasks.length) {
+                setGeneratedTaskDraft([]);
+                setGeneratedContextDraft([]);
+              }
             }}
             disabled={!generatedTaskDraft.some((task) => task.selected && task.title.trim() && task.description.trim())}
             className="mt-2 w-full bg-[var(--color-status-success-bg)] hover:bg-[var(--color-status-success-solid)] disabled:opacity-40 text-[var(--color-status-success)] hover:text-[var(--color-status-success-solid-foreground)] rounded px-3 py-2 text-xs font-semibold flex items-center justify-center gap-1.5"
-          ><Check size={13} /> Add selected tasks</button>
+          ><Check size={13} /> Add selected graph</button>
         </div>
       )}
 

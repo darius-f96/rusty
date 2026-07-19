@@ -1,64 +1,18 @@
 import { WebSocket } from "ws";
 import { safeSend } from "../services/websocket";
-import { completeLlmText } from "../services/llmRuntime";
+import { completeLlmText, EmptyLlmResponseError } from "../services/llmRuntime";
+import {
+  buildTaskGenerationQuery,
+  TASK_GENERATION_SYSTEM_PROMPT,
+  type TaskGenerationChatEntry,
+} from "./taskGenerationPrompt";
+import {
+  InvalidTaskOutputError,
+  parseGeneratedTaskGraph,
+} from "./generatedTaskGraph";
 
-type ChatEntry = { role: "user" | "assistant"; content: string };
-type GeneratedTask = { key: string; title: string; description: string; dependsOn: string[] };
 const activeTaskGenerations = new Map<string, AbortController>();
-
-class InvalidTaskOutputError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "InvalidTaskOutputError";
-  }
-}
-
-function parseGeneratedTasks(content: string): GeneratedTask[] {
-  const trimmed = content.trim();
-  const match = trimmed.match(/\{[\s\S]*\}/);
-  let parsed: any;
-  try {
-    parsed = JSON.parse(match?.[0] || trimmed);
-  } catch {
-    throw new InvalidTaskOutputError("The model returned malformed JSON.");
-  }
-
-  if (!Array.isArray(parsed?.tasks)) {
-    throw new InvalidTaskOutputError('The model response did not contain a "tasks" array.');
-  }
-
-  const usedKeys = new Set<string>();
-  const tasks: GeneratedTask[] = (parsed.tasks as any[])
-    .map((task: any, index: number) => {
-      const title = String(task?.title || "").trim().slice(0, 120);
-      const description = String(task?.description || "").trim().slice(0, 8000);
-      if (!title || !description) return null;
-
-      const requestedKey = String(task?.key || `task-${index + 1}`).trim().slice(0, 80) || `task-${index + 1}`;
-      let key = requestedKey;
-      let suffix = 2;
-      while (usedKeys.has(key)) key = `${requestedKey}-${suffix++}`;
-      usedKeys.add(key);
-
-      const dependsOn = Array.isArray(task?.dependsOn)
-        ? task.dependsOn.map((dependency: unknown) => String(dependency).trim()).filter(Boolean)
-        : [];
-      return { key, title, description, dependsOn };
-    })
-    .filter((task: GeneratedTask | null): task is GeneratedTask => task !== null)
-    .slice(0, 20);
-
-  if (!tasks.length) {
-    throw new InvalidTaskOutputError("The model did not return any valid tasks.");
-  }
-
-  const earlierKeys = new Set<string>();
-  return tasks.map((task) => {
-    const dependsOn = [...new Set<string>(task.dependsOn)].filter((dependency) => earlierKeys.has(dependency));
-    earlierKeys.add(task.key);
-    return { ...task, dependsOn };
-  });
-}
+const TASK_GENERATION_MAX_TOKENS = 16_000;
 
 export function stopTaskNodeGeneration(requestId: string): boolean {
   const controller = activeTaskGenerations.get(requestId);
@@ -73,7 +27,7 @@ export async function generateTaskNodes(ws: WebSocket, data: any): Promise<void>
   const abortController = new AbortController();
   activeTaskGenerations.set(requestId, abortController);
   try {
-    const history: ChatEntry[] = Array.isArray(data.chatHistory)
+    const history: TaskGenerationChatEntry[] = Array.isArray(data.chatHistory)
       ? data.chatHistory.filter((entry: any) => (entry?.role === "user" || entry?.role === "assistant") && typeof entry.content === "string")
       : [];
     if (!history.length) throw new Error("Discuss the story in Global Chat before generating tasks.");
@@ -85,37 +39,66 @@ export async function generateTaskNodes(ws: WebSocket, data: any): Promise<void>
     const additionalInstructions = typeof data.additionalInstructions === "string"
       ? data.additionalInstructions.trim().slice(0, 8000)
       : "";
-    const system = `You extract implementation tasks from a product discussion. Return ONLY valid JSON with this exact shape: {"tasks":[{"key":"task-1","title":"short action-oriented title","description":"complete implementation instructions","dependsOn":[]},{"key":"task-2","title":"another title","description":"complete instructions","dependsOn":["task-1"]}]}. Each key must be unique. dependsOn must contain only keys of earlier tasks whose implementation output or decisions directly influence the current task; use an empty array when no dependency exists. Tasks must be specific, non-overlapping, ordered so prerequisites appear first, and based only on decisions established in the conversation and the user's additional instructions. Do not include canvas coordinates, markdown, commentary, or file changes. Return 1 to 20 tasks.`;
-    const conversation = history.slice(-30).map((entry) => `${entry.role.toUpperCase()}: ${entry.content}`).join("\n\n");
-    const userMessage = additionalInstructions
-      ? `${conversation}\n\nADDITIONAL TASK-GENERATION INSTRUCTIONS:\n${additionalInstructions}`
-      : conversation;
+    const userMessage = buildTaskGenerationQuery(history, additionalInstructions);
 
+    let previousFailure: "empty" | "invalid" | null = null;
     for (let attempt = 1; attempt <= 2; attempt++) {
-      const content = await completeLlmText({
-        modelReference,
-        customProvider,
-        systemPrompt: attempt === 1
-          ? system
-          : `${system}\n\nYour previous response could not be parsed as the required task JSON. This is the final retry. Return exactly one JSON object that follows the schema, with no surrounding text.`,
-        userMessage,
-        maxTokens: 5000,
-        signal: abortController.signal,
-      });
       try {
-        const tasks = parseGeneratedTasks(content);
-        safeSend(ws, { type: "generate_task_nodes_complete", requestId, nodeId, tasks, attempts: attempt });
+        const retryInstruction = previousFailure === "empty"
+          ? "Your previous response contained no visible text. This is the final retry. Use minimal reasoning and return the required JSON object immediately."
+          : "Your previous response could not be parsed as the required task JSON. This is the final retry. Return exactly one JSON object that follows the schema, with no surrounding text.";
+        const content = await completeLlmText({
+          modelReference,
+          customProvider,
+          systemPrompt: attempt === 1
+            ? TASK_GENERATION_SYSTEM_PROMPT
+            : `${TASK_GENERATION_SYSTEM_PROMPT}\n\n${retryInstruction}`,
+          userMessage,
+          // Generated plans can now include verbatim code-context nodes, so the
+          // former 5k budget is too small for otherwise valid task graphs.
+          maxTokens: TASK_GENERATION_MAX_TOKENS,
+          reasoning: "minimal",
+          signal: abortController.signal,
+        });
+        const graph = parseGeneratedTaskGraph(content);
+        safeSend(ws, {
+          type: "generate_task_nodes_complete",
+          requestId,
+          nodeId,
+          tasks: graph.tasks,
+          contexts: graph.contexts,
+          attempts: attempt,
+        });
         return;
       } catch (error) {
-        if (!(error instanceof InvalidTaskOutputError)) throw error;
+        if (abortController.signal.aborted) throw error;
+        const isEmptyResponse = error instanceof EmptyLlmResponseError;
+        if (!isEmptyResponse && !(error instanceof InvalidTaskOutputError)) throw error;
         if (attempt === 1) {
+          previousFailure = isEmptyResponse ? "empty" : "invalid";
           safeSend(ws, {
             type: "generate_task_nodes_log",
             requestId,
             nodeId,
-            message: "The model returned invalid task JSON. Retrying once with stricter formatting instructions...",
+            message: isEmptyResponse
+              ? "The model returned no visible task JSON. Retrying once with a larger output budget and minimal reasoning..."
+              : "The model returned invalid task JSON. Retrying once with stricter formatting instructions...",
           });
           continue;
+        }
+        if (isEmptyResponse) {
+          const lengthHint = error.stopReason === "length"
+            ? " The model exhausted its available output budget; reduce unusually large code snippets or use a model with a larger output limit."
+            : " Try again or verify that the provider supports text completions for this model.";
+          safeSend(ws, {
+            type: "generate_task_nodes_error",
+            requestId,
+            nodeId,
+            errorCode: "EMPTY_MODEL_RESPONSE",
+            attempts: attempt,
+            error: `The model returned no task JSON after two attempts.${lengthHint}`,
+          });
+          return;
         }
         safeSend(ws, {
           type: "generate_task_nodes_error",
