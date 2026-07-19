@@ -107,6 +107,7 @@ interface RunPiAgentChatOptions {
     baseUrl: string;
     apiKey?: string;
     apiType: string;
+    transport?: "http" | "github-copilot-sdk";
     authType?: "bearer" | "anthropic" | "none" | "environment";
     models: Array<{
       id: string;
@@ -257,6 +258,10 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
   // Install before runtime-version fallback: executeNode may create a lower-level
   // Pi session afterwards, and it must inherit the same no-bypass policy.
   await installPiCommandPolicy();
+  if (options.customProvider?.transport === "github-copilot-sdk" || options.customProvider?.id === "github-copilot") {
+    options.sendLog("Using the GitHub Copilot SDK agent runtime.");
+    return undefined;
+  }
   if (!supportsPiRuntime()) {
     options.sendLog(`Pi delegation requires Node 22.19+; current runtime is Node ${process.versions.node} at ${process.execPath}. Using the compatibility agent runtime.`);
     return undefined;
@@ -306,7 +311,7 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
         compat: model.compat,
         headers: {
           ...(model.headers || {}),
-          ...((options.customProvider!.id === "github-models" || options.customProvider!.id === "github-copilot")
+          ...(options.customProvider!.id === "github-models"
             ? { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2026-03-10" }
             : {}),
           ...(normalizeApiType(model.apiType || options.customProvider!.apiType) === "anthropic-messages"

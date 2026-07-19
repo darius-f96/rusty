@@ -31,6 +31,7 @@ export interface LlmProviderConfig {
   baseUrl: string;
   apiKey?: string;
   apiType?: LlmApiType | string;
+  transport?: "http" | "github-copilot-sdk";
   authType?: LlmAuthType;
   catalogUrl?: string;
   models?: ProviderModelConfig[];
@@ -85,15 +86,6 @@ const PROVIDER_DEFAULTS: Record<string, ProviderDefaults> = {
     piProvider: "anthropic",
   },
   "github-models": {
-    baseUrl: "https://models.github.ai/inference",
-    catalogUrl: "https://models.github.ai/catalog/models",
-    authType: "bearer",
-    apiType: "openai-completions",
-    envVar: "GITHUB_TOKEN",
-  },
-  // Backward compatibility for configurations created before the provider was
-  // correctly named GitHub Models.
-  "github-copilot": {
     baseUrl: "https://models.github.ai/inference",
     catalogUrl: "https://models.github.ai/catalog/models",
     authType: "bearer",
@@ -167,7 +159,7 @@ function catalogRequest(provider: LlmProviderConfig): { url: string; headers: Re
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
   }
 
-  if (provider.id === "github-models" || provider.id === "github-copilot") {
+  if (provider.id === "github-models") {
     headers.Accept = "application/vnd.github+json";
     headers["X-GitHub-Api-Version"] = "2026-03-10";
   }
@@ -227,6 +219,9 @@ function openAiModelSupported(remoteId: string, hasPiMetadata: boolean): boolean
 }
 
 export async function discoverProviderModels(provider: LlmProviderConfig): Promise<DiscoveredProviderModel[]> {
+  if (provider.transport === "github-copilot-sdk" || provider.id === "github-copilot") {
+    throw new Error("GitHub Copilot model discovery must use the Copilot SDK adapter.");
+  }
   const { url, headers } = catalogRequest(provider);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);
@@ -250,7 +245,7 @@ export async function discoverProviderModels(provider: LlmProviderConfig): Promi
   const defaults = PROVIDER_DEFAULTS[provider.id];
   const providerApiType = normalizeApiType(provider.apiType || defaults?.apiType);
   const providerBaseUrl = trimTrailingSlash(provider.baseUrl?.trim() || defaults?.baseUrl || "");
-  const isGitHub = provider.id === "github-models" || provider.id === "github-copilot";
+  const isGitHub = provider.id === "github-models";
   const isKnownPiProvider = !!defaults?.piProvider;
 
   return rawModels

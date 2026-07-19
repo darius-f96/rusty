@@ -1,7 +1,18 @@
 import type { CustomProvider, ProviderModel } from "./types";
 
-export function normalizedProviderId(providerId: string): string {
-  return providerId === "github-copilot" ? "github-models" : providerId;
+/**
+ * Version 1 and older used the misleading `github-copilot` id for GitHub
+ * Models. Version 2 introduces a real Copilot SDK provider under that id.
+ */
+export const PROVIDER_CONFIG_VERSION = 2;
+
+export function normalizedProviderId(
+  providerId: string,
+  configVersion = PROVIDER_CONFIG_VERSION,
+): string {
+  return configVersion < PROVIDER_CONFIG_VERSION && providerId === "github-copilot"
+    ? "github-models"
+    : providerId;
 }
 
 function normalizeProviderModel(
@@ -20,11 +31,16 @@ function normalizeProviderModel(
   };
 }
 
-export function normalizeStoredProvider(provider: CustomProvider): CustomProvider {
-  const providerId = normalizedProviderId(provider.id);
+export function normalizeStoredProvider(
+  provider: CustomProvider,
+  configVersion = PROVIDER_CONFIG_VERSION,
+): CustomProvider {
+  const providerId = normalizedProviderId(provider.id, configVersion);
   const apiType = provider.apiType === "anthropic" ? "anthropic-messages" : provider.apiType;
   const builtInBearerProviders = new Set(["openai", "opencode", "opencode-go", "github-models"]);
-  const inferredAuthType = providerId === "anthropic"
+  const inferredAuthType = providerId === "github-copilot"
+    ? "environment"
+    : providerId === "anthropic"
     ? "anthropic"
     : builtInBearerProviders.has(providerId) || provider.apiKey
       ? "bearer"
@@ -32,16 +48,21 @@ export function normalizeStoredProvider(provider: CustomProvider): CustomProvide
   return {
     ...provider,
     id: providerId,
-    name: provider.id === "github-copilot" ? "GitHub Models" : provider.name,
+    name: configVersion < PROVIDER_CONFIG_VERSION && provider.id === "github-copilot"
+      ? "GitHub Models"
+      : provider.name,
     apiType,
     authType: provider.authType || inferredAuthType,
     models: (provider.models || []).map((model) => normalizeProviderModel(model, provider.id, providerId)),
   };
 }
 
-export function normalizeStoredModelReference(model: string | undefined): string | undefined {
+export function normalizeStoredModelReference(
+  model: string | undefined,
+  configVersion = PROVIDER_CONFIG_VERSION,
+): string | undefined {
   if (!model) return model;
-  return model.startsWith("github-copilot/")
+  return configVersion < PROVIDER_CONFIG_VERSION && model.startsWith("github-copilot/")
     ? `github-models/${model.slice("github-copilot/".length)}`
     : model;
 }

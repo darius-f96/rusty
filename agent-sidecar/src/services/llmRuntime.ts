@@ -7,6 +7,11 @@ import {
   remoteModelId,
   resolveProviderApiKey,
 } from "./llmProviders";
+import {
+  callCopilotWithToolsStreaming,
+  completeCopilotText,
+  GITHUB_COPILOT_PROVIDER_ID,
+} from "./copilotService";
 
 export interface ResolvedLlmRuntime {
   providerId: string;
@@ -50,6 +55,10 @@ function providerIdFromReference(modelReference: string): string {
   return separator === -1 ? "" : modelReference.slice(0, separator);
 }
 
+function isGitHubCopilotProvider(provider?: LlmProviderConfig | null): boolean {
+  return provider?.transport === "github-copilot-sdk" || provider?.id === GITHUB_COPILOT_PROVIDER_ID;
+}
+
 function selectedProviderModel(provider: LlmProviderConfig, modelReference: string): ProviderModelConfig | undefined {
   const target = remoteModelId(modelReference, provider.id);
   return provider.models?.find((model) => (model.remoteId || remoteModelId(model.id, provider.id)) === target);
@@ -84,7 +93,7 @@ function runtimeHeaders(
 ): Record<string, string> | undefined {
   if (!provider) return undefined;
   const headers: Record<string, string> = { ...(model.headers || {}) };
-  if (provider.id === "github-models" || provider.id === "github-copilot") {
+  if (provider.id === "github-models") {
     headers.Accept = "application/vnd.github+json";
     headers["X-GitHub-Api-Version"] = "2026-03-10";
   }
@@ -153,6 +162,18 @@ export async function completeLlmText(options: {
   reasoning?: "minimal" | "low" | "medium" | "high" | "xhigh";
   signal?: AbortSignal;
 }): Promise<string> {
+  if (isGitHubCopilotProvider(options.customProvider)) {
+    const providerId = options.customProvider!.id;
+    return completeCopilotText({
+      modelId: remoteModelId(options.modelReference, providerId),
+      systemPrompt: options.systemPrompt,
+      userMessage: options.userMessage,
+      history: options.history,
+      reasoning: options.reasoning,
+      signal: options.signal,
+    });
+  }
+
   const runtime = await resolveLlmRuntime(options.modelReference, options.customProvider);
   const { completeSimple } = await importEsm<any>("@earendil-works/pi-ai");
   const history = (options.history || [])
@@ -197,6 +218,20 @@ export async function callLlmWithToolsPiStreaming(options: {
   maxRounds?: number;
   shouldAbort?: () => boolean;
 }): Promise<string> {
+  if (isGitHubCopilotProvider(options.customProvider)) {
+    const providerId = options.customProvider!.id;
+    return callCopilotWithToolsStreaming({
+      modelId: remoteModelId(options.modelReference, providerId),
+      systemPrompt: options.systemPrompt,
+      userMessage: options.userMessage,
+      tools: options.tools,
+      sendLog: options.sendLog,
+      sendToken: options.sendToken,
+      history: options.history,
+      shouldAbort: options.shouldAbort,
+    });
+  }
+
   const runtime = await resolveLlmRuntime(options.modelReference, options.customProvider);
   const { streamSimple } = await importEsm<any>("@earendil-works/pi-ai");
   const history = (options.history || [])

@@ -63,6 +63,13 @@ import { generateTaskNodes, stopTaskNodeGeneration } from "./capabilities/genera
 import { stopCommandsForSession } from "./services/commandExecution";
 import { clearCommandSession } from "./services/commandPermissions";
 import { discoverProviderModels, testProviderConnection } from "./services/llmProviders";
+import {
+  discoverCopilotModels,
+  getCopilotConnectionStatus,
+  shutdownCopilotService,
+  startCopilotLogin,
+  testCopilotConnection,
+} from "./services/copilotService";
 
 dotenv.config();
 
@@ -98,7 +105,21 @@ process.on("unhandledRejection", (reason, promise) => {
 });
 
 const app = express();
-app.use(cors());
+const allowedOrigins = new Set([
+  "tauri://localhost",
+  "http://tauri.localhost",
+  "https://tauri.localhost",
+  "http://localhost:1420",
+  "http://127.0.0.1:1420",
+  ...(process.env.AXIOM_WEBVIEW_ORIGIN ? [process.env.AXIOM_WEBVIEW_ORIGIN] : []),
+]);
+const isAllowedOrigin = (origin: string | undefined) => !origin || allowedOrigins.has(origin);
+
+app.use(cors({
+  origin(origin, callback) {
+    callback(isAllowedOrigin(origin) ? null : new Error("Origin is not allowed by the Axiom sidecar."), isAllowedOrigin(origin));
+  },
+}));
 app.use(express.json());
 
 // Provider-aware endpoints keep authentication, catalog URLs, headers, and
@@ -107,7 +128,10 @@ app.use(express.json());
 // providers such as Anthropic and GitHub Models.
 app.post("/llm/models", async (req, res) => {
   try {
-    const models = await discoverProviderModels(req.body?.provider || {});
+    const provider = req.body?.provider || {};
+    const models = provider.transport === "github-copilot-sdk" || provider.id === "github-copilot"
+      ? await discoverCopilotModels()
+      : await discoverProviderModels(provider);
     res.json({ models });
   } catch (err: any) {
     console.error("LLM model discovery error:", err?.message || err);
@@ -117,7 +141,10 @@ app.post("/llm/models", async (req, res) => {
 
 app.post("/llm/test", async (req, res) => {
   try {
-    const result = await testProviderConnection(req.body?.provider || {});
+    const provider = req.body?.provider || {};
+    const result = provider.transport === "github-copilot-sdk" || provider.id === "github-copilot"
+      ? await testCopilotConnection()
+      : await testProviderConnection(provider);
     res.json({ ok: true, ...result });
   } catch (err: any) {
     console.error("LLM connection test error:", err?.message || err);
@@ -125,10 +152,34 @@ app.post("/llm/test", async (req, res) => {
   }
 });
 
+app.get("/llm/copilot/status", async (_req, res) => {
+  res.json(await getCopilotConnectionStatus());
+});
+
+app.post("/llm/copilot/login", async (_req, res) => {
+  try {
+    res.status(202).json(await startCopilotLogin());
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || "Could not start GitHub authorization." });
+  }
+});
+
+app.get("/llm/copilot/models", async (_req, res) => {
+  try {
+    res.json({ models: await discoverCopilotModels() });
+  } catch (err: any) {
+    res.status(502).json({ error: err?.message || "Could not load GitHub Copilot models." });
+  }
+});
+
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
 wss.on("connection", (ws: WebSocket, req: http.IncomingMessage) => {
+  if (!isAllowedOrigin(req.headers.origin)) {
+    ws.close(1008, "Origin is not allowed by the Axiom sidecar.");
+    return;
+  }
   const parsedUrl = new URL(req.url || "", "http://localhost");
 
   // LSP admin channel: install / detect language servers on demand.
@@ -333,7 +384,13 @@ app.get("/health", (req, res) => {
   });
 });
 
-const PORT = process.env.PORT || 4000;
-server.listen(PORT, () => {
-  console.log(`Pi sidecar server listening on port ${PORT} with Node ${process.versions.node} (${process.execPath})`);
+const PORT = Number(process.env.PORT || 4000);
+server.listen(PORT, "127.0.0.1", () => {
+  console.log(`Pi sidecar server listening on 127.0.0.1:${PORT} with Node ${process.versions.node} (${process.execPath})`);
 });
+
+const shutdown = () => {
+  void shutdownCopilotService().finally(() => server.close());
+};
+process.once("SIGINT", shutdown);
+process.once("SIGTERM", shutdown);

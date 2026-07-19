@@ -2,16 +2,32 @@ import type { CustomProvider, ProviderModel } from "../store";
 
 const SIDECAR_HTTP_URL = "http://localhost:4000";
 
+export interface CopilotConnectionStatus {
+  state: "disconnected" | "connecting" | "connected" | "failed";
+  authenticated: boolean;
+  authType?: string;
+  host?: string;
+  login?: string;
+  message?: string;
+  verificationUri?: string;
+  userCode?: string;
+  diagnostics?: string[];
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${SIDECAR_HTTP_URL}${path}`, init);
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || `Sidecar request failed (${response.status}).`);
+  return payload as T;
+}
+
 async function post<T>(path: string, provider: CustomProvider): Promise<T> {
   const connectionConfig = { ...provider, models: [] };
-  const response = await fetch(`${SIDECAR_HTTP_URL}${path}`, {
+  return request<T>(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ provider: connectionConfig }),
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || `Sidecar request failed (${response.status}).`);
-  return payload as T;
 }
 
 export const llmIntegrationService = {
@@ -22,5 +38,15 @@ export const llmIntegrationService = {
 
   async testConnection(provider: CustomProvider): Promise<{ modelCount: number; supportedModelCount: number }> {
     return post<{ ok: true; modelCount: number; supportedModelCount: number }>("/llm/test", provider);
+  },
+
+  async getCopilotStatus(): Promise<CopilotConnectionStatus> {
+    return request<CopilotConnectionStatus>("/llm/copilot/status");
+  },
+
+  async startCopilotLogin(): Promise<CopilotConnectionStatus> {
+    return request<CopilotConnectionStatus>("/llm/copilot/login", {
+      method: "POST",
+    });
   },
 };

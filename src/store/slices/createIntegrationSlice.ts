@@ -7,6 +7,7 @@ import {
   normalizeStoredModelReference,
   normalizeStoredProvider,
   normalizedProviderId,
+  PROVIDER_CONFIG_VERSION,
 } from "../providerHelpers";
 import type { WorkspaceSliceCreator } from "../sliceTypes";
 import type { CustomProvider, LspSettings, Skill, WorkspaceState } from "../types";
@@ -62,6 +63,16 @@ const defaultProviders: CustomProvider[] = [
       { id: "openai/gpt-5.6-terra", remoteId: "gpt-5.6-terra", name: "GPT-5.6 Terra", apiType: "openai-responses", baseUrl: "https://api.openai.com/v1", supported: true, reasoning: true, input: ["text", "image"], contextWindow: 1_050_000, maxTokens: 128_000, cost: { input: 2.5, output: 15, cacheRead: 0.25, cacheWrite: 3.125 } },
       { id: "openai/gpt-5.6-luna", remoteId: "gpt-5.6-luna", name: "GPT-5.6 Luna", apiType: "openai-responses", baseUrl: "https://api.openai.com/v1", supported: true, reasoning: true, input: ["text", "image"], contextWindow: 1_050_000, maxTokens: 128_000, cost: { input: 1, output: 6, cacheRead: 0.1, cacheWrite: 1.25 } },
     ],
+  },
+  {
+    id: "github-copilot",
+    name: "GitHub Copilot",
+    baseUrl: "",
+    apiKey: "",
+    apiType: "copilot-sdk",
+    transport: "github-copilot-sdk",
+    authType: "environment",
+    models: [],
   },
   {
     id: "github-models",
@@ -215,6 +226,7 @@ export const createIntegrationSlice: WorkspaceSliceCreator = (set, get) => ({
     const state = get();
     const { SecureStorageService } = await import("../../services/secureStorageService");
     await SecureStorageService.saveSecureData("axiom_secure_config", {
+      configVersion: PROVIDER_CONFIG_VERSION,
       customProviders: state.customProviders,
       activeCustomProviderId: state.activeCustomProviderId,
       activeModel: state.activeModel,
@@ -227,6 +239,7 @@ export const createIntegrationSlice: WorkspaceSliceCreator = (set, get) => ({
   loadSecureConfig: async () => {
     const { SecureStorageService } = await import("../../services/secureStorageService");
     const config = await SecureStorageService.loadSecureData<{
+      configVersion?: number;
       customProviders?: CustomProvider[];
       activeCustomProviderId?: string | null;
       activeModel?: string;
@@ -238,9 +251,12 @@ export const createIntegrationSlice: WorkspaceSliceCreator = (set, get) => ({
     if (!config) return;
 
     const updates: Partial<WorkspaceState> = {};
+    const configVersion = config.configVersion || 0;
     if (config.customProviders) {
       const currentDefaults = get().customProviders;
-      const normalizedProviders = config.customProviders.map(normalizeStoredProvider);
+      const normalizedProviders = config.customProviders.map((provider) =>
+        normalizeStoredProvider(provider, configVersion)
+      );
       const savedProviders = new Map(normalizedProviders.map((provider) => [provider.id, provider]));
       const mergedProviders = currentDefaults.map((defaultProvider) => {
         const savedProvider = savedProviders.get(defaultProvider.id);
@@ -262,10 +278,12 @@ export const createIntegrationSlice: WorkspaceSliceCreator = (set, get) => ({
     }
     if (config.activeCustomProviderId !== undefined) {
       updates.activeCustomProviderId = config.activeCustomProviderId
-        ? normalizedProviderId(config.activeCustomProviderId)
+        ? normalizedProviderId(config.activeCustomProviderId, configVersion)
         : null;
     }
-    if (config.activeModel) updates.activeModel = normalizeStoredModelReference(config.activeModel) || "";
+    if (config.activeModel) {
+      updates.activeModel = normalizeStoredModelReference(config.activeModel, configVersion) || "";
+    }
     if (config.mcpServers) updates.mcpServers = config.mcpServers;
     if (config.lspSettings) updates.lspSettings = { ...config.lspSettings, enabled: false };
     const storedThemeId = loadStoredThemeId();

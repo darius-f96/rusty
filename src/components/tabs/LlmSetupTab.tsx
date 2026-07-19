@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useWorkspaceStore, CustomProvider } from "../../store";
-import { Cpu, Key, Globe, Plus, ShieldCheck, Save, Layers, Lock, Unlock, HelpCircle as HelpIcon, RefreshCw, GitBranch } from "lucide-react";
+import { Cpu, Key, Globe, Plus, ShieldCheck, Save, Layers, Lock, Unlock, HelpCircle as HelpIcon, RefreshCw, GitBranch, Copy, ExternalLink } from "lucide-react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { CustomSelect } from "../CustomSelect";
 import { notify } from "../../notificationStore";
 import { llmIntegrationService } from "../../services/llmIntegrationService";
+import type { CopilotConnectionStatus } from "../../services/llmIntegrationService";
 
 const API_PROTOCOL_OPTIONS = [
   { id: "openai-completions", name: "OpenAI Chat Completions" },
@@ -29,6 +31,7 @@ export const LlmSetupTab: React.FC = () => {
 
   // Selected provider configuration state
   const selectedProvider = customProviders.find((p) => p.id === activeCustomProviderId);
+  const isCopilot = selectedProvider?.transport === "github-copilot-sdk" || selectedProvider?.id === "github-copilot";
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [catalogUrl, setCatalogUrl] = useState("");
@@ -38,6 +41,39 @@ export const LlmSetupTab: React.FC = () => {
   const [fetchingModels, setFetchingModels] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<Record<string, "connected" | "failed">>({});
+  const [copilotStatus, setCopilotStatus] = useState<CopilotConnectionStatus | null>(null);
+  const copilotAutoLoadRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      try {
+        const status = await llmIntegrationService.getCopilotStatus();
+        if (cancelled) return;
+        setCopilotStatus(status);
+        if (status.authenticated) {
+          setConnectionStatus((current) => ({ ...current, "github-copilot": "connected" }));
+        } else if (status.state === "failed") {
+          setConnectionStatus((current) => ({ ...current, "github-copilot": "failed" }));
+        }
+        timer = setTimeout(poll, status.state === "connecting" ? 1_000 : 10_000);
+      } catch (error: any) {
+        if (cancelled) return;
+        setCopilotStatus({
+          state: "failed",
+          authenticated: false,
+          message: error?.message || "Could not reach the Copilot service.",
+        });
+        timer = setTimeout(poll, 10_000);
+      }
+    };
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
 
   // Sync inputs with selected provider
   useEffect(() => {
@@ -58,14 +94,18 @@ export const LlmSetupTab: React.FC = () => {
     }
   }, [activeModel, selectedProvider, setActiveModel]);
 
-  const providerWithDraftSettings = (): CustomProvider | null => selectedProvider ? {
-    ...selectedProvider,
-    apiKey: authType === "none" ? "" : apiKey.trim(),
-    baseUrl: baseUrl.trim(),
-    catalogUrl: catalogUrl.trim() || undefined,
-    apiType,
-    authType,
-  } : null;
+  const providerWithDraftSettings = (): CustomProvider | null => selectedProvider
+    ? isCopilot
+      ? selectedProvider
+      : {
+          ...selectedProvider,
+          apiKey: authType === "none" ? "" : apiKey.trim(),
+          baseUrl: baseUrl.trim(),
+          catalogUrl: catalogUrl.trim() || undefined,
+          apiType,
+          authType,
+        }
+    : null;
 
   const handleSaveSettings = () => {
     if (!activeCustomProviderId || !selectedProvider) return;
@@ -134,6 +174,60 @@ export const LlmSetupTab: React.FC = () => {
       setTestingConnection(false);
     }
   };
+
+  const handleCopilotLogin = async () => {
+    try {
+      const status = await llmIntegrationService.startCopilotLogin();
+      setCopilotStatus(status);
+      notify(
+        "GitHub authorization",
+        "Complete the Copilot sign-in flow in your browser.",
+        "info",
+      );
+    } catch (error: any) {
+      setCopilotStatus({ state: "failed", authenticated: false, message: error?.message });
+      notify("Sign-in failed", error?.message || "Could not start GitHub authorization.", "error");
+    }
+  };
+
+  const handleCopyCopilotCode = async () => {
+    if (!copilotStatus?.userCode) return;
+    try {
+      await navigator.clipboard.writeText(copilotStatus.userCode);
+      notify("Code copied", "The GitHub device code was copied to your clipboard.", "success");
+    } catch (error: any) {
+      notify("Copy failed", error?.message || "Could not copy the device code.", "error");
+    }
+  };
+
+  const handleOpenCopilotVerification = async () => {
+    const verificationUri = copilotStatus?.verificationUri || "https://github.com/login/device";
+    try {
+      await openUrl(verificationUri);
+    } catch (error: any) {
+      notify("Could not open GitHub", error?.message || `Open ${verificationUri} in your browser.`, "error");
+    }
+  };
+
+  const handleCopyCopilotDiagnostics = async () => {
+    if (!copilotStatus?.diagnostics?.length) return;
+    try {
+      await navigator.clipboard.writeText(copilotStatus.diagnostics.join("\n"));
+      notify("Diagnostics copied", "Paste these redacted Copilot authentication logs into the issue or chat.", "success");
+    } catch (error: any) {
+      notify("Copy failed", error?.message || "Could not copy the authentication diagnostics.", "error");
+    }
+  };
+
+  useEffect(() => {
+    if (!copilotStatus?.authenticated) {
+      copilotAutoLoadRef.current = false;
+      return;
+    }
+    if (!isCopilot || !selectedProvider || selectedProvider.models.length > 0 || copilotAutoLoadRef.current) return;
+    copilotAutoLoadRef.current = true;
+    void handleFetchModels();
+  }, [copilotStatus?.authenticated, isCopilot, selectedProvider?.id, selectedProvider?.models.length]);
 
   // Add Custom Provider Form State
   const [showAddCustom, setShowAddCustom] = useState(false);
@@ -213,6 +307,8 @@ export const LlmSetupTab: React.FC = () => {
         return "Connects to OpenCode Zen. If the key is blank, the sidecar uses OPENCODE_API_KEY. Model discovery enriches the Zen catalog with the protocol required by each model. OpenCode Go should be registered separately with provider ID opencode-go and base URL https://opencode.ai/zen/go/v1.";
       case "github-models":
         return "Connects to GitHub Models via the official OpenAI-compatible inference API. Requires a GitHub Personal Access Token (PAT) with the 'models:read' scope; a blank field falls back to GITHUB_TOKEN in the sidecar environment. Use Fetch Models to load the official catalog.";
+      case "github-copilot":
+        return "Uses your GitHub Copilot subscription through GitHub's official Copilot SDK. Authentication is managed by the bundled Copilot CLI and the system credential store; model availability and premium-request usage depend on your Copilot plan and organization policy.";
       default:
         return "Custom OpenAI-compatible provider (e.g. Ollama, LM Studio, vLLM, or LiteLLM gateway). Configure the URL and models as needed.";
     }
@@ -242,12 +338,26 @@ export const LlmSetupTab: React.FC = () => {
             <div className="space-y-2">
               {customProviders.map((p) => {
                 const isActive = p.id === activeCustomProviderId;
+                const isCopilotProvider = p.transport === "github-copilot-sdk" || p.id === "github-copilot";
                 
                 // Connection indicator status text & color
                 const testedStatus = connectionStatus[p.id];
                 let statusLabel = p.authType === "none" ? "No Auth" : "Env / Key";
                 let statusColor = "bg-[var(--color-status-warning-bg)] text-[var(--color-status-warning)]";
-                if (testedStatus === "connected") {
+                if (isCopilotProvider) {
+                  statusLabel = copilotStatus?.state === "connecting"
+                    ? "Signing In"
+                    : copilotStatus?.authenticated
+                      ? "Connected"
+                      : copilotStatus?.state === "failed"
+                        ? "Failed"
+                        : "Sign In";
+                  statusColor = copilotStatus?.authenticated
+                    ? "bg-[var(--color-status-success-solid)] text-[var(--color-status-success-solid-foreground)]"
+                    : copilotStatus?.state === "failed"
+                      ? "bg-[var(--color-status-danger-bg)] text-[var(--color-status-danger)]"
+                      : "bg-[var(--color-status-warning-bg)] text-[var(--color-status-warning)]";
+                } else if (testedStatus === "connected") {
                   statusLabel = "Connected";
                   statusColor = "bg-[var(--color-status-success-solid)] text-[var(--color-status-success-solid-foreground)]";
                 } else if (testedStatus === "failed") {
@@ -258,13 +368,13 @@ export const LlmSetupTab: React.FC = () => {
                   statusColor = "bg-[var(--color-status-success-solid)] text-[var(--color-status-success-solid-foreground)]";
                 } else if (
                   p.authType !== "none"
-                  && !["openai", "anthropic", "opencode", "opencode-go", "github-models"].includes(p.id)
+                  && !["openai", "anthropic", "opencode", "opencode-go", "github-models", "github-copilot"].includes(p.id)
                 ) {
                   statusLabel = "Key Required";
                   statusColor = "bg-[var(--color-status-danger-bg)] text-[var(--color-status-danger)]";
                 }
 
-                const isGithubModels = p.id === "github-models";
+                const isGithubProvider = p.id === "github-models" || isCopilotProvider;
 
                 return (
                   <div
@@ -284,11 +394,11 @@ export const LlmSetupTab: React.FC = () => {
                   >
                     <div className="flex flex-col min-w-0 pr-2">
                       <span className="text-xs font-bold text-[var(--text-light)] group-hover:text-[var(--accent-color)] transition-colors flex items-center space-x-1.5">
-                        {isGithubModels && <GitBranch size={11} className="text-[var(--text-muted)] flex-shrink-0" />}
+                        {isGithubProvider && <GitBranch size={11} className="text-[var(--text-muted)] flex-shrink-0" />}
                         <span>{p.name}</span>
                       </span>
                       <span className="text-[10px] text-[var(--text-muted)] font-mono truncate mt-0.5 max-w-[180px]">
-                        {p.baseUrl || "Built-in API endpoint"}
+                        {isCopilotProvider ? "Copilot subscription via GitHub" : p.baseUrl || "Built-in API endpoint"}
                       </span>
                     </div>
 
@@ -442,6 +552,106 @@ export const LlmSetupTab: React.FC = () => {
 
               {/* Settings Form */}
               <div className="space-y-4 text-xs">
+                {isCopilot ? (
+                  <div className="space-y-4 rounded-xl border border-[var(--border-color)] bg-[var(--bg-app)]/60 p-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-start gap-3">
+                        <div className={`mt-0.5 h-2.5 w-2.5 flex-shrink-0 rounded-full ${
+                          copilotStatus?.authenticated
+                            ? "bg-[var(--color-status-success)]"
+                            : copilotStatus?.state === "connecting"
+                              ? "bg-[var(--color-status-warning)] animate-pulse"
+                              : "bg-[var(--text-muted)]"
+                        }`} />
+                        <div className="space-y-1">
+                          <div className="font-mono text-xs font-bold text-[var(--text-light)]">
+                            {copilotStatus?.state === "connecting"
+                              ? "Waiting for GitHub authorization"
+                              : copilotStatus?.authenticated
+                                ? `Connected${copilotStatus.login ? ` as ${copilotStatus.login}` : ""}`
+                                : "GitHub sign-in required"}
+                          </div>
+                          <p className="text-[10px] leading-relaxed text-[var(--text-muted)]">
+                            {copilotStatus?.message || "Use the GitHub account that owns your Copilot subscription."}
+                          </p>
+                          {copilotStatus?.host && (
+                            <p className="font-mono text-[9px] text-[var(--text-muted)]">{copilotStatus.host}</p>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleCopilotLogin()}
+                        disabled={copilotStatus?.state === "connecting"}
+                        className="whitespace-nowrap rounded-lg bg-[var(--accent-color)] px-3 py-2 font-mono text-[10px] font-bold text-[var(--color-primary-foreground)] transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {copilotStatus?.state === "connecting"
+                          ? "Signing in…"
+                          : copilotStatus?.authenticated
+                            ? "Re-authenticate"
+                            : "Sign in with GitHub"}
+                      </button>
+                    </div>
+                    {copilotStatus?.state === "connecting" && copilotStatus.userCode && (
+                      <div className="rounded-xl border border-[var(--accent-color)]/40 bg-[var(--accent-bg)]/10 p-4 text-center">
+                        <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-[var(--text-muted)]">
+                          GitHub device code
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleCopyCopilotCode}
+                          className="mt-2 font-mono text-2xl font-bold tracking-[0.18em] text-[var(--text-light)] hover:text-[var(--accent-color)]"
+                          title="Copy device code"
+                        >
+                          {copilotStatus.userCode}
+                        </button>
+                        <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleCopyCopilotCode}
+                            className="flex items-center gap-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-app)] px-3 py-2 font-mono text-[10px] font-bold text-[var(--text-normal)] hover:border-[var(--accent-color)] hover:text-[var(--text-light)]"
+                          >
+                            <Copy size={12} />
+                            <span>Copy Code</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleOpenCopilotVerification}
+                            className="flex items-center gap-1.5 rounded-lg bg-[var(--accent-color)] px-3 py-2 font-mono text-[10px] font-bold text-[var(--color-primary-foreground)] hover:opacity-90"
+                          >
+                            <ExternalLink size={12} />
+                            <span>Open GitHub</span>
+                          </button>
+                        </div>
+                        <p className="mt-2 break-all font-mono text-[9px] text-[var(--text-muted)]">
+                          {copilotStatus.verificationUri || "https://github.com/login/device"}
+                        </p>
+                      </div>
+                    )}
+                    {Boolean(copilotStatus?.diagnostics?.length) && (
+                      <details className="rounded-lg border border-[var(--border-color)]/60 bg-[var(--bg-app)]/60 p-3">
+                        <summary className="cursor-pointer font-mono text-[10px] font-bold text-[var(--text-normal)]">
+                          Authentication diagnostics
+                        </summary>
+                        <pre className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-[var(--bg-app)] p-2 font-mono text-[9px] leading-relaxed text-[var(--text-muted)]">
+                          {copilotStatus?.diagnostics?.join("\n")}
+                        </pre>
+                        <button
+                          type="button"
+                          onClick={handleCopyCopilotDiagnostics}
+                          className="mt-2 flex items-center gap-1.5 rounded-lg border border-[var(--border-color)] px-2.5 py-1.5 font-mono text-[9px] font-bold text-[var(--text-normal)] hover:border-[var(--accent-color)] hover:text-[var(--text-light)]"
+                        >
+                          <Copy size={11} />
+                          <span>Copy Diagnostics</span>
+                        </button>
+                      </details>
+                    )}
+                    <div className="border-t border-[var(--border-color)]/50 pt-3 text-[10px] leading-relaxed text-[var(--text-muted)]">
+                      GitHub Copilot CLI manages credentials, using the system credential store when available. Axiom never stores the OAuth token in provider settings.
+                    </div>
+                  </div>
+                ) : (
+                  <>
                 {/* 1. API Key Input */}
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
@@ -560,6 +770,8 @@ export const LlmSetupTab: React.FC = () => {
                     />
                   </div>
                 </div>
+                  </>
+                )}
 
                 {/* 4. Default Target Model Dropdown */}
                 <div className="space-y-2 pt-2">
@@ -577,7 +789,9 @@ export const LlmSetupTab: React.FC = () => {
                             .map((m) => ({ id: m.id, name: `${m.name} (${m.remoteId || m.id})` }))
                         : []
                     }
-                    placeholder="No supported models available - fetch the provider catalog"
+                    placeholder={isCopilot && !copilotStatus?.authenticated
+                      ? "Sign in with GitHub to load Copilot models"
+                      : "No supported models available - fetch the provider catalog"}
                   />
                   {selectedProvider.models.some((model) => model.supported === false) && (
                     <span className="text-[10px] text-[var(--text-muted)] font-mono">
@@ -592,37 +806,39 @@ export const LlmSetupTab: React.FC = () => {
                     <button
                       type="button"
                       onClick={handleFetchModels}
-                      disabled={fetchingModels || testingConnection}
+                      disabled={fetchingModels || testingConnection || (isCopilot && !copilotStatus?.authenticated)}
                       className="whitespace-nowrap border border-[var(--border-color)] hover:border-[var(--accent-color)] bg-[var(--bg-app)] hover:bg-[var(--accent-bg)]/10 text-[var(--text-normal)] hover:text-[var(--text-light)] font-mono font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer flex items-center space-x-1.5 disabled:opacity-50"
                       title="Discover and normalize the provider's model catalog"
                     >
                       <RefreshCw size={13} className={fetchingModels ? "animate-spin text-[var(--accent-color)]" : ""} />
-                      <span>{fetchingModels ? "Fetching..." : "Fetch Models"}</span>
+                      <span>{fetchingModels ? "Fetching..." : isCopilot ? "Load Models" : "Fetch Models"}</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={handleTestConnection}
-                      disabled={fetchingModels || testingConnection}
+                      disabled={fetchingModels || testingConnection || (isCopilot && !copilotStatus?.authenticated)}
                       className="whitespace-nowrap border border-[var(--border-color)] hover:border-[var(--color-status-success-border)] bg-[var(--bg-app)] hover:bg-[var(--color-status-success-bg)] text-[var(--text-normal)] hover:text-[var(--text-light)] font-mono font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer flex items-center space-x-1.5 disabled:opacity-50"
                     >
                       <ShieldCheck size={13} className={testingConnection ? "animate-pulse text-[var(--color-status-success)]" : ""} />
                       <span>{testingConnection ? "Testing..." : "Test"}</span>
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={handleSaveSettings}
-                      className="whitespace-nowrap bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/85 text-[var(--color-primary-foreground)] font-mono font-bold px-4 py-2.5 rounded-xl transition-all shadow-lg hover:shadow-[var(--accent-color)]/20 cursor-pointer flex items-center space-x-1.5"
-                    >
-                      <Save size={13} />
-                      <span>Save Configuration</span>
-                    </button>
+                    {!isCopilot && (
+                      <button
+                        type="button"
+                        onClick={handleSaveSettings}
+                        className="whitespace-nowrap bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/85 text-[var(--color-primary-foreground)] font-mono font-bold px-4 py-2.5 rounded-xl transition-all shadow-lg hover:shadow-[var(--accent-color)]/20 cursor-pointer flex items-center space-x-1.5"
+                      >
+                        <Save size={13} />
+                        <span>Save Configuration</span>
+                      </button>
+                    )}
                   </div>
 
                   <div className="flex items-center space-x-1.5 text-[10px] font-mono text-[var(--text-muted)] bg-[var(--bg-app)]/50 border border-[var(--border-color)]/40 rounded-lg px-2.5 py-1.5 w-fit">
                     <ShieldCheck size={14} className="text-[var(--color-status-success)]" />
-                    <span>Active Model: {activeModel}</span>
+                    <span>Active Model: {activeModel || "None selected"}</span>
                   </div>
                 </div>
               </div>

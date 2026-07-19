@@ -12,6 +12,20 @@ test("model references preserve provider-owned slash IDs", () => {
   assert.equal(remoteModelId(reference, "github-models"), "openai/gpt-4.1");
 });
 
+test("Copilot providers cannot fall through to the generic HTTP adapter", async () => {
+  await assert.rejects(
+    discoverProviderModels({
+      id: "github-copilot",
+      name: "GitHub Copilot",
+      baseUrl: "",
+      apiType: "copilot-sdk",
+      transport: "github-copilot-sdk",
+      authType: "environment",
+    }),
+    /Copilot SDK adapter/,
+  );
+});
+
 test("GitHub catalog arrays are normalized and unsupported models are marked", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (_input, init) => {
