@@ -458,6 +458,15 @@ function withAlpha(hex: string, alpha: number): string {
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }
 
+/** Monaco theme colors only accept hex notation, including #RRGGBBAA for alpha. */
+function withHexAlpha(hex: string, alpha: number): string {
+  const normalized = hex.replace("#", "").slice(0, 6);
+  const alphaHex = Math.round(Math.max(0, Math.min(1, alpha)) * 255)
+    .toString(16)
+    .padStart(2, "0");
+  return `#${normalized}${alphaHex}`;
+}
+
 function mixHex(base: string, mix: string, amount: number): string {
   const baseChannels = hexChannels(base);
   const mixChannels = hexChannels(mix);
@@ -598,20 +607,20 @@ function createTheme(id: string, seed: ThemeSeed): AppTheme {
     syntax,
     diff: isLight
       ? {
-          addedBackground: "rgba(22, 163, 74, 0.12)",
-          addedTextBackground: "rgba(22, 163, 74, 0.2)",
-          addedGutter: "rgba(22, 163, 74, 0.42)",
-          removedBackground: "rgba(220, 38, 38, 0.1)",
-          removedTextBackground: "rgba(220, 38, 38, 0.18)",
-          removedGutter: "rgba(220, 38, 38, 0.4)",
+          addedBackground: withHexAlpha("#16A34A", 0.12),
+          addedTextBackground: withHexAlpha("#16A34A", 0.2),
+          addedGutter: withHexAlpha("#16A34A", 0.42),
+          removedBackground: withHexAlpha("#DC2626", 0.1),
+          removedTextBackground: withHexAlpha("#DC2626", 0.18),
+          removedGutter: withHexAlpha("#DC2626", 0.4),
         }
       : {
-          addedBackground: "rgba(31, 157, 85, 0.11)",
-          addedTextBackground: "rgba(31, 157, 85, 0.22)",
-          addedGutter: "rgba(31, 157, 85, 0.38)",
-          removedBackground: "rgba(229, 72, 77, 0.11)",
-          removedTextBackground: "rgba(229, 72, 77, 0.22)",
-          removedGutter: "rgba(229, 72, 77, 0.38)",
+          addedBackground: withHexAlpha("#1F9D55", 0.11),
+          addedTextBackground: withHexAlpha("#1F9D55", 0.22),
+          addedGutter: withHexAlpha("#1F9D55", 0.38),
+          removedBackground: withHexAlpha("#E5484D", 0.11),
+          removedTextBackground: withHexAlpha("#E5484D", 0.22),
+          removedGutter: withHexAlpha("#E5484D", 0.38),
         },
   };
 }

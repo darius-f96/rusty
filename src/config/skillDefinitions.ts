@@ -28,9 +28,18 @@ export const DEFAULT_SKILL_ID: string = BUILT_IN_SKILL_IDS.BUILD;
 
 /**
  * The skill GlobalChatNode starts with before the user overrides it.
- * The node always shows ALL built-in skills in its dropdown.
+ * The node only shows planning and analysis skills in its dropdown.
  */
 export const GLOBAL_CHAT_DEFAULT_SKILL_ID: string = BUILT_IN_SKILL_IDS.TASK_AUDITOR;
+
+/**
+ * Global Chat is a planning surface, so implementation-oriented skills must not
+ * be selectable (or honored from an older persisted canvas).
+ */
+export const GLOBAL_CHAT_SKILL_IDS: readonly string[] = [
+  BUILT_IN_SKILL_IDS.PLAN,
+  BUILT_IN_SKILL_IDS.TASK_AUDITOR,
+];
 
 // ── Built-in skill definitions ────────────────────────────────────────────────
 

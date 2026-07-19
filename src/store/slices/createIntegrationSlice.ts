@@ -11,6 +11,19 @@ import {
 import type { WorkspaceSliceCreator } from "../sliceTypes";
 import type { CustomProvider, LspSettings, Skill, WorkspaceState } from "../types";
 
+const THEME_STORAGE_KEY = "selected_theme";
+
+function loadStoredThemeId(): string | null {
+  const storedThemeId = localStorage.getItem(THEME_STORAGE_KEY);
+  return storedThemeId ? resolveTheme(storedThemeId).id : null;
+}
+
+function saveThemeId(themeId: string): string {
+  const resolvedThemeId = resolveTheme(themeId).id;
+  localStorage.setItem(THEME_STORAGE_KEY, resolvedThemeId);
+  return resolvedThemeId;
+}
+
 const defaultProviders: CustomProvider[] = [
   {
     id: "opencode",
@@ -105,7 +118,7 @@ export const createIntegrationSlice: WorkspaceSliceCreator = (set, get) => ({
   skills: BUILT_IN_SKILLS,
   activeSkillId: DEFAULT_SKILL_ID,
   mcpServers: loadStoredMcpServers(),
-  activeThemeId: resolveTheme(localStorage.getItem("selected_theme") || "spaceDust").id,
+  activeThemeId: loadStoredThemeId() || resolveTheme("spaceDust").id,
 
   updateLspSettings: (settings) => set((state) => {
     setTimeout(() => void get().saveSecureConfig(), 0);
@@ -192,10 +205,10 @@ export const createIntegrationSlice: WorkspaceSliceCreator = (set, get) => ({
   },
 
   setActiveThemeId: (themeId) => {
-    const activeThemeId = resolveTheme(themeId).id;
-    localStorage.setItem("selected_theme", activeThemeId);
+    // This synchronous preference is the source of truth so closing the app
+    // cannot interrupt an asynchronous secure-config write.
+    const activeThemeId = saveThemeId(themeId);
     set({ activeThemeId });
-    setTimeout(() => void get().saveSecureConfig(), 0);
   },
 
   saveSecureConfig: async () => {
@@ -205,7 +218,6 @@ export const createIntegrationSlice: WorkspaceSliceCreator = (set, get) => ({
       customProviders: state.customProviders,
       activeCustomProviderId: state.activeCustomProviderId,
       activeModel: state.activeModel,
-      activeThemeId: state.activeThemeId,
       lastWorkspacePath: state.rootPath,
       mcpServers: state.mcpServers,
       lspSettings: { ...state.lspSettings, enabled: false },
@@ -256,10 +268,14 @@ export const createIntegrationSlice: WorkspaceSliceCreator = (set, get) => ({
     if (config.activeModel) updates.activeModel = normalizeStoredModelReference(config.activeModel) || "";
     if (config.mcpServers) updates.mcpServers = config.mcpServers;
     if (config.lspSettings) updates.lspSettings = { ...config.lspSettings, enabled: false };
-    if (config.activeThemeId) {
-      const activeThemeId = resolveTheme(config.activeThemeId).id;
-      updates.activeThemeId = activeThemeId;
-      localStorage.setItem("selected_theme", activeThemeId);
+    const storedThemeId = loadStoredThemeId();
+    if (storedThemeId) {
+      // Never let an older asynchronous config snapshot replace the latest
+      // theme preference during startup.
+      updates.activeThemeId = saveThemeId(storedThemeId);
+    } else if (config.activeThemeId) {
+      // Migrate themes saved before the dedicated preference became canonical.
+      updates.activeThemeId = saveThemeId(config.activeThemeId);
     }
     set(updates);
 

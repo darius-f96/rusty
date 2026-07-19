@@ -3,12 +3,19 @@ import { useWorkspaceStore } from "../../store";
 import { VfsRegistry } from "../../services/vfs";
 import { notify } from "../../notificationStore";
 import type { SubagentActivity } from "../ui/Chat";
-import { resolveSkill, toSkillData, BUILT_IN_SKILL_IDS } from "../../config/skillDefinitions";
+import {
+  resolveSkill,
+  toSkillData,
+  BUILT_IN_SKILL_IDS,
+  GLOBAL_CHAT_DEFAULT_SKILL_ID,
+  GLOBAL_CHAT_SKILL_IDS,
+} from "../../config/skillDefinitions";
 import type { AgentQuestion } from "../ui/ChatInput";
 import { commandPermissionService, handleCommandPermissionMessage } from "../../services/commandPermissionService";
 import { scheduleTreeRefresh } from "../filetree/FileTreePresenter";
 import { appendBoundedText } from "../../services/boundedTextBuffer";
 import { invoke } from "@tauri-apps/api/core";
+import { selectableModelProviders } from "../../store/providerHelpers";
 export interface GeneratedTaskDraft { title: string; description: string; selected: boolean }
 
 const activeExplorerSockets = new Map<string, WebSocket>();
@@ -81,8 +88,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
   const activeModel = useWorkspaceStore((state) => state.activeModel);
   const providers = useWorkspaceStore((state) => state.customProviders);
   const activeCustomProviderId = useWorkspaceStore((state) => state.activeCustomProviderId);
-  const isProviderActive = (prov: any) => prov.models.some((model: any) => model.supported !== false);
-  const filteredProviders = providers.filter(isProviderActive);
+  const filteredProviders = selectableModelProviders(providers, activeCustomProviderId);
   const activeProvider = filteredProviders.find((p) => p.id === activeCustomProviderId);
   const availableModels = activeProvider
     ? activeProvider.models.filter((model) => model.supported !== false)
@@ -232,10 +238,13 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       ) || currentProviders.find((provider) => provider.id === currentActiveProviderId);
       const chatHistory = useWorkspaceStore.getState().globalChatHistory[selectedNodeId] || [];
 
-      // Resolve skill: prefer the skill selected on the node, fall back to DEFAULT_SKILL_ID.
+      // Global Chat only honors planning/analysis skills, including for older canvases.
       const skills = useWorkspaceStore.getState().skills;
-      const nodeSkillId = selectedNode?.data?.skillId as string | undefined;
-      const resolvedSkill = resolveSkill(skills, nodeSkillId || BUILT_IN_SKILL_IDS.TASK_AUDITOR);
+      const requestedSkillId = selectedNode?.data?.skillId as string | undefined;
+      const nodeSkillId = requestedSkillId && GLOBAL_CHAT_SKILL_IDS.includes(requestedSkillId)
+        ? requestedSkillId
+        : GLOBAL_CHAT_DEFAULT_SKILL_ID;
+      const resolvedSkill = resolveSkill(skills, nodeSkillId);
       const skillData = toSkillData(resolvedSkill);
 
       // Build MCP server list from:
@@ -263,6 +272,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
         mcpServers,
         customProvider: prov || null,
         skill: skillData,
+        planOnly: true,
         lspSettings: { ...useWorkspaceStore.getState().lspSettings, enabled: false },
       }));
     };
@@ -353,6 +363,14 @@ export const useExplorerWebSocket = (selectedNode: any) => {
         }
 
         if (msg.type === "write_file") {
+          if (selectedNode?.type === "globalChatNode") {
+            const error = "Global Chat is planning-only and cannot write files to the VFS. Use write_plan for plans.";
+            addLog(selectedNodeId, error);
+            if (socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({ type: "write_file_response", requestId: msg.requestId, error }));
+            }
+            return;
+          }
           void (async () => {
             try {
               const store = useWorkspaceStore.getState();
@@ -387,6 +405,35 @@ export const useExplorerWebSocket = (selectedNode: any) => {
             } catch (err: any) {
               if (socket.readyState === WebSocket.OPEN) {
                 socket.send(JSON.stringify({ type: "write_file_response", requestId: msg.requestId, error: err.message || String(err) }));
+              }
+            }
+          })();
+          return;
+        }
+
+        if (msg.type === "write_plan") {
+          void (async () => {
+            try {
+              if (selectedNode?.type !== "globalChatNode") {
+                throw new Error("The write_plan tool is only available to Global Chat.");
+              }
+              const filename = String(msg.filename || "");
+              if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,119}\.md$/.test(filename)) {
+                throw new Error("Plan filename must be a Markdown filename using only letters, numbers, hyphens, or underscores.");
+              }
+              const rootPath = useWorkspaceStore.getState().rootPath?.replace(/[\\/]+$/, "");
+              if (!rootPath) throw new Error("No project root is open.");
+              const separator = rootPath.includes("\\") ? "\\" : "/";
+              const planPath = `${rootPath}${separator}plans${separator}${filename}`;
+              await invoke("write_file_disk", { path: planPath, content: String(msg.content || ""), tabId });
+              scheduleTreeRefresh();
+              addLog(selectedNodeId, `Saved plan to ${planPath}`);
+              if (socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: "write_plan_response", requestId: msg.requestId, path: planPath }));
+              }
+            } catch (err: any) {
+              if (socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: "write_plan_response", requestId: msg.requestId, error: err.message || String(err) }));
               }
             }
           })();

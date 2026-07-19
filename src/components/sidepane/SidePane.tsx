@@ -19,6 +19,7 @@ import { CustomSelect } from "../CustomSelect";
 import { VfsRegistry, VFS_CHANGED_EVENT } from "../../services/vfs";
 import { canvasFileService } from "../tabs/canvas/services/canvasFileService";
 import { notify } from "../../notificationStore";
+import { selectableProviderModels } from "../../store/providerHelpers";
 
 const EMPTY_ARRAY: any[] = [];
 
@@ -34,6 +35,8 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
   const nodes = useWorkspaceStore((state) => state.nodes);
   const nodeStatus = useWorkspaceStore((state) => state.nodeStatus[selectedNodeId || ""] || "idle");
   const selectedChatMessageCount = useWorkspaceStore((state) => state.globalChatHistory[selectedNodeId || ""]?.length || 0);
+  const customProviders = useWorkspaceStore((state) => state.customProviders);
+  const activeCustomProviderId = useWorkspaceStore((state) => state.activeCustomProviderId);
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
   const modifiedFiles = (selectedNode?.data?.modifiedFiles as string[]) || EMPTY_ARRAY;
@@ -313,9 +316,9 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
                 const updateTaskNode = useWorkspaceStore.getState().updateTaskNode;
                 updateTaskNode(selectedNode.id, { model: val });
               }}
-              options={useWorkspaceStore.getState().customProviders.flatMap((p) => p.models).map((m) => ({
-                id: m.id,
-                name: `${m.name}`,
+              options={selectableProviderModels(customProviders, activeCustomProviderId).map(({ model }) => ({
+                id: model.id,
+                name: model.name,
               }))}
               placeholder="Select model"
               className="w-36"

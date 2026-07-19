@@ -17,6 +17,7 @@ import {
   reconciliationOverlayService,
   RECONCILIATION_OVERLAY_CHANGED_EVENT,
 } from "../../services/reconciliationOverlayService";
+import { selectableProviderModels } from "../../store/providerHelpers";
 
 interface ReconciliationGraphPaneProps {
   onClose: () => void;
@@ -471,22 +472,18 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
 
   // Compile list of available models
   const availableModels = useMemo(() => {
-    const configuredModels = customProviders.flatMap((provider) =>
-      (provider.models || [])
-        .filter((model) => model.supported !== false)
-        .map((model) => model.id)
-    );
-    return Array.from(new Set([activeModel, ...configuredModels].filter(Boolean)));
-  }, [activeModel, customProviders]);
+    const configuredModels = selectableProviderModels(customProviders, activeCustomProviderId)
+      .map(({ model }) => model.id);
+    return Array.from(new Set(configuredModels));
+  }, [activeCustomProviderId, customProviders]);
 
   const modelOptions = useMemo(() => {
     return availableModels.map((m) => ({ id: m, name: m }));
   }, [availableModels]);
 
   useEffect(() => {
-    if ((!selectedModel || !availableModels.includes(selectedModel)) && activeModel) {
-      setSelectedModel(activeModel);
-    }
+    if (availableModels.includes(selectedModel)) return;
+    setSelectedModel(availableModels.includes(activeModel) ? activeModel : availableModels[0] || "");
   }, [activeModel, availableModels, selectedModel]);
 
   const duplicateFilesEntries = Object.entries(duplicateFiles);

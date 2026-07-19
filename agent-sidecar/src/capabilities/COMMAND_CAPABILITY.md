@@ -29,12 +29,18 @@ returns one of these decisions:
 
 - `deny`: do not execute.
 - `allow_once`: execute this request only.
-- `allow_session`: remember the exact normalized tuple of executable, argument
-  list, and canonical working directory for this Pi session.
+- `allow_session`: for a normal-risk direct executable, remember the executable
+  for this Pi session. Elevated/destructive commands and commands mediated by
+  an interpreter or dispatcher remember only the exact normalized tuple.
 
-Session grants live only in Sidecar memory. Different arguments, directories,
-agent nodes, or tabs require another decision. A timeout is not part of the
-grant signature because changing it cannot change what process is executed.
+Session grants live only in Sidecar memory. A normal-risk grant for a direct
+executable such as `grep` covers different arguments and working directories in
+the same workspace and Pi session. A change to an elevated or destructive
+operation asks again. Shells, interpreters, package/build runners, and other
+dispatchers always use exact-command grants because their outer executable does
+not reveal what code they will run. Agent nodes and tabs do not share grants. A
+timeout is not part of the exact grant signature because changing it cannot
+change what process is executed.
 
 ## Execution boundaries
 

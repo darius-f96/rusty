@@ -256,7 +256,7 @@ wss.on("connection", (ws: WebSocket, req: http.IncomingMessage) => {
     console.log(`WebSocket [Server] Received message type: ${data.type}`);
 
     // Pair interactive tool responses with the originating Sidecar request.
-    if (data.type === "read_file_response" || data.type === "write_file_response" || data.type === "agent_question_response" || data.type === "command_permission_response") {
+    if (data.type === "read_file_response" || data.type === "write_file_response" || data.type === "write_plan_response" || data.type === "agent_question_response" || data.type === "command_permission_response") {
       console.log(`WebSocket [Server] Resolving pending request: ${data.requestId}`, { hasError: !!data.error });
       const pending = pendingRequests.get(data.requestId);
       if (pending && (data.type !== "command_permission_response" || pending.ws === ws)) {

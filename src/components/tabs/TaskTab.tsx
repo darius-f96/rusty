@@ -10,6 +10,7 @@ import { useDiffViewMode } from "../../hooks/useDiffViewMode";
 import { DiffViewToggle } from "../ui/DiffViewToggle";
 import { Chat } from "../ui/Chat";
 import { ChatInput } from "../ui/ChatInput";
+import { selectableProviderModels } from "../../store/providerHelpers";
 
 const EMPTY_ARRAY: any[] = [];
 
@@ -24,6 +25,7 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, onStopExec
   const nodes = useWorkspaceStore((state) => state.nodes);
   const editorGroups = useWorkspaceStore((state) => state.editorGroups);
   const customProviders = useWorkspaceStore((state) => state.customProviders);
+  const activeCustomProviderId = useWorkspaceStore((state) => state.activeCustomProviderId);
   const activeModel = useWorkspaceStore((state) => state.activeModel);
   const updateTaskNode = useWorkspaceStore((state) => state.updateTaskNode);
   const chatHistory = useWorkspaceStore((state) => state.globalChatHistory[taskNodeId] || EMPTY_ARRAY);
@@ -241,9 +243,9 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, onStopExec
             <CustomSelect
               value={(taskNode.data as any).model || activeModel}
               onChange={(val) => updateTaskNode(taskNodeId, { model: val })}
-              options={customProviders.flatMap((p) => p.models).map((m) => ({
-                id: m.id,
-                name: `${m.name} (${m.id})`,
+              options={selectableProviderModels(customProviders, activeCustomProviderId).map(({ model }) => ({
+                id: model.id,
+                name: `${model.name} (${model.id})`,
               }))}
               placeholder="No models configured"
               className="w-48"

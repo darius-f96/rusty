@@ -1,12 +1,15 @@
 /** Frontend broker for command approvals emitted by any Pi runtime. */
 export type CommandPermissionDecision = "deny" | "allow_once" | "allow_session";
 export type CommandRisk = "normal" | "elevated" | "destructive";
+export type CommandSessionGrantScope = "executable" | "exact_command";
 
 export interface CommandPermissionRequest {
   requestId: string;
   sessionId: string;
   command: { program: string; args: string[]; cwd: string; timeoutMs: number };
   risk: CommandRisk;
+  sessionGrantScope: CommandSessionGrantScope;
+  sessionGrantProgram: string;
   description: string;
 }
 

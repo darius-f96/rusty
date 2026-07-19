@@ -10,6 +10,7 @@ import { notify } from "../../notificationStore";
 import { commandPermissionService, handleCommandPermissionMessage } from "../../services/commandPermissionService";
 import { scheduleTreeRefresh } from "../filetree/FileTreePresenter";
 import { appendBoundedText } from "../../services/boundedTextBuffer";
+import { selectableProviderModels } from "../../store/providerHelpers";
 
 interface AgentTabProps {
   tab: any;
@@ -26,6 +27,7 @@ interface SavedChat {
 
 export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) => {
   const customProviders = useWorkspaceStore((state) => state.customProviders);
+  const activeCustomProviderId = useWorkspaceStore((state) => state.activeCustomProviderId);
   const activeModel = useWorkspaceStore((state) => state.activeModel);
   const setActiveModel = useWorkspaceStore((state) => state.setActiveModel);
   const agentChats = useWorkspaceStore((state) => state.agentChats[tab.id] || []);
@@ -73,18 +75,19 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
   const lastUserMessageIdRef = useRef<string | null>(null);
   const lastConsoleMessageIdRef = useRef<string | null>(null);
 
-  const modelOptions = customProviders.flatMap((p) => p.models)
-    .filter((model) => model.supported !== false)
-    .map((m) => ({
-      id: m.id,
-      name: `${m.name} (${m.id})`,
+  const modelOptions = selectableProviderModels(customProviders, activeCustomProviderId)
+    .map(({ model }) => ({
+      id: model.id,
+      name: `${model.name} (${model.id})`,
     }));
 
   useEffect(() => {
-    if (selectedModel !== activeModel) {
-      setActiveModel(selectedModel);
-    }
-  }, [selectedModel]);
+    const nextModel = modelOptions.some((option) => option.id === activeModel)
+      ? activeModel
+      : modelOptions[0]?.id || "";
+    setSelectedModel(nextModel);
+    if (nextModel !== activeModel) setActiveModel(nextModel);
+  }, [activeCustomProviderId, activeModel, customProviders, setActiveModel]);
 
   useEffect(() => {
     // Always ensure a skill is selected. Resolution order:
@@ -771,7 +774,10 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
             )}
             <CustomSelect
               value={selectedModel}
-              onChange={setSelectedModel}
+              onChange={(model) => {
+                setSelectedModel(model);
+                setActiveModel(model);
+              }}
               options={modelOptions}
               placeholder="Select model"
               className="w-64"

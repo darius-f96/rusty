@@ -14,6 +14,8 @@ function formatCommandToken(token: string): string {
 export const CommandPermissionDialog: React.FC<CommandPermissionDialogProps> = ({ request, onDecision }) => {
   const commandText = [request.command.program, ...(request.command.args || [])].map(formatCommandToken).join(" ");
   const destructive = request.risk === "destructive";
+  const executableGrant = request.sessionGrantScope === "executable";
+  const sessionGrantProgram = request.sessionGrantProgram || request.command.program;
   return (
     <div className="fixed inset-0 bg-[var(--color-surface-overlay)] backdrop-blur-sm z-[100] flex items-center justify-center p-4">
       <div role="dialog" aria-modal="true" aria-labelledby="command-permission-title" className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-xl w-full max-w-xl shadow-2xl overflow-hidden font-mono">
@@ -32,13 +34,17 @@ export const CommandPermissionDialog: React.FC<CommandPermissionDialogProps> = (
             <span className="text-[var(--text-muted)]">Working dir</span><span className="text-[var(--text-normal)] break-all">{request.command.cwd}</span>
             <span className="text-[var(--text-muted)]">Timeout</span><span className="text-[var(--text-normal)]">{Math.round(request.command.timeoutMs / 1000)} seconds</span>
           </div>
-          <p className="text-[10px] leading-relaxed text-[var(--text-muted)]">Always allow is memory-only and applies to this exact executable, argument list, working directory, and Pi session. Changed arguments will ask again.</p>
+          <p className="text-[10px] leading-relaxed text-[var(--text-muted)]">
+            {executableGrant
+              ? `Session allow is memory-only and covers other normal-risk ${sessionGrantProgram} commands in this Pi session. Elevated or destructive variants will ask again.`
+              : "Session allow is memory-only and applies only to this exact command and Pi session. Changed arguments will ask again."}
+          </p>
           {destructive && <p className="text-[10px] leading-relaxed text-[var(--color-status-danger)]">This command may modify infrastructure, remote systems, or project state. Review every argument carefully.</p>}
         </div>
         <div className="px-4 py-3 bg-[var(--bg-header)] border-t border-[var(--border-color)] flex items-center justify-end gap-2">
           <button id="command-permission-deny" onClick={() => onDecision("deny")} className="px-3 py-1.5 border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-light)] rounded-lg text-xs">Deny</button>
           <button id="command-permission-allow-once" onClick={() => onDecision("allow_once")} className="px-3 py-1.5 bg-[var(--color-status-warning-solid)] hover:bg-[var(--color-status-warning-solid)] text-[var(--color-status-warning-solid-foreground)] rounded-lg text-xs font-semibold">Allow once</button>
-          <button id="command-permission-allow-session" onClick={() => onDecision("allow_session")} className="px-3 py-1.5 bg-[var(--color-status-success-solid)] hover:bg-[var(--color-status-success-solid)] text-[var(--color-status-success-solid-foreground)] rounded-lg text-xs font-semibold">Always this session</button>
+          <button id="command-permission-allow-session" onClick={() => onDecision("allow_session")} className="px-3 py-1.5 bg-[var(--color-status-success-solid)] hover:bg-[var(--color-status-success-solid)] text-[var(--color-status-success-solid-foreground)] rounded-lg text-xs font-semibold">{executableGrant ? `Allow ${sessionGrantProgram} this session` : "Allow exact command this session"}</button>
         </div>
       </div>
     </div>

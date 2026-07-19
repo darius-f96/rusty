@@ -5,6 +5,7 @@ import { DEFAULT_SKILL_ID } from "../../../config/skillDefinitions";
 import { Chat } from "../../ui/Chat";
 import { AgentQuestion, ChatInput } from "../../ui/ChatInput";
 import type { SubagentActivity } from "../../ui/Chat";
+import { selectableProviderModels } from "../../../store/providerHelpers";
 
 interface PromptChatContentProps {
   selectedNode: any;
@@ -24,8 +25,10 @@ const EMPTY_ARRAY: any[] = [];
 const ModelSelector: React.FC<{ nodeId: string; nodeData: any }> = ({ nodeId, nodeData }) => {
   const activeModel = useWorkspaceStore((s) => s.activeModel);
   const providers = useWorkspaceStore((s) => s.customProviders);
+  const activeProviderId = useWorkspaceStore((s) => s.activeCustomProviderId);
   const updateTaskNode = useWorkspaceStore((s) => s.updateTaskNode);
-  const modelOptions = providers.flatMap((p) => p.models).map((m) => ({ id: m.id, name: m.name }));
+  const modelOptions = selectableProviderModels(providers, activeProviderId)
+    .map(({ model }) => ({ id: model.id, name: model.name }));
   return (
     <CustomSelect
       value={nodeData.model || activeModel}

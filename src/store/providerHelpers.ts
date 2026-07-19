@@ -45,3 +45,34 @@ export function normalizeStoredModelReference(model: string | undefined): string
     ? `github-models/${model.slice("github-copilot/".length)}`
     : model;
 }
+
+/**
+ * Providers whose models may appear in model selectors.
+ *
+ * The selected provider remains available because built-in integrations can
+ * receive credentials from the sidecar environment. Other providers must be
+ * explicitly configured so untouched built-in catalogs do not leak into every
+ * model dropdown.
+ */
+export function selectableModelProviders(
+  providers: CustomProvider[],
+  selectedProviderId: string | null,
+): CustomProvider[] {
+  return providers.filter((provider) =>
+    provider.id === selectedProviderId
+    || provider.authType === "none"
+    || provider.authType === "environment"
+    || Boolean(provider.apiKey?.trim())
+  );
+}
+
+export function selectableProviderModels(
+  providers: CustomProvider[],
+  selectedProviderId: string | null,
+): Array<{ provider: CustomProvider; model: ProviderModel }> {
+  return selectableModelProviders(providers, selectedProviderId).flatMap((provider) =>
+    provider.models
+      .filter((model) => model.supported !== false)
+      .map((model) => ({ provider, model }))
+  );
+}

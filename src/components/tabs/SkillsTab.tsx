@@ -4,6 +4,7 @@ import { skillsService } from "../../services/skillsService";
 import { Cpu, Plus, Trash2, Save, Wand2, Plug } from "lucide-react";
 import { CustomSelect } from "../CustomSelect";
 import { notify } from "../../notificationStore";
+import { selectableProviderModels } from "../../store/providerHelpers";
 
 const AVAILABLE_TOOLS = [
   { id: "read_file", label: "Read Files" },
@@ -21,6 +22,7 @@ export const SkillsTab: React.FC = () => {
   const deleteSkill = useWorkspaceStore((state) => state.deleteSkill);
   const rootPath = useWorkspaceStore((state) => state.rootPath);
   const customProviders = useWorkspaceStore((state) => state.customProviders);
+  const activeCustomProviderId = useWorkspaceStore((state) => state.activeCustomProviderId);
   const mcpServers = useWorkspaceStore((state) => state.mcpServers);
 
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
@@ -218,11 +220,8 @@ export const SkillsTab: React.FC = () => {
     }
   };
 
-  const modelOptions = customProviders.flatMap((p) =>
-    p.models
-      .filter((model) => model.supported !== false)
-      .map((m) => ({ id: m.id, name: `${p.name} / ${m.name}` }))
-  );
+  const modelOptions = selectableProviderModels(customProviders, activeCustomProviderId)
+    .map(({ provider, model }) => ({ id: model.id, name: `${provider.name} / ${model.name}` }));
 
   return (
     <div className="w-full h-full p-8 max-w-5xl mx-auto flex flex-col space-y-6 font-sans text-[var(--text-normal)] overflow-y-auto">

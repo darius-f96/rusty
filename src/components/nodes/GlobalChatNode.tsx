@@ -3,7 +3,10 @@ import { Pencil, Check, Trash2, Sparkles, X, Loader2, Plug, ChevronDown, Lightbu
 import { useWorkspaceStore } from "../../store";
 import { processResponse } from "../../services/responseProcessingService";
 import { CanvasTabContext } from "../tabs/canvas/CanvasTabContext";
-import { BUILT_IN_SKILL_IDS, GLOBAL_CHAT_DEFAULT_SKILL_ID } from "../../config/skillDefinitions";
+import {
+  GLOBAL_CHAT_DEFAULT_SKILL_ID,
+  GLOBAL_CHAT_SKILL_IDS,
+} from "../../config/skillDefinitions";
 
 export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) => {
   const { tabId } = useContext(CanvasTabContext);
@@ -77,6 +80,9 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
   };
 
   const summaryText = data.summary;
+  const selectedSkillId = GLOBAL_CHAT_SKILL_IDS.includes(data.skillId)
+    ? data.skillId
+    : GLOBAL_CHAT_DEFAULT_SKILL_ID;
 
   useEffect(() => {
     const el = contentRef.current;
@@ -176,10 +182,8 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
             >
               <span className="flex items-center space-x-1.5 min-w-0">
                 <BookOpen size={11} className="text-[var(--color-status-warning)] flex-shrink-0" />
-                <span className={data.skillId ? "text-[var(--text-light)] truncate" : "text-[var(--text-muted)] truncate"}>
-                  {data.skillId
-                    ? (skills.find((s: any) => s.id === data.skillId)?.name || data.skillId)
-                    : (skills.find((s: any) => s.id === GLOBAL_CHAT_DEFAULT_SKILL_ID)?.name || BUILT_IN_SKILL_IDS.TASK_AUDITOR)}
+                <span className="text-[var(--text-light)] truncate">
+                  {skills.find((s: any) => s.id === selectedSkillId)?.name || selectedSkillId}
                 </span>
               </span>
               <ChevronDown size={11} className="text-[var(--text-muted)] flex-shrink-0 ml-2" />
@@ -189,9 +193,8 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
                 className="absolute z-30 left-0 right-0 mt-1 bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded shadow-xl py-1 max-h-44 overflow-y-auto font-mono"
                 onClick={(e) => e.stopPropagation()}
               >
-                {/* Show all standard (non-internal) built-in skills — GlobalChatNode defaults to task-auditor
-                    but the user can switch to any user-visible built-in skill from this list. */}
-                {skills.filter((s: any) => Object.values(BUILT_IN_SKILL_IDS).includes(s.id) && !s.isInternal).map((s: any) => (
+                {/* Global Chat is intentionally limited to planning and analysis skills. */}
+                {skills.filter((s: any) => GLOBAL_CHAT_SKILL_IDS.includes(s.id)).map((s: any) => (
                   <button
                     key={s.id}
                     onClick={(e) => { e.stopPropagation(); updateNode(id, { skillId: s.id }); setSkillMenuOpen(false); }}
@@ -307,7 +310,7 @@ export const GlobalChatNode: React.FC<{ id: string; data: any }> = memo(({ id, d
           <span className="font-sans text-[9px] font-semibold pointer-events-none">Open Pane</span>
         </button>
         <span className="text-[9px] font-sans text-[var(--text-muted)] pr-2">
-          Global Auditor
+          Planning only · plans/
         </span>
       </div>
 

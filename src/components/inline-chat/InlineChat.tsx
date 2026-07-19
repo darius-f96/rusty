@@ -9,6 +9,7 @@ import {
 } from "../../services/inlineChatService";
 import { MarkdownRenderer } from "../ui/MarkdownRenderer";
 import { CustomSelect } from "../CustomSelect";
+import { selectableProviderModels } from "../../store/providerHelpers";
 
 interface InlineChatProps {
   sessionId: string;
@@ -44,9 +45,16 @@ export const InlineChat = ({ sessionId, context, position, onClose }: InlineChat
     };
   }, []);
 
-  const modelOptions = providers.flatMap((provider) =>
-    provider.models.map((model) => ({ id: model.id, name: `${provider.name} / ${model.name}` }))
-  );
+  const modelOptions = selectableProviderModels(providers, activeProviderId)
+    .map(({ provider, model }) => ({ id: model.id, name: `${provider.name} / ${model.name}` }));
+
+  useEffect(() => {
+    if (modelOptions.some((option) => option.id === selectedModel)) return;
+    const nextModel = modelOptions.some((option) => option.id === activeModel)
+      ? activeModel
+      : modelOptions[0]?.id || "";
+    setSelectedModel(nextModel);
+  }, [activeModel, activeProviderId, providers, selectedModel]);
 
   const stop = () => {
     runRef.current?.cancel();

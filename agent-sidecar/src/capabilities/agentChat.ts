@@ -25,7 +25,7 @@ type AgentTool = {
 };
 
 export async function agentChat(ws: WebSocket, data: any): Promise<void> {
-  const { tabId, message, model, workspaceRoot, chatHistory, customProvider, skill, lspSettings, mcpServers } = data;
+  const { tabId, message, model, workspaceRoot, chatHistory, customProvider, skill, lspSettings, mcpServers, planOnly } = data;
   (ws as any).__activeAgentTabId = tabId;
   console.log(`WebSocket [Server] agent_chat starting`, { tabId, workspaceRoot, model, hasSkill: !!skill, lspEnabled: lspSettings?.enabled, mcpCount: mcpServers?.length || 0 });
 
@@ -59,7 +59,9 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
             if (res.error) {
               const errorMsg = String(res.error).toLowerCase();
               if (errorMsg.includes("not found") || errorMsg.includes("no such file") || errorMsg.includes("exist")) {
-                resolve("[File does not exist yet. You can create it by calling write_file with content.]");
+                resolve(planOnly
+                  ? "[File does not exist.]"
+                  : "[File does not exist yet. You can create it by calling write_file with content.]");
               } else {
                 reject(new Error(res.error));
               }
@@ -98,6 +100,45 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
             }
           });
           safeSend(ws, { type: "write_file", requestId, path: resolvedPath, content });
+        });
+      }
+    };
+
+    const writePlanTool = {
+      name: "write_plan",
+      description: "Save a Markdown plan in the plans folder at the project root. Use this only when the user explicitly asks to save, write, or store the plan as a file.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          filename: {
+            type: "string",
+            description: "A Markdown filename such as authentication-refactor.md. Do not include a directory."
+          },
+          content: { type: "string", description: "The complete Markdown plan" }
+        },
+        required: ["filename", "content"]
+      },
+      execute: async ({ filename, content }: { filename: string; content: string }) => {
+        const normalizedFilename = filename.endsWith(".md") ? filename : `${filename}.md`;
+        if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,119}\.md$/.test(normalizedFilename)) {
+          throw new Error("Plan filename must use only letters, numbers, hyphens, or underscores and end in .md.");
+        }
+        sendLog(`Saving plan: plans/${normalizedFilename}`);
+        return new Promise((resolve, reject) => {
+          const requestId = getNextId();
+          registerPendingRequest(requestId, ws, (res) => {
+            if (res.error) {
+              reject(new Error(res.error));
+            } else {
+              resolve(`Plan saved to: ${res.path || path.join(workspaceRoot, "plans", normalizedFilename)}`);
+            }
+          });
+          safeSend(ws, {
+            type: "write_plan",
+            requestId,
+            filename: normalizedFilename,
+            content
+          });
         });
       }
     };
@@ -178,6 +219,7 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
     const allTools: AgentTool[] = [
       readVfsTool,
       writeVfsTool,
+      writePlanTool,
       createListFilesTool(workspaceRoot),
       createSearchCodebaseTool(workspaceRoot),
       createWebSearchTool(sendLog),
@@ -185,7 +227,7 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
       ...lspTools
     ];
 
-    const enabledToolNames = skill?.enabledTools || [
+    const requestedToolNames = skill?.enabledTools || [
       "read_file",
       "write_file",
       "list_files",
@@ -194,6 +236,12 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
       "run_command",
       ...(lspSettings?.enabled ? ["lsp_get_definition", "lsp_get_references", "lsp_get_diagnostics"] : [])
     ];
+    const enabledToolNames = planOnly
+      ? Array.from(new Set([
+          ...requestedToolNames.filter((name: string) => name !== "write_file" && name !== "run_command"),
+          "write_plan",
+        ]))
+      : requestedToolNames.filter((name: string) => name !== "write_plan");
     const tools: AgentTool[] = allTools.filter((t) => enabledToolNames.includes(t.name));
     // Observability is always available, including when a restrictive skill is selected.
     tools.push(progressTool);
@@ -219,6 +267,7 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
     const toolDescriptions: Record<string, string> = {
       read_file: "- 'read_file': Read any file in the workspace (input: {\"path\": \"file/path\"}).",
       write_file: "- 'write_file': Write or edit a file (input: {\"path\": \"file/path\", \"content\": \"full content\"}).",
+      write_plan: "- 'write_plan': Save a Markdown plan under the project-root plans folder (input: {\"filename\": \"descriptive-name.md\", \"content\": \"complete plan\"}).",
       list_files: "- 'list_files': List all files in the workspace (no input needed).",
       search_codebase: "- 'search_codebase': Search for text patterns across the codebase (input: {\"pattern\": \"search text\"}).",
       web_search: "- 'web_search': Search the public web for current information and cited sources (input: {\"query\": \"search query\"}).",
@@ -253,7 +302,19 @@ Guidelines:
 ${mcpToolLines.length > 0 ? `\nMCP integration tools (external data sources):\n${mcpToolLines.join("\n")}\n` : ""}
 `;
 
-    const systemPrompt = `${skill?.systemPrompt || defaultSystemPrompt}
+    const planningPolicy = planOnly ? `
+
+Global Chat planning policy (this overrides any conflicting skill instruction):
+- Work only on planning, analysis, requirements, architecture, risks, and recommendations. Never implement code or modify project source files.
+- The VFS is read-only for this session. Never attempt to call 'write_file', and never use commands to create or modify files.
+- Always present requested plans in the chat. A request to create, draft, generate, or prepare a plan means to answer with the plan in chat; it does NOT authorize creating a file.
+- Never generate, create, or persist any file unless the user explicitly asks you to save, write, or store that file on disk.
+- The only permitted filesystem change is saving a Markdown planning document with 'write_plan'. It stores the document in the 'plans' folder at the project root (${path.join(workspaceRoot, "plans")}).
+- Call 'write_plan' only after an explicit user request to save, write, or store the plan as a file. Even then, also show the plan in chat.
+- Any persisted plan MUST use 'write_plan' with a descriptive Markdown filename. Never store a plan in the VFS or anywhere outside the project-root 'plans' folder.
+` : "";
+
+    const systemPrompt = `${skill?.systemPrompt || defaultSystemPrompt}${planningPolicy}
 
 User-visible reasoning updates:
 - Before the first substantive action, call 'report_progress' with a concise summary of your approach and the next action.
