@@ -22,7 +22,7 @@ interface DescriptionTabContentProps {
 export const DescriptionTabContent: React.FC<DescriptionTabContentProps> = ({ selectedNode }) => {
   const updateTaskNode = useWorkspaceStore((state) => state.updateTaskNode);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [viewMode, setViewMode] = useState<"edit" | "preview" | "split">("split");
+  const [viewMode, setViewMode] = useState<"edit" | "preview" | "split">("preview");
 
   const prompt = (selectedNode?.data?.prompt ?? selectedNode?.data?.description) || "";
 

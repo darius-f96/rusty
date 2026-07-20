@@ -110,9 +110,9 @@
   will-change: transform;
 }
 
+/* React Flow owns node positioning transforms. Forcing a 3D layer per node can
+   make Chromium drop some node layers at low zoom in larger generated graphs. */
 .react-flow__node {
-  transform-style: preserve-3d;
-  backface-visibility: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -123,9 +123,6 @@
 
 /* Enable hardware accelerated rendering globally for improved quality and frame rates */
 .monaco-editor,
-.react-flow__viewport,
-.react-flow__node,
-.react-flow__edge-path,
 .workspace-container,
 .editor-container,
 .tabs-container,
@@ -200,4 +197,3 @@
   background: color-mix(in srgb, var(--syntax-string) 10%, transparent) !important;
   border: 1px solid color-mix(in srgb, var(--syntax-string) 24%, transparent) !important;
 }
-

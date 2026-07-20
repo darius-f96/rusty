@@ -82,6 +82,9 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
       if (n.type === "boundaryNode") {
         return { ...n, selectable: false, draggable: false, zIndex: 0 };
       }
+      if (n.type === "taskNode" && n.data?.isMinimized === false) {
+        return { ...n, zIndex: 1000 };
+      }
       return { ...n, zIndex: n.zIndex ?? 10 };
     });
   }, [nodes]);
