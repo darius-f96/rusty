@@ -34,10 +34,8 @@ export function getOrCreateContext(state: WorkspaceState, tabId: string): Canvas
   return state.canvasContexts[tabId];
 }
 
-export const workspaceHasGlobalChatNode = (state: WorkspaceState): boolean =>
-  Object.values(state.canvasContexts).some((context) =>
-    context.nodes.some((node) => node.type === "globalChatNode"),
-  );
+export const canvasHasGlobalChatNode = (state: WorkspaceState, tabId: string): boolean =>
+  state.canvasContexts[tabId]?.nodes.some((node) => node.type === "globalChatNode") ?? false;
 
 export function findTabIdByNodeId(state: WorkspaceState, nodeId: string): string {
   if (nodeId.startsWith(RECONCILIATION_STREAM_PREFIX)) {

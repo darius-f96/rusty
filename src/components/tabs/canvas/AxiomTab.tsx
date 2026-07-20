@@ -75,11 +75,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
   const edges = context.edges || [];
   const isPipelineApplied = !!context.isPipelineApplied;
   const isReconciliationRunning = context.nodeStatus?.[`__reconciliation__:${tab.id}`] === "running";
-  const hasGlobalChatNode = useWorkspaceStore((state) =>
-    Object.values(state.canvasContexts).some((canvasContext) =>
-      canvasContext.nodes.some((node) => node.type === "globalChatNode")
-    )
-  );
+  const hasGlobalChatNode = nodes.some((node) => node.type === "globalChatNode");
 
   const flowNodes = useMemo(() => {
     return nodes.map((n) => {
@@ -638,7 +634,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
                       setNodeMenuOpen(false);
                     }}
                     disabled={hasGlobalChatNode}
-                    title={hasGlobalChatNode ? "Only one Global Explorer can be added to a workspace" : undefined}
+                    title={hasGlobalChatNode ? "Only one Global Explorer can be added to an Axiom" : undefined}
                     className={`w-full text-left px-3 py-2 text-[var(--text-normal)] transition-colors flex items-center space-x-2 ${
                       hasGlobalChatNode
                         ? "cursor-not-allowed opacity-50"
@@ -804,7 +800,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
                   setContextMenu(null);
                 }}
                 disabled={hasGlobalChatNode}
-                title={hasGlobalChatNode ? "Only one Global Explorer can be added to a workspace" : undefined}
+                title={hasGlobalChatNode ? "Only one Global Explorer can be added to an Axiom" : undefined}
                 className={`w-full text-left px-3 py-2 text-[var(--text-normal)] transition-colors flex items-center space-x-2 ${
                   hasGlobalChatNode
                     ? "cursor-not-allowed opacity-50"

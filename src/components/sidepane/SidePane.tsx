@@ -10,6 +10,7 @@ import { useExplorerWebSocket } from "./useExplorerWebSocket";
 // Components
 import { SidePaneHeader } from "./components/SidePaneHeader";
 import { SidePaneTabs } from "./components/SidePaneTabs";
+import { DescriptionTabContent } from "./components/DescriptionTabContent";
 import { DiffTabContent } from "./components/DiffTabContent";
 import { ConsoleTabContent } from "./components/ConsoleTabContent";
 import { ExplorerChatContent } from "./components/ExplorerChatContent";
@@ -43,7 +44,7 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
   const originalFileContents = (selectedNode?.data?.originalFileContents as Record<string, string>) || {};
   const generatedFileContents = (selectedNode?.data?.generatedFileContents as Record<string, string>) || {};
 
-  const [activeTab, setActiveTab] = useState<"diff" | "chat" | "console" | "vfs">("diff");
+  const [activeTab, setActiveTab] = useState<"description" | "diff" | "chat" | "console" | "vfs">("description");
   const [activeDiffFile, setActiveDiffFile] = useState<string>("");
   const [isMaximized, setIsMaximized] = useState(false);
 
@@ -161,6 +162,8 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
     if (!selectedNode) return;
     if (selectedNode.type === "globalChatNode") {
       setActiveTab("chat");
+    } else if (selectedNode.type === "taskNode") {
+      setActiveTab("description");
     } else {
       setActiveTab("diff");
     }
@@ -238,6 +241,10 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
 
       {/* Tabs Content */}
       <div className="flex-1 overflow-hidden relative bg-[var(--bg-app)]">
+        {activeTab === "description" && selectedNode.type === "taskNode" && (
+          <DescriptionTabContent selectedNode={selectedNode} tabId={tabId} />
+        )}
+
         {activeTab === "diff" && selectedNode.type !== "globalChatNode" && (
           <DiffTabContent
             selectedNode={selectedNode}

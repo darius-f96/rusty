@@ -18,7 +18,7 @@ import {
   getOrCreateContext,
   MAX_CANVAS_HISTORY,
   updateContextAndSync,
-  workspaceHasGlobalChatNode,
+  canvasHasGlobalChatNode,
 } from "../canvasHelpers";
 import type { WorkspaceSliceCreator } from "../sliceTypes";
 import {
@@ -293,6 +293,7 @@ export const createCanvasSlice: WorkspaceSliceCreator = (set, get) => ({
         model: state.activeModel,
         status: "idle",
         skillId: BUILT_IN_SKILL_IDS.BUILD,
+        isMinimized: true,
       },
     };
     return updateContextAndSync(state, targetTabId, (current) => ({
@@ -360,6 +361,7 @@ export const createCanvasSlice: WorkspaceSliceCreator = (set, get) => ({
             status: "idle",
             sourceGlobalChatNodeId: anchorNodeId,
             skillId: BUILT_IN_SKILL_IDS.BUILD,
+            isMinimized: true,
           },
         });
       });
@@ -450,8 +452,8 @@ export const createCanvasSlice: WorkspaceSliceCreator = (set, get) => ({
   },
 
   addGlobalChatNode: (x, y, tabId) => set((state) => {
-    if (workspaceHasGlobalChatNode(state)) return {};
     const targetTabId = tabId || getActiveCanvasTabId(state);
+    if (canvasHasGlobalChatNode(state, targetTabId)) return {};
     const id = `global_chat_${Date.now()}`;
     const context = getOrCreateContext(state, targetTabId);
     let finalX = x;

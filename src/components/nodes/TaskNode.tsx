@@ -19,7 +19,7 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
     setTempName(data.name || "AI Executor Node");
   }, [data.name]);
 
-  const isMinimized = !!data.isMinimized;
+  const isMinimized = data.isMinimized !== undefined ? data.isMinimized : true;
   const setIsMinimized = (val: boolean) => {
     updateTaskNode(id, { isMinimized: val });
   };

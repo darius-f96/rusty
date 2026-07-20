@@ -1,10 +1,10 @@
 import React from "react";
-import { Code, MessageSquare, Terminal, Folder } from "lucide-react";
+import { Code, MessageSquare, Terminal, Folder, FileText } from "lucide-react";
 
 interface SidePaneTabsProps {
   selectedNode: any;
-  activeTab: "diff" | "chat" | "console" | "vfs";
-  setActiveTab: (tab: "diff" | "chat" | "console" | "vfs") => void;
+  activeTab: "description" | "diff" | "chat" | "console" | "vfs";
+  setActiveTab: (tab: "description" | "diff" | "chat" | "console" | "vfs") => void;
   nodeStatus: string;
 }
 
@@ -14,10 +14,22 @@ export const SidePaneTabs: React.FC<SidePaneTabsProps> = ({
   setActiveTab,
   nodeStatus
 }) => {
-
   return (
     <div className="flex border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/10 text-xs font-mono select-none justify-between items-center pr-3 flex-shrink-0">
       <div className="flex">
+        {selectedNode.type === "taskNode" && (
+          <button
+            onClick={() => setActiveTab("description")}
+            className={`flex items-center space-x-1.5 px-4 py-2.5 border-b-2 transition-all ${
+              activeTab === "description"
+                ? "border-[var(--accent-color)] text-[var(--text-light)] bg-[var(--accent-bg)] font-semibold"
+                : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-light)]"
+            }`}
+          >
+            <FileText size={14} />
+            <span>Description</span>
+          </button>
+        )}
         {selectedNode.type !== "globalChatNode" && (
           <button
             onClick={() => setActiveTab("diff")}
@@ -72,7 +84,6 @@ export const SidePaneTabs: React.FC<SidePaneTabsProps> = ({
           </button>
         )}
       </div>
-
-      </div>
+    </div>
   );
 };
