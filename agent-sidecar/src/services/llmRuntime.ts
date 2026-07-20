@@ -134,7 +134,7 @@ export async function resolveLlmRuntime(
     model = syntheticModel(customProvider, configuredModel || fallbackModel, modelId);
   } else {
     try {
-      const { getModel } = await importEsm<any>("@earendil-works/pi-ai");
+      const { getModel } = await importEsm<any>("@earendil-works/pi-ai/compat");
       model = getModel(providerId as any, modelId as any);
     } catch (error: any) {
       throw new Error(`Pi does not recognize ${providerId}/${modelId}: ${error?.message || String(error)}`);
@@ -197,7 +197,7 @@ export async function completeLlmText(options: {
   }
 
   const runtime = await resolveLlmRuntime(options.modelReference, options.customProvider);
-  const { completeSimple } = await importEsm<any>("@earendil-works/pi-ai");
+  const { completeSimple } = await importEsm<any>("@earendil-works/pi-ai/compat");
   const history = (options.history || [])
     .filter((entry) => entry?.role === "user" || entry?.role === "assistant")
     .slice(-12)
@@ -271,7 +271,7 @@ export async function callLlmWithToolsPiStreaming(options: {
   }
 
   const runtime = await resolveLlmRuntime(options.modelReference, options.customProvider);
-  const { streamSimple } = await importEsm<any>("@earendil-works/pi-ai");
+  const { streamSimple } = await importEsm<any>("@earendil-works/pi-ai/compat");
   const history = (options.history || [])
     .filter((entry) => entry?.role === "user" || entry?.role === "assistant")
     .slice(-12)

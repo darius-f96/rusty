@@ -5,7 +5,7 @@ import { importEsm } from "../services/esmImport";
 import { generateTaskNodes } from "./generateTaskNodes";
 
 test("task generation retries a reasoning-only response with a larger budget", async () => {
-  const pi = await importEsm<any>("@earendil-works/pi-ai");
+  const pi = await importEsm<any>("@earendil-works/pi-ai/compat");
   const registration = pi.registerFauxProvider({
     api: "axiom-faux-task-generation",
     provider: "faux-task-provider",

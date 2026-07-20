@@ -279,7 +279,7 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
   }
 
   const { AuthStorage, ModelRegistry, createAgentSession } = await importEsm("@earendil-works/pi-coding-agent");
-  const { getModel } = await importEsm("@earendil-works/pi-ai");
+  const { getModel } = await importEsm("@earendil-works/pi-ai/compat");
   let modelRegistry: any;
   let selectedModel: any;
   if (options.customProvider) {

@@ -110,6 +110,41 @@ test("Anthropic-style custom catalogs use x-api-key authentication", async () =>
   }
 });
 
+test("current OpenCode models retain protocol metadata and stay selectable", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    data: [
+      { id: "gpt-5.6-sol" },
+      { id: "gpt-5.6-terra" },
+      { id: "claude-opus-4-8" },
+      { id: "claude-sonnet-4-6" },
+      { id: "gemini-3.5-flash" },
+      { id: "deepseek-v4-pro" },
+      { id: "minimax-m2.7" },
+      { id: "qwen3.6-plus" },
+    ],
+  }), { status: 200, headers: { "content-type": "application/json" } });
+
+  try {
+    const models = await discoverProviderModels({
+      id: "opencode",
+      name: "OpenCode Zen",
+      baseUrl: "https://opencode.ai/zen/v1",
+      apiKey: "opencode-key",
+      apiType: "openai-completions",
+      authType: "bearer",
+    });
+
+    assert.equal(models.length, 8);
+    assert.equal(models.filter((model) => model.supported).length, 8);
+    assert.equal(models.find((model) => model.remoteId === "gpt-5.6-sol")?.apiType, "openai-responses");
+    assert.equal(models.find((model) => model.remoteId === "claude-opus-4-8")?.apiType, "anthropic-messages");
+    assert.equal(models.find((model) => model.remoteId === "gemini-3.5-flash")?.apiType, "google-generative-ai");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("current OpenAI text models stay usable when the bundled catalog lags", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response(JSON.stringify({

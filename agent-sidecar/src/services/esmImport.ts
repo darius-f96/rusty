@@ -7,6 +7,7 @@ const nativeImport = new Function("specifier", "return import(specifier)") as <T
 const packageEntries: Record<string, { packageName: string; entry: string }> = {
   "@earendil-works/pi-coding-agent": { packageName: "@earendil-works/pi-coding-agent", entry: "dist/index.js" },
   "@earendil-works/pi-ai": { packageName: "@earendil-works/pi-ai", entry: "dist/index.js" },
+  "@earendil-works/pi-ai/compat": { packageName: "@earendil-works/pi-ai", entry: "dist/compat.js" },
   "@earendil-works/pi-agent-core": { packageName: "@earendil-works/pi-agent-core", entry: "dist/index.js" },
   "@tintinweb/pi-subagents/dist/agent-runner.js": { packageName: "@tintinweb/pi-subagents", entry: "dist/agent-runner.js" }
 };

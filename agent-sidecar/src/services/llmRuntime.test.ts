@@ -18,7 +18,7 @@ test("empty response errors retain stop-reason diagnostics", () => {
 });
 
 test("provider-neutral tool loop executes calls and continues to final text", async () => {
-  const pi = await importEsm<any>("@earendil-works/pi-ai");
+  const pi = await importEsm<any>("@earendil-works/pi-ai/compat");
   const registration = pi.registerFauxProvider({ api: "axiom-faux-test", provider: "faux-provider" });
   registration.setResponses([
     pi.fauxAssistantMessage([pi.fauxToolCall("echo", { value: "hello" })], { stopReason: "toolUse" }),

@@ -176,7 +176,7 @@ async function loadPiModels(providerId: string): Promise<Map<string, any>> {
   const piProvider = PROVIDER_DEFAULTS[providerId]?.piProvider;
   if (!piProvider) return new Map();
   try {
-    const { getModels } = await importEsm<any>("@earendil-works/pi-ai");
+    const { getModels } = await importEsm<any>("@earendil-works/pi-ai/compat");
     const models = getModels(piProvider as any) || [];
     return new Map(models.map((model: any) => [model.id, model]));
   } catch (error) {
@@ -207,11 +207,11 @@ function githubModelSupported(raw: any): boolean {
 }
 
 function openAiModelSupported(remoteId: string, hasPiMetadata: boolean): boolean {
-  if (hasPiMetadata) return true;
   const id = remoteId.toLowerCase();
   if (/(audio|realtime|transcrib|tts|image|embedding|moderation|whisper|dall-e|sora|search-preview)/.test(id)) {
     return false;
   }
+  if (hasPiMetadata) return true;
   // The OpenAI model catalog does not expose endpoint/tool capability flags.
   // Keep current text/reasoning families usable through the generic Responses
   // adapter while excluding the specialized catalogs above.
