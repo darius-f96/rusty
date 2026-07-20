@@ -44,6 +44,40 @@ export interface CustomProvider {
   models: ProviderModel[];
 }
 
+export type ProviderQuotaState = "available" | "unavailable" | "unauthenticated";
+
+export interface ProviderQuotaWindow {
+  id: string;
+  label: string;
+  usedPercent?: number;
+  remainingPercent?: number;
+  used?: number;
+  limit?: number;
+  remaining?: number;
+  unit?: "requests" | "tokens" | "credits";
+  resetAt?: string;
+  windowMinutes?: number;
+  unlimited?: boolean;
+  overage?: number;
+  overageAllowed?: boolean;
+}
+
+export interface ProviderQuotaSnapshot {
+  providerId: string;
+  providerName: string;
+  state: ProviderQuotaState;
+  source: string;
+  fetchedAt: string;
+  plan?: string;
+  account?: string;
+  windows: ProviderQuotaWindow[];
+  balance?: { formatted?: string; unlimited?: boolean };
+  resetCreditsAvailable?: number;
+  spendControlReached?: boolean;
+  message?: string;
+  manageUrl?: string;
+}
+
 export interface GeneratedTaskNodeSpec {
   key?: string;
   title: string;

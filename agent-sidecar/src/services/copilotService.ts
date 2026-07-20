@@ -279,6 +279,40 @@ export async function getCopilotConnectionStatus(): Promise<CopilotConnectionSta
   }
 }
 
+export async function readCopilotQuota(): Promise<{
+  status: CopilotConnectionStatus;
+  plan?: string;
+  quotaSnapshots?: Record<string, any>;
+}> {
+  try {
+    const sdk = await getClient();
+    const auth = await sdk.getAuthStatus();
+    recordAuthStatus("SDK quota check", auth);
+    const status = statusFromAuth(auth);
+    if (!auth.isAuthenticated) return { status };
+
+    const [quota, currentAuth] = await Promise.all([
+      sdk.rpc.account.getQuota({}),
+      sdk.rpc.account.getCurrentAuth(),
+    ]);
+    const copilotUser = (currentAuth.authInfo as any)?.copilotUser;
+    return {
+      status,
+      plan: copilotUser?.copilot_plan || copilotUser?.access_type_sku,
+      quotaSnapshots: quota.quotaSnapshots,
+    };
+  } catch (error: any) {
+    addAuthDiagnostic(`SDK quota check failed: ${error?.message || String(error)}`);
+    return {
+      status: {
+        state: "failed",
+        authenticated: false,
+        message: error?.message || "Could not query GitHub Copilot quota.",
+      },
+    };
+  }
+}
+
 async function finalizeSuccessfulLogin(): Promise<void> {
   loginAttempt = {
     state: "connecting",

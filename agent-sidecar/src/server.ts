@@ -77,6 +77,7 @@ import {
   startCodexLogin,
   testCodexConnection,
 } from "./services/codexService";
+import { fetchProviderQuota } from "./services/providerQuota";
 
 dotenv.config();
 
@@ -160,6 +161,15 @@ app.post("/llm/test", async (req, res) => {
   } catch (err: any) {
     console.error("LLM connection test error:", err?.message || err);
     res.status(502).json({ error: err?.message || "Provider connection test failed." });
+  }
+});
+
+app.post("/llm/quota", async (req, res) => {
+  try {
+    res.json(await fetchProviderQuota(req.body?.provider || {}));
+  } catch (err: any) {
+    console.error("LLM quota discovery error:", err?.message || err);
+    res.status(502).json({ error: err?.message || "Failed to fetch provider quota." });
   }
 });
 

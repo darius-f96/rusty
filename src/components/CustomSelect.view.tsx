@@ -90,6 +90,7 @@ export const CustomSelectView: React.FC<CustomSelectViewProps> = ({
       {isOpen && pos && createPortal(
         <div
           ref={dropdownRef}
+          data-custom-select-dropdown
           style={{
             position: "fixed",
             top: pos.openUp ? undefined : pos.top,

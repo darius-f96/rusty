@@ -481,6 +481,24 @@ export async function getCodexConnectionStatus(): Promise<CodexConnectionStatus>
   }
 }
 
+export async function readCodexQuota(): Promise<{
+  status: CodexConnectionStatus;
+  rateLimitResult?: any;
+}> {
+  const status = await getCodexConnectionStatus();
+  if (!status.authenticated) return { status };
+  if (status.authType !== "chatgpt" && status.authType !== "personalAccessToken") {
+    return { status };
+  }
+  try {
+    const rateLimitResult = await appServer.request("account/rateLimits/read", {}, 20_000);
+    return { status, rateLimitResult };
+  } catch (error: any) {
+    addAuthDiagnostic(`Rate-limit check failed: ${error?.message || String(error)}`);
+    throw new Error(error?.message || "Could not query OpenAI Codex quota.");
+  }
+}
+
 export async function startCodexLogin(): Promise<CodexConnectionStatus> {
   if (loginAttempt?.state === "connecting") {
     return withDiagnostics({

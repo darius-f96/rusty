@@ -1,4 +1,4 @@
-import type { CustomProvider, ProviderModel } from "../store";
+import type { CustomProvider, ProviderModel, ProviderQuotaSnapshot } from "../store";
 
 const SIDECAR_HTTP_URL = "http://localhost:4000";
 
@@ -50,6 +50,10 @@ export const llmIntegrationService = {
 
   async testConnection(provider: CustomProvider): Promise<{ modelCount: number; supportedModelCount: number }> {
     return post<{ ok: true; modelCount: number; supportedModelCount: number }>("/llm/test", provider);
+  },
+
+  async getQuota(provider: CustomProvider): Promise<ProviderQuotaSnapshot> {
+    return post<ProviderQuotaSnapshot>("/llm/quota", provider);
   },
 
   async getCopilotStatus(): Promise<CopilotConnectionStatus> {

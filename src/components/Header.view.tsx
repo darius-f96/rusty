@@ -4,9 +4,10 @@ import { AxiomIcon } from "./AxiomIcon";
 
 interface HeaderViewProps {
   onSearchOpen: () => void;
+  quotaControl: React.ReactNode;
 }
 
-export const HeaderView: React.FC<HeaderViewProps> = ({ onSearchOpen }) => {
+export const HeaderView: React.FC<HeaderViewProps> = ({ onSearchOpen, quotaControl }) => {
   return (
     <header className="w-full h-10 px-4 flex items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-app)] select-none z-30 flex-shrink-0">
       {/* Left Area: Logo */}
@@ -35,8 +36,8 @@ export const HeaderView: React.FC<HeaderViewProps> = ({ onSearchOpen }) => {
         </div>
       </div>
 
-      {/* Right Area placeholder to balance flex layout */}
-      <div className="w-[100px] flex justify-end" />
+      {/* Right Area: provider quota and subscription usage */}
+      <div className="min-w-[250px] flex justify-end">{quotaControl}</div>
     </header>
   );
 };
