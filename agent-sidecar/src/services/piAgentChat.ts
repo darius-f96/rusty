@@ -107,7 +107,7 @@ interface RunPiAgentChatOptions {
     baseUrl: string;
     apiKey?: string;
     apiType: string;
-    transport?: "http" | "github-copilot-sdk";
+    transport?: "http" | "github-copilot-sdk" | "openai-codex-app-server";
     authType?: "bearer" | "anthropic" | "none" | "environment";
     models: Array<{
       id: string;
@@ -260,6 +260,10 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
   await installPiCommandPolicy();
   if (options.customProvider?.transport === "github-copilot-sdk" || options.customProvider?.id === "github-copilot") {
     options.sendLog("Using the GitHub Copilot SDK agent runtime.");
+    return undefined;
+  }
+  if (options.customProvider?.transport === "openai-codex-app-server" || options.customProvider?.id === "openai-codex") {
+    options.sendLog("Using the OpenAI Codex app-server agent runtime.");
     return undefined;
   }
   if (!supportsPiRuntime()) {

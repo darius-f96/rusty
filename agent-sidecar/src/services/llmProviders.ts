@@ -31,7 +31,7 @@ export interface LlmProviderConfig {
   baseUrl: string;
   apiKey?: string;
   apiType?: LlmApiType | string;
-  transport?: "http" | "github-copilot-sdk";
+  transport?: "http" | "github-copilot-sdk" | "openai-codex-app-server";
   authType?: LlmAuthType;
   catalogUrl?: string;
   models?: ProviderModelConfig[];
@@ -221,6 +221,9 @@ function openAiModelSupported(remoteId: string, hasPiMetadata: boolean): boolean
 export async function discoverProviderModels(provider: LlmProviderConfig): Promise<DiscoveredProviderModel[]> {
   if (provider.transport === "github-copilot-sdk" || provider.id === "github-copilot") {
     throw new Error("GitHub Copilot model discovery must use the Copilot SDK adapter.");
+  }
+  if (provider.transport === "openai-codex-app-server" || provider.id === "openai-codex") {
+    throw new Error("OpenAI Codex model discovery must use the Codex app-server adapter.");
   }
   const { url, headers } = catalogRequest(provider);
   const controller = new AbortController();

@@ -30,8 +30,8 @@ export interface CustomProvider {
   baseUrl: string;
   apiKey: string;
   apiType: string;
-  /** HTTP providers use Pi's protocol adapters; Copilot is backed by GitHub's SDK. */
-  transport?: "http" | "github-copilot-sdk";
+  /** Subscription providers use their official local runtimes instead of Pi's HTTP adapters. */
+  transport?: "http" | "github-copilot-sdk" | "openai-codex-app-server";
   authType?: "bearer" | "anthropic" | "none" | "environment";
   catalogUrl?: string;
   models: ProviderModel[];

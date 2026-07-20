@@ -65,6 +65,16 @@ const defaultProviders: CustomProvider[] = [
     ],
   },
   {
+    id: "openai-codex",
+    name: "OpenAI Codex",
+    baseUrl: "",
+    apiKey: "",
+    apiType: "codex-app-server",
+    transport: "openai-codex-app-server",
+    authType: "environment",
+    models: [],
+  },
+  {
     id: "github-copilot",
     name: "GitHub Copilot",
     baseUrl: "",

@@ -58,6 +58,7 @@ export async function generateTaskNodes(ws: WebSocket, data: any): Promise<void>
           // former 5k budget is too small for otherwise valid task graphs.
           maxTokens: TASK_GENERATION_MAX_TOKENS,
           reasoning: "minimal",
+          cwd: data.workspaceRoot,
           signal: abortController.signal,
         });
         const graph = parseGeneratedTaskGraph(content);

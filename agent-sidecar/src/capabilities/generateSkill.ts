@@ -53,6 +53,7 @@ For a question-heavy skill (like 'grind-me'), enable all tools but emphasize ask
       systemPrompt: metaPrompt,
       userMessage: `Generate a skill for: ${description}`,
       maxTokens: 4000,
+      cwd: data.workspaceRoot,
     });
 
     let spec: any;

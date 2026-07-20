@@ -383,6 +383,7 @@ Questions:
       sendLog,
       sendToken,
       maxRounds: 30,
+      cwd: workspaceRoot,
       history: chatHistory || [],
       shouldAbort: () => ws.readyState !== WebSocket.OPEN,
     });

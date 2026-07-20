@@ -14,6 +14,18 @@ export interface CopilotConnectionStatus {
   diagnostics?: string[];
 }
 
+export interface CodexConnectionStatus {
+  state: "disconnected" | "connecting" | "connected" | "failed";
+  authenticated: boolean;
+  authType?: string;
+  email?: string;
+  planType?: string;
+  message?: string;
+  verificationUri?: string;
+  userCode?: string;
+  diagnostics?: string[];
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${SIDECAR_HTTP_URL}${path}`, init);
   const payload = await response.json().catch(() => ({}));
@@ -46,6 +58,16 @@ export const llmIntegrationService = {
 
   async startCopilotLogin(): Promise<CopilotConnectionStatus> {
     return request<CopilotConnectionStatus>("/llm/copilot/login", {
+      method: "POST",
+    });
+  },
+
+  async getCodexStatus(): Promise<CodexConnectionStatus> {
+    return request<CodexConnectionStatus>("/llm/codex/status");
+  },
+
+  async startCodexLogin(): Promise<CodexConnectionStatus> {
+    return request<CodexConnectionStatus>("/llm/codex/login", {
       method: "POST",
     });
   },

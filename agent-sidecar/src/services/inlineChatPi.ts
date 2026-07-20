@@ -51,6 +51,7 @@ Answer only the user's focused question about this editor context. Prefer a shor
     userMessage: options.message,
     history: options.history,
     maxTokens: 4096,
+    cwd: options.workspaceRoot,
   });
   options.sendToken(content);
   return content;

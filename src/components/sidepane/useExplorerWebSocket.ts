@@ -910,6 +910,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
         model: taskGenerationModel,
         chatHistory,
         additionalInstructions,
+        workspaceRoot: state.rootPath,
         customProvider: provider || null,
       }));
     };

@@ -283,6 +283,7 @@ Workspace root: ${workspaceRoot || "unknown"}
         sendLog,
         sendToken: () => {},
         maxRounds: 15,
+        cwd: workspaceRoot,
         history: chatHistory || [],
         shouldAbort: () => ws.readyState !== WebSocket.OPEN,
       });

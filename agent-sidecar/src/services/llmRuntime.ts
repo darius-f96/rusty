@@ -12,6 +12,11 @@ import {
   completeCopilotText,
   GITHUB_COPILOT_PROVIDER_ID,
 } from "./copilotService";
+import {
+  callCodexWithToolsStreaming,
+  completeCodexText,
+  OPENAI_CODEX_PROVIDER_ID,
+} from "./codexService";
 
 export interface ResolvedLlmRuntime {
   providerId: string;
@@ -57,6 +62,10 @@ function providerIdFromReference(modelReference: string): string {
 
 function isGitHubCopilotProvider(provider?: LlmProviderConfig | null): boolean {
   return provider?.transport === "github-copilot-sdk" || provider?.id === GITHUB_COPILOT_PROVIDER_ID;
+}
+
+function isOpenAICodexProvider(provider?: LlmProviderConfig | null): boolean {
+  return provider?.transport === "openai-codex-app-server" || provider?.id === OPENAI_CODEX_PROVIDER_ID;
 }
 
 function selectedProviderModel(provider: LlmProviderConfig, modelReference: string): ProviderModelConfig | undefined {
@@ -160,6 +169,7 @@ export async function completeLlmText(options: {
   history?: Array<{ role: string; content: string }>;
   maxTokens?: number;
   reasoning?: "minimal" | "low" | "medium" | "high" | "xhigh";
+  cwd?: string;
   signal?: AbortSignal;
 }): Promise<string> {
   if (isGitHubCopilotProvider(options.customProvider)) {
@@ -170,6 +180,18 @@ export async function completeLlmText(options: {
       userMessage: options.userMessage,
       history: options.history,
       reasoning: options.reasoning,
+      signal: options.signal,
+    });
+  }
+  if (isOpenAICodexProvider(options.customProvider)) {
+    const providerId = options.customProvider!.id;
+    return completeCodexText({
+      modelId: remoteModelId(options.modelReference, providerId),
+      systemPrompt: options.systemPrompt,
+      userMessage: options.userMessage,
+      history: options.history,
+      reasoning: options.reasoning,
+      cwd: options.cwd,
       signal: options.signal,
     });
   }
@@ -216,6 +238,7 @@ export async function callLlmWithToolsPiStreaming(options: {
   sendToken: (token: string) => void;
   history?: Array<{ role: string; content: string }>;
   maxRounds?: number;
+  cwd?: string;
   shouldAbort?: () => boolean;
 }): Promise<string> {
   if (isGitHubCopilotProvider(options.customProvider)) {
@@ -228,6 +251,21 @@ export async function callLlmWithToolsPiStreaming(options: {
       sendLog: options.sendLog,
       sendToken: options.sendToken,
       history: options.history,
+      shouldAbort: options.shouldAbort,
+    });
+  }
+  if (isOpenAICodexProvider(options.customProvider)) {
+    const providerId = options.customProvider!.id;
+    return callCodexWithToolsStreaming({
+      modelId: remoteModelId(options.modelReference, providerId),
+      systemPrompt: options.systemPrompt,
+      userMessage: options.userMessage,
+      tools: options.tools,
+      sendLog: options.sendLog,
+      sendToken: options.sendToken,
+      history: options.history,
+      maxRounds: options.maxRounds,
+      cwd: options.cwd,
       shouldAbort: options.shouldAbort,
     });
   }

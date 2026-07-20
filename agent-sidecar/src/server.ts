@@ -70,6 +70,13 @@ import {
   startCopilotLogin,
   testCopilotConnection,
 } from "./services/copilotService";
+import {
+  discoverCodexModels,
+  getCodexConnectionStatus,
+  shutdownCodexService,
+  startCodexLogin,
+  testCodexConnection,
+} from "./services/codexService";
 
 dotenv.config();
 
@@ -131,7 +138,9 @@ app.post("/llm/models", async (req, res) => {
     const provider = req.body?.provider || {};
     const models = provider.transport === "github-copilot-sdk" || provider.id === "github-copilot"
       ? await discoverCopilotModels()
-      : await discoverProviderModels(provider);
+      : provider.transport === "openai-codex-app-server" || provider.id === "openai-codex"
+        ? await discoverCodexModels()
+        : await discoverProviderModels(provider);
     res.json({ models });
   } catch (err: any) {
     console.error("LLM model discovery error:", err?.message || err);
@@ -144,7 +153,9 @@ app.post("/llm/test", async (req, res) => {
     const provider = req.body?.provider || {};
     const result = provider.transport === "github-copilot-sdk" || provider.id === "github-copilot"
       ? await testCopilotConnection()
-      : await testProviderConnection(provider);
+      : provider.transport === "openai-codex-app-server" || provider.id === "openai-codex"
+        ? await testCodexConnection()
+        : await testProviderConnection(provider);
     res.json({ ok: true, ...result });
   } catch (err: any) {
     console.error("LLM connection test error:", err?.message || err);
@@ -169,6 +180,26 @@ app.get("/llm/copilot/models", async (_req, res) => {
     res.json({ models: await discoverCopilotModels() });
   } catch (err: any) {
     res.status(502).json({ error: err?.message || "Could not load GitHub Copilot models." });
+  }
+});
+
+app.get("/llm/codex/status", async (_req, res) => {
+  res.json(await getCodexConnectionStatus());
+});
+
+app.post("/llm/codex/login", async (_req, res) => {
+  try {
+    res.status(202).json(await startCodexLogin());
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || "Could not start OpenAI authorization." });
+  }
+});
+
+app.get("/llm/codex/models", async (_req, res) => {
+  try {
+    res.json({ models: await discoverCodexModels() });
+  } catch (err: any) {
+    res.status(502).json({ error: err?.message || "Could not load OpenAI Codex models." });
   }
 });
 
@@ -390,7 +421,7 @@ server.listen(PORT, "127.0.0.1", () => {
 });
 
 const shutdown = () => {
-  void shutdownCopilotService().finally(() => server.close());
+  void Promise.allSettled([shutdownCopilotService(), shutdownCodexService()]).finally(() => server.close());
 };
 process.once("SIGINT", shutdown);
 process.once("SIGTERM", shutdown);

@@ -292,6 +292,7 @@ CRITICAL SCOPE & EFFICIENCY GUARDRAILS:
         sendLog,
         sendToken: (token) => safeSend(ws, { type: "token", nodeId, content: token }),
         maxRounds: 200,
+        cwd: workspaceRoot,
         history: chatHistory || [],
         shouldAbort: () => ws.readyState !== WebSocket.OPEN,
       });

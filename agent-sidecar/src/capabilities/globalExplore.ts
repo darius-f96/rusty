@@ -160,6 +160,7 @@ IMPORTANT: End your response with a section marked "--- SUMMARY ---" that contai
         sendLog,
         sendToken,
         maxRounds: 50,
+        cwd: workspaceRoot,
         history: chatHistory || [],
         shouldAbort: () => ws.readyState !== WebSocket.OPEN,
       });

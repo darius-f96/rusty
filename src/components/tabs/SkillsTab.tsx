@@ -158,6 +158,7 @@ export const SkillsTab: React.FC = () => {
           type: "generate_skill",
           model,
           description,
+          workspaceRoot: rootPath,
           customProvider: provider || null,
         }));
       };

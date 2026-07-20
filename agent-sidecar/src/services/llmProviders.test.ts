@@ -26,6 +26,20 @@ test("Copilot providers cannot fall through to the generic HTTP adapter", async 
   );
 });
 
+test("Codex providers cannot fall through to the generic HTTP adapter", async () => {
+  await assert.rejects(
+    discoverProviderModels({
+      id: "openai-codex",
+      name: "OpenAI Codex",
+      baseUrl: "",
+      apiType: "codex-app-server",
+      transport: "openai-codex-app-server",
+      authType: "environment",
+    }),
+    /Codex app-server adapter/,
+  );
+});
+
 test("GitHub catalog arrays are normalized and unsupported models are marked", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (_input, init) => {

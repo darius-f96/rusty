@@ -5,7 +5,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { CustomSelect } from "../CustomSelect";
 import { notify } from "../../notificationStore";
 import { llmIntegrationService } from "../../services/llmIntegrationService";
-import type { CopilotConnectionStatus } from "../../services/llmIntegrationService";
+import type { CodexConnectionStatus, CopilotConnectionStatus } from "../../services/llmIntegrationService";
 
 const API_PROTOCOL_OPTIONS = [
   { id: "openai-completions", name: "OpenAI Chat Completions" },
@@ -32,6 +32,8 @@ export const LlmSetupTab: React.FC = () => {
   // Selected provider configuration state
   const selectedProvider = customProviders.find((p) => p.id === activeCustomProviderId);
   const isCopilot = selectedProvider?.transport === "github-copilot-sdk" || selectedProvider?.id === "github-copilot";
+  const isCodex = selectedProvider?.transport === "openai-codex-app-server" || selectedProvider?.id === "openai-codex";
+  const isManagedAuthProvider = isCopilot || isCodex;
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [catalogUrl, setCatalogUrl] = useState("");
@@ -42,7 +44,9 @@ export const LlmSetupTab: React.FC = () => {
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<Record<string, "connected" | "failed">>({});
   const [copilotStatus, setCopilotStatus] = useState<CopilotConnectionStatus | null>(null);
-  const copilotAutoLoadRef = useRef(false);
+  const [codexStatus, setCodexStatus] = useState<CodexConnectionStatus | null>(null);
+  const managedStatus = isCodex ? codexStatus : copilotStatus;
+  const managedAutoLoadRef = useRef("");
 
   useEffect(() => {
     let cancelled = false;
@@ -75,6 +79,38 @@ export const LlmSetupTab: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (!isCodex) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      try {
+        const status = await llmIntegrationService.getCodexStatus();
+        if (cancelled) return;
+        setCodexStatus(status);
+        if (status.authenticated) {
+          setConnectionStatus((current) => ({ ...current, "openai-codex": "connected" }));
+        } else if (status.state === "failed") {
+          setConnectionStatus((current) => ({ ...current, "openai-codex": "failed" }));
+        }
+        timer = setTimeout(poll, status.state === "connecting" ? 1_000 : 10_000);
+      } catch (error: any) {
+        if (cancelled) return;
+        setCodexStatus({
+          state: "failed",
+          authenticated: false,
+          message: error?.message || "Could not reach the Codex service.",
+        });
+        timer = setTimeout(poll, 10_000);
+      }
+    };
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [isCodex]);
+
   // Sync inputs with selected provider
   useEffect(() => {
     if (selectedProvider) {
@@ -95,7 +131,7 @@ export const LlmSetupTab: React.FC = () => {
   }, [activeModel, selectedProvider, setActiveModel]);
 
   const providerWithDraftSettings = (): CustomProvider | null => selectedProvider
-    ? isCopilot
+    ? isManagedAuthProvider
       ? selectedProvider
       : {
           ...selectedProvider,
@@ -175,59 +211,65 @@ export const LlmSetupTab: React.FC = () => {
     }
   };
 
-  const handleCopilotLogin = async () => {
+  const handleManagedLogin = async () => {
     try {
-      const status = await llmIntegrationService.startCopilotLogin();
-      setCopilotStatus(status);
+      const status = isCodex
+        ? await llmIntegrationService.startCodexLogin()
+        : await llmIntegrationService.startCopilotLogin();
+      if (isCodex) setCodexStatus(status as CodexConnectionStatus);
+      else setCopilotStatus(status as CopilotConnectionStatus);
       notify(
-        "GitHub authorization",
-        "Complete the Copilot sign-in flow in your browser.",
+        isCodex ? "OpenAI authorization" : "GitHub authorization",
+        `Complete the ${isCodex ? "Codex" : "Copilot"} sign-in flow in your browser.`,
         "info",
       );
     } catch (error: any) {
-      setCopilotStatus({ state: "failed", authenticated: false, message: error?.message });
-      notify("Sign-in failed", error?.message || "Could not start GitHub authorization.", "error");
+      const failed = { state: "failed" as const, authenticated: false, message: error?.message };
+      if (isCodex) setCodexStatus(failed);
+      else setCopilotStatus(failed);
+      notify("Sign-in failed", error?.message || `Could not start ${isCodex ? "OpenAI" : "GitHub"} authorization.`, "error");
     }
   };
 
-  const handleCopyCopilotCode = async () => {
-    if (!copilotStatus?.userCode) return;
+  const handleCopyManagedCode = async () => {
+    if (!managedStatus?.userCode) return;
     try {
-      await navigator.clipboard.writeText(copilotStatus.userCode);
-      notify("Code copied", "The GitHub device code was copied to your clipboard.", "success");
+      await navigator.clipboard.writeText(managedStatus.userCode);
+      notify("Code copied", `The ${isCodex ? "OpenAI" : "GitHub"} device code was copied to your clipboard.`, "success");
     } catch (error: any) {
       notify("Copy failed", error?.message || "Could not copy the device code.", "error");
     }
   };
 
-  const handleOpenCopilotVerification = async () => {
-    const verificationUri = copilotStatus?.verificationUri || "https://github.com/login/device";
+  const handleOpenManagedVerification = async () => {
+    const verificationUri = managedStatus?.verificationUri
+      || (isCodex ? "https://auth.openai.com/codex/device" : "https://github.com/login/device");
     try {
       await openUrl(verificationUri);
     } catch (error: any) {
-      notify("Could not open GitHub", error?.message || `Open ${verificationUri} in your browser.`, "error");
+      notify(`Could not open ${isCodex ? "OpenAI" : "GitHub"}`, error?.message || `Open ${verificationUri} in your browser.`, "error");
     }
   };
 
-  const handleCopyCopilotDiagnostics = async () => {
-    if (!copilotStatus?.diagnostics?.length) return;
+  const handleCopyManagedDiagnostics = async () => {
+    if (!managedStatus?.diagnostics?.length) return;
     try {
-      await navigator.clipboard.writeText(copilotStatus.diagnostics.join("\n"));
-      notify("Diagnostics copied", "Paste these redacted Copilot authentication logs into the issue or chat.", "success");
+      await navigator.clipboard.writeText(managedStatus.diagnostics.join("\n"));
+      notify("Diagnostics copied", `Paste these redacted ${isCodex ? "Codex" : "Copilot"} authentication logs into the issue or chat.`, "success");
     } catch (error: any) {
       notify("Copy failed", error?.message || "Could not copy the authentication diagnostics.", "error");
     }
   };
 
   useEffect(() => {
-    if (!copilotStatus?.authenticated) {
-      copilotAutoLoadRef.current = false;
+    if (!managedStatus?.authenticated) {
+      managedAutoLoadRef.current = "";
       return;
     }
-    if (!isCopilot || !selectedProvider || selectedProvider.models.length > 0 || copilotAutoLoadRef.current) return;
-    copilotAutoLoadRef.current = true;
+    if (!isManagedAuthProvider || !selectedProvider || selectedProvider.models.length > 0 || managedAutoLoadRef.current === selectedProvider.id) return;
+    managedAutoLoadRef.current = selectedProvider.id;
     void handleFetchModels();
-  }, [copilotStatus?.authenticated, isCopilot, selectedProvider?.id, selectedProvider?.models.length]);
+  }, [managedStatus?.authenticated, isManagedAuthProvider, selectedProvider?.id, selectedProvider?.models.length]);
 
   // Add Custom Provider Form State
   const [showAddCustom, setShowAddCustom] = useState(false);
@@ -301,6 +343,8 @@ export const LlmSetupTab: React.FC = () => {
     switch (id) {
       case "openai":
         return "Connects directly to OpenAI's completion servers. If API Key is left blank, it falls back to the OPENAI_API_KEY environment variable defined in the agent sidecar startup environment.";
+      case "openai-codex":
+        return "Uses your existing OpenAI Codex sign-in through the bundled official Codex app-server. Credentials are shared with the Codex CLI/Desktop via ~/.codex, available models come from your account, and Axiom keeps control of workspace tools and permissions.";
       case "anthropic":
         return "Connects directly to Anthropic's Claude API. If API Key is left blank, it falls back to the ANTHROPIC_API_KEY environment variable defined in the agent sidecar startup environment.";
       case "opencode":
@@ -339,22 +383,25 @@ export const LlmSetupTab: React.FC = () => {
               {customProviders.map((p) => {
                 const isActive = p.id === activeCustomProviderId;
                 const isCopilotProvider = p.transport === "github-copilot-sdk" || p.id === "github-copilot";
+                const isCodexProvider = p.transport === "openai-codex-app-server" || p.id === "openai-codex";
+                const isManagedProvider = isCopilotProvider || isCodexProvider;
+                const providerStatus = isCodexProvider ? codexStatus : copilotStatus;
                 
                 // Connection indicator status text & color
                 const testedStatus = connectionStatus[p.id];
                 let statusLabel = p.authType === "none" ? "No Auth" : "Env / Key";
                 let statusColor = "bg-[var(--color-status-warning-bg)] text-[var(--color-status-warning)]";
-                if (isCopilotProvider) {
-                  statusLabel = copilotStatus?.state === "connecting"
+                if (isManagedProvider) {
+                  statusLabel = providerStatus?.state === "connecting"
                     ? "Signing In"
-                    : copilotStatus?.authenticated
+                    : providerStatus?.authenticated
                       ? "Connected"
-                      : copilotStatus?.state === "failed"
+                      : providerStatus?.state === "failed"
                         ? "Failed"
                         : "Sign In";
-                  statusColor = copilotStatus?.authenticated
+                  statusColor = providerStatus?.authenticated
                     ? "bg-[var(--color-status-success-solid)] text-[var(--color-status-success-solid-foreground)]"
-                    : copilotStatus?.state === "failed"
+                    : providerStatus?.state === "failed"
                       ? "bg-[var(--color-status-danger-bg)] text-[var(--color-status-danger)]"
                       : "bg-[var(--color-status-warning-bg)] text-[var(--color-status-warning)]";
                 } else if (testedStatus === "connected") {
@@ -368,7 +415,7 @@ export const LlmSetupTab: React.FC = () => {
                   statusColor = "bg-[var(--color-status-success-solid)] text-[var(--color-status-success-solid-foreground)]";
                 } else if (
                   p.authType !== "none"
-                  && !["openai", "anthropic", "opencode", "opencode-go", "github-models", "github-copilot"].includes(p.id)
+                  && !["openai", "openai-codex", "anthropic", "opencode", "opencode-go", "github-models", "github-copilot"].includes(p.id)
                 ) {
                   statusLabel = "Key Required";
                   statusColor = "bg-[var(--color-status-danger-bg)] text-[var(--color-status-danger)]";
@@ -398,7 +445,11 @@ export const LlmSetupTab: React.FC = () => {
                         <span>{p.name}</span>
                       </span>
                       <span className="text-[10px] text-[var(--text-muted)] font-mono truncate mt-0.5 max-w-[180px]">
-                        {isCopilotProvider ? "Copilot subscription via GitHub" : p.baseUrl || "Built-in API endpoint"}
+                        {isCopilotProvider
+                          ? "Copilot subscription via GitHub"
+                          : isCodexProvider
+                            ? "Codex plan via OpenAI sign-in"
+                            : p.baseUrl || "Built-in API endpoint"}
                       </span>
                     </div>
 
@@ -552,63 +603,70 @@ export const LlmSetupTab: React.FC = () => {
 
               {/* Settings Form */}
               <div className="space-y-4 text-xs">
-                {isCopilot ? (
+                {isManagedAuthProvider ? (
                   <div className="space-y-4 rounded-xl border border-[var(--border-color)] bg-[var(--bg-app)]/60 p-4">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-start gap-3">
                         <div className={`mt-0.5 h-2.5 w-2.5 flex-shrink-0 rounded-full ${
-                          copilotStatus?.authenticated
+                          managedStatus?.authenticated
                             ? "bg-[var(--color-status-success)]"
-                            : copilotStatus?.state === "connecting"
+                            : managedStatus?.state === "connecting"
                               ? "bg-[var(--color-status-warning)] animate-pulse"
                               : "bg-[var(--text-muted)]"
                         }`} />
                         <div className="space-y-1">
                           <div className="font-mono text-xs font-bold text-[var(--text-light)]">
-                            {copilotStatus?.state === "connecting"
-                              ? "Waiting for GitHub authorization"
-                              : copilotStatus?.authenticated
-                                ? `Connected${copilotStatus.login ? ` as ${copilotStatus.login}` : ""}`
-                                : "GitHub sign-in required"}
+                            {managedStatus?.state === "connecting"
+                              ? `Waiting for ${isCodex ? "OpenAI" : "GitHub"} authorization`
+                              : managedStatus?.authenticated
+                                ? `Connected${isCodex
+                                  ? codexStatus?.email ? ` as ${codexStatus.email}` : ""
+                                  : copilotStatus?.login ? ` as ${copilotStatus.login}` : ""}`
+                                : `${isCodex ? "OpenAI" : "GitHub"} sign-in required`}
                           </div>
                           <p className="text-[10px] leading-relaxed text-[var(--text-muted)]">
-                            {copilotStatus?.message || "Use the GitHub account that owns your Copilot subscription."}
+                            {managedStatus?.message || (isCodex
+                              ? "Use the OpenAI account connected to your Codex plan."
+                              : "Use the GitHub account that owns your Copilot subscription.")}
                           </p>
-                          {copilotStatus?.host && (
+                          {isCopilot && copilotStatus?.host && (
                             <p className="font-mono text-[9px] text-[var(--text-muted)]">{copilotStatus.host}</p>
+                          )}
+                          {isCodex && codexStatus?.planType && (
+                            <p className="font-mono text-[9px] text-[var(--text-muted)]">Plan: {codexStatus.planType}</p>
                           )}
                         </div>
                       </div>
                       <button
                         type="button"
-                        onClick={() => void handleCopilotLogin()}
-                        disabled={copilotStatus?.state === "connecting"}
+                        onClick={() => void handleManagedLogin()}
+                        disabled={managedStatus?.state === "connecting"}
                         className="whitespace-nowrap rounded-lg bg-[var(--accent-color)] px-3 py-2 font-mono text-[10px] font-bold text-[var(--color-primary-foreground)] transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        {copilotStatus?.state === "connecting"
+                        {managedStatus?.state === "connecting"
                           ? "Signing in…"
-                          : copilotStatus?.authenticated
+                          : managedStatus?.authenticated
                             ? "Re-authenticate"
-                            : "Sign in with GitHub"}
+                            : `Sign in with ${isCodex ? "OpenAI" : "GitHub"}`}
                       </button>
                     </div>
-                    {copilotStatus?.state === "connecting" && copilotStatus.userCode && (
+                    {managedStatus?.state === "connecting" && managedStatus.userCode && (
                       <div className="rounded-xl border border-[var(--accent-color)]/40 bg-[var(--accent-bg)]/10 p-4 text-center">
                         <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-[var(--text-muted)]">
-                          GitHub device code
+                          {isCodex ? "OpenAI" : "GitHub"} device code
                         </div>
                         <button
                           type="button"
-                          onClick={handleCopyCopilotCode}
+                          onClick={handleCopyManagedCode}
                           className="mt-2 font-mono text-2xl font-bold tracking-[0.18em] text-[var(--text-light)] hover:text-[var(--accent-color)]"
                           title="Copy device code"
                         >
-                          {copilotStatus.userCode}
+                          {managedStatus.userCode}
                         </button>
                         <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
                           <button
                             type="button"
-                            onClick={handleCopyCopilotCode}
+                            onClick={handleCopyManagedCode}
                             className="flex items-center gap-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-app)] px-3 py-2 font-mono text-[10px] font-bold text-[var(--text-normal)] hover:border-[var(--accent-color)] hover:text-[var(--text-light)]"
                           >
                             <Copy size={12} />
@@ -616,29 +674,30 @@ export const LlmSetupTab: React.FC = () => {
                           </button>
                           <button
                             type="button"
-                            onClick={handleOpenCopilotVerification}
+                            onClick={handleOpenManagedVerification}
                             className="flex items-center gap-1.5 rounded-lg bg-[var(--accent-color)] px-3 py-2 font-mono text-[10px] font-bold text-[var(--color-primary-foreground)] hover:opacity-90"
                           >
                             <ExternalLink size={12} />
-                            <span>Open GitHub</span>
+                            <span>Open {isCodex ? "OpenAI" : "GitHub"}</span>
                           </button>
                         </div>
                         <p className="mt-2 break-all font-mono text-[9px] text-[var(--text-muted)]">
-                          {copilotStatus.verificationUri || "https://github.com/login/device"}
+                          {managedStatus.verificationUri
+                            || (isCodex ? "https://auth.openai.com/codex/device" : "https://github.com/login/device")}
                         </p>
                       </div>
                     )}
-                    {Boolean(copilotStatus?.diagnostics?.length) && (
+                    {Boolean(managedStatus?.diagnostics?.length) && (
                       <details className="rounded-lg border border-[var(--border-color)]/60 bg-[var(--bg-app)]/60 p-3">
                         <summary className="cursor-pointer font-mono text-[10px] font-bold text-[var(--text-normal)]">
                           Authentication diagnostics
                         </summary>
                         <pre className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-[var(--bg-app)] p-2 font-mono text-[9px] leading-relaxed text-[var(--text-muted)]">
-                          {copilotStatus?.diagnostics?.join("\n")}
+                          {managedStatus?.diagnostics?.join("\n")}
                         </pre>
                         <button
                           type="button"
-                          onClick={handleCopyCopilotDiagnostics}
+                          onClick={handleCopyManagedDiagnostics}
                           className="mt-2 flex items-center gap-1.5 rounded-lg border border-[var(--border-color)] px-2.5 py-1.5 font-mono text-[9px] font-bold text-[var(--text-normal)] hover:border-[var(--accent-color)] hover:text-[var(--text-light)]"
                         >
                           <Copy size={11} />
@@ -647,7 +706,9 @@ export const LlmSetupTab: React.FC = () => {
                       </details>
                     )}
                     <div className="border-t border-[var(--border-color)]/50 pt-3 text-[10px] leading-relaxed text-[var(--text-muted)]">
-                      GitHub Copilot CLI manages credentials, using the system credential store when available. Axiom never stores the OAuth token in provider settings.
+                      {isCodex
+                        ? "The official Codex app-server manages credentials in the same ~/.codex account used by Codex CLI/Desktop. Axiom never stores the OAuth token in provider settings."
+                        : "GitHub Copilot CLI manages credentials, using the system credential store when available. Axiom never stores the OAuth token in provider settings."}
                     </div>
                   </div>
                 ) : (
@@ -789,8 +850,8 @@ export const LlmSetupTab: React.FC = () => {
                             .map((m) => ({ id: m.id, name: `${m.name} (${m.remoteId || m.id})` }))
                         : []
                     }
-                    placeholder={isCopilot && !copilotStatus?.authenticated
-                      ? "Sign in with GitHub to load Copilot models"
+                    placeholder={isManagedAuthProvider && !managedStatus?.authenticated
+                      ? `Sign in with ${isCodex ? "OpenAI" : "GitHub"} to load ${isCodex ? "Codex" : "Copilot"} models`
                       : "No supported models available - fetch the provider catalog"}
                   />
                   {selectedProvider.models.some((model) => model.supported === false) && (
@@ -806,25 +867,25 @@ export const LlmSetupTab: React.FC = () => {
                     <button
                       type="button"
                       onClick={handleFetchModels}
-                      disabled={fetchingModels || testingConnection || (isCopilot && !copilotStatus?.authenticated)}
+                      disabled={fetchingModels || testingConnection || (isManagedAuthProvider && !managedStatus?.authenticated)}
                       className="whitespace-nowrap border border-[var(--border-color)] hover:border-[var(--accent-color)] bg-[var(--bg-app)] hover:bg-[var(--accent-bg)]/10 text-[var(--text-normal)] hover:text-[var(--text-light)] font-mono font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer flex items-center space-x-1.5 disabled:opacity-50"
                       title="Discover and normalize the provider's model catalog"
                     >
                       <RefreshCw size={13} className={fetchingModels ? "animate-spin text-[var(--accent-color)]" : ""} />
-                      <span>{fetchingModels ? "Fetching..." : isCopilot ? "Load Models" : "Fetch Models"}</span>
+                      <span>{fetchingModels ? "Fetching..." : isManagedAuthProvider ? "Load Models" : "Fetch Models"}</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={handleTestConnection}
-                      disabled={fetchingModels || testingConnection || (isCopilot && !copilotStatus?.authenticated)}
+                      disabled={fetchingModels || testingConnection || (isManagedAuthProvider && !managedStatus?.authenticated)}
                       className="whitespace-nowrap border border-[var(--border-color)] hover:border-[var(--color-status-success-border)] bg-[var(--bg-app)] hover:bg-[var(--color-status-success-bg)] text-[var(--text-normal)] hover:text-[var(--text-light)] font-mono font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer flex items-center space-x-1.5 disabled:opacity-50"
                     >
                       <ShieldCheck size={13} className={testingConnection ? "animate-pulse text-[var(--color-status-success)]" : ""} />
                       <span>{testingConnection ? "Testing..." : "Test"}</span>
                     </button>
 
-                    {!isCopilot && (
+                    {!isManagedAuthProvider && (
                       <button
                         type="button"
                         onClick={handleSaveSettings}

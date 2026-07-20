@@ -38,7 +38,7 @@ export function normalizeStoredProvider(
   const providerId = normalizedProviderId(provider.id, configVersion);
   const apiType = provider.apiType === "anthropic" ? "anthropic-messages" : provider.apiType;
   const builtInBearerProviders = new Set(["openai", "opencode", "opencode-go", "github-models"]);
-  const inferredAuthType = providerId === "github-copilot"
+  const inferredAuthType = providerId === "github-copilot" || providerId === "openai-codex"
     ? "environment"
     : providerId === "anthropic"
     ? "anthropic"
