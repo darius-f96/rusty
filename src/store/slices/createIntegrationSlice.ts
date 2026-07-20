@@ -45,9 +45,9 @@ const defaultProviders: CustomProvider[] = [
     authType: "anthropic",
     catalogUrl: "https://api.anthropic.com/v1/models",
     models: [
-      { id: "anthropic/claude-sonnet-4-6", remoteId: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", apiType: "anthropic-messages", baseUrl: "https://api.anthropic.com", supported: true },
-      { id: "anthropic/claude-opus-4-6", remoteId: "claude-opus-4-6", name: "Claude Opus 4.6", apiType: "anthropic-messages", baseUrl: "https://api.anthropic.com", supported: true },
-      { id: "anthropic/claude-haiku-4-5", remoteId: "claude-haiku-4-5", name: "Claude Haiku 4.5", apiType: "anthropic-messages", baseUrl: "https://api.anthropic.com", supported: true },
+      { id: "anthropic/claude-sonnet-4-6", remoteId: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", apiType: "anthropic-messages", baseUrl: "https://api.anthropic.com", supported: true, reasoning: true, supportedReasoningEfforts: ["minimal", "low", "medium", "high"] },
+      { id: "anthropic/claude-opus-4-6", remoteId: "claude-opus-4-6", name: "Claude Opus 4.6", apiType: "anthropic-messages", baseUrl: "https://api.anthropic.com", supported: true, reasoning: true, supportedReasoningEfforts: ["minimal", "low", "medium", "high"] },
+      { id: "anthropic/claude-haiku-4-5", remoteId: "claude-haiku-4-5", name: "Claude Haiku 4.5", apiType: "anthropic-messages", baseUrl: "https://api.anthropic.com", supported: true, reasoning: true, supportedReasoningEfforts: ["minimal", "low", "medium", "high"] },
     ],
   },
   {
@@ -59,9 +59,9 @@ const defaultProviders: CustomProvider[] = [
     authType: "bearer",
     catalogUrl: "https://api.openai.com/v1/models",
     models: [
-      { id: "openai/gpt-5.6-sol", remoteId: "gpt-5.6-sol", name: "GPT-5.6 Sol", apiType: "openai-responses", baseUrl: "https://api.openai.com/v1", supported: true, reasoning: true, input: ["text", "image"], contextWindow: 1_050_000, maxTokens: 128_000, cost: { input: 5, output: 30, cacheRead: 0.5, cacheWrite: 6.25 } },
-      { id: "openai/gpt-5.6-terra", remoteId: "gpt-5.6-terra", name: "GPT-5.6 Terra", apiType: "openai-responses", baseUrl: "https://api.openai.com/v1", supported: true, reasoning: true, input: ["text", "image"], contextWindow: 1_050_000, maxTokens: 128_000, cost: { input: 2.5, output: 15, cacheRead: 0.25, cacheWrite: 3.125 } },
-      { id: "openai/gpt-5.6-luna", remoteId: "gpt-5.6-luna", name: "GPT-5.6 Luna", apiType: "openai-responses", baseUrl: "https://api.openai.com/v1", supported: true, reasoning: true, input: ["text", "image"], contextWindow: 1_050_000, maxTokens: 128_000, cost: { input: 1, output: 6, cacheRead: 0.1, cacheWrite: 1.25 } },
+      { id: "openai/gpt-5.6-sol", remoteId: "gpt-5.6-sol", name: "GPT-5.6 Sol", apiType: "openai-responses", baseUrl: "https://api.openai.com/v1", supported: true, reasoning: true, supportedReasoningEfforts: ["minimal", "low", "medium", "high", "xhigh"], defaultReasoningEffort: "medium", input: ["text", "image"], contextWindow: 1_050_000, maxTokens: 128_000, cost: { input: 5, output: 30, cacheRead: 0.5, cacheWrite: 6.25 } },
+      { id: "openai/gpt-5.6-terra", remoteId: "gpt-5.6-terra", name: "GPT-5.6 Terra", apiType: "openai-responses", baseUrl: "https://api.openai.com/v1", supported: true, reasoning: true, supportedReasoningEfforts: ["minimal", "low", "medium", "high", "xhigh"], defaultReasoningEffort: "medium", input: ["text", "image"], contextWindow: 1_050_000, maxTokens: 128_000, cost: { input: 2.5, output: 15, cacheRead: 0.25, cacheWrite: 3.125 } },
+      { id: "openai/gpt-5.6-luna", remoteId: "gpt-5.6-luna", name: "GPT-5.6 Luna", apiType: "openai-responses", baseUrl: "https://api.openai.com/v1", supported: true, reasoning: true, supportedReasoningEfforts: ["minimal", "low", "medium", "high", "xhigh"], defaultReasoningEffort: "medium", input: ["text", "image"], contextWindow: 1_050_000, maxTokens: 128_000, cost: { input: 1, output: 6, cacheRead: 0.1, cacheWrite: 1.25 } },
     ],
   },
   {

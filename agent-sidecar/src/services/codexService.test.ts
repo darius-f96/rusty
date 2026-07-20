@@ -23,6 +23,8 @@ test("Codex catalog models retain account model metadata", () => {
   assert.equal(model.supported, true);
   assert.deepEqual(model.input, ["text", "image"]);
   assert.deepEqual(model.capabilities, ["reasoning", "vision"]);
+  assert.deepEqual(model.supportedReasoningEfforts, ["medium", "high"]);
+  assert.equal(model.defaultReasoningEffort, "high");
   assert.equal(model.compat?.isDefault, true);
   assert.equal(model.compat?.defaultReasoningEffort, "high");
   assert.deepEqual(model.compat?.supportedReasoningEfforts, ["medium", "high"]);

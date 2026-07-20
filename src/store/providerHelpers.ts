@@ -1,4 +1,14 @@
-import type { CustomProvider, ProviderModel } from "./types";
+import type { CustomProvider, ProviderModel, ReasoningEffort } from "./types";
+
+const REASONING_VARIANT_SEPARATOR = "::reasoning=";
+const REASONING_EFFORT_ORDER = ["minimal", "low", "medium", "high", "xhigh"] as const;
+const REASONING_EFFORT_LABELS: Record<(typeof REASONING_EFFORT_ORDER)[number], string> = {
+  minimal: "Minimal",
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  xhigh: "Extra High",
+};
 
 /**
  * Version 1 and older used the misleading `github-copilot` id for GitHub
@@ -25,10 +35,50 @@ function normalizeProviderModel(
     || (model.id.startsWith(originalPrefix) ? model.id.slice(originalPrefix.length) : model.id);
   return {
     ...model,
-    id: `${providerId}/${remoteId}`,
+    id: model.reasoningEffort
+      ? `${providerId}/${remoteId}${REASONING_VARIANT_SEPARATOR}${model.reasoningEffort}`
+      : `${providerId}/${remoteId}`,
     remoteId,
     apiType: model.apiType === "anthropic" ? "anthropic-messages" : model.apiType,
   };
+}
+
+export function baseModelReference(modelReference: string): string {
+  const separator = modelReference.lastIndexOf(REASONING_VARIANT_SEPARATOR);
+  return separator === -1 ? modelReference : modelReference.slice(0, separator);
+}
+
+export function providerHasModelReference(provider: CustomProvider, modelReference: string): boolean {
+  const baseReference = baseModelReference(modelReference);
+  return provider.models.some((model) =>
+    model.id === baseReference
+    || `${provider.id}/${model.remoteId || model.id}` === baseReference
+  );
+}
+
+export function providerModelVariants(model: ProviderModel): ProviderModel[] {
+  if (model.reasoningEffort) return [model];
+  const compatibleEfforts = Array.isArray(model.compat?.supportedReasoningEfforts)
+    ? model.compat.supportedReasoningEfforts
+    : [];
+  const supportedEfforts = model.supportedReasoningEfforts?.length
+    ? model.supportedReasoningEfforts
+    : compatibleEfforts.filter((effort): effort is ReasoningEffort =>
+      effort === "minimal" || effort === "low" || effort === "medium" || effort === "high" || effort === "xhigh"
+    );
+  const supported = supportedEfforts
+    .filter((effort, index, efforts) => REASONING_EFFORT_ORDER.includes(effort) && efforts.indexOf(effort) === index)
+    .sort((a, b) => REASONING_EFFORT_ORDER.indexOf(a) - REASONING_EFFORT_ORDER.indexOf(b));
+  if (supported.length === 0) return [model];
+  return [
+    { ...model, name: `${model.name} · Provider Default` },
+    ...supported.map((effort) => ({
+      ...model,
+      id: `${model.id}${REASONING_VARIANT_SEPARATOR}${effort}`,
+      name: `${model.name} · ${REASONING_EFFORT_LABELS[effort]}`,
+      reasoningEffort: effort,
+    })),
+  ];
 }
 
 export function normalizeStoredProvider(
@@ -94,6 +144,7 @@ export function selectableProviderModels(
   return selectableModelProviders(providers, selectedProviderId).flatMap((provider) =>
     provider.models
       .filter((model) => model.supported !== false)
+      .flatMap(providerModelVariants)
       .map((model) => ({ provider, model }))
   );
 }

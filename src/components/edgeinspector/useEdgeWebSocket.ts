@@ -10,6 +10,7 @@ import { useState, useRef, useEffect } from "react";
 import { useWorkspaceStore } from "../../store";
 import { VfsRegistry } from "../../services/vfs";
 import { notify } from "../../notificationStore";
+import { providerHasModelReference } from "../../store/providerHelpers";
 
 export const useEdgeWebSocket = (
   edgeId: string | null,
@@ -78,7 +79,7 @@ export const useEdgeWebSocket = (
       const activeProviderId = useWorkspaceStore.getState().activeCustomProviderId;
       const activeModel = useWorkspaceStore.getState().activeModel;
       const provider = providers.find((candidate) =>
-        candidate.models.some((candidateModel) => candidateModel.id === activeModel)
+        providerHasModelReference(candidate, activeModel)
       ) || providers.find((candidate) => candidate.id === activeProviderId);
 
       socket.send(

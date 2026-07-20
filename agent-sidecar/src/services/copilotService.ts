@@ -414,6 +414,15 @@ export function normalizeCopilotModel(model: ModelInfo): DiscoveredProviderModel
       ...(model.capabilities.supports.reasoningEffort ? ["reasoning"] : []),
     ],
     reasoning: model.capabilities.supports.reasoningEffort,
+    supportedReasoningEfforts: (model.supportedReasoningEfforts || []).filter((effort) =>
+      effort === "low" || effort === "medium" || effort === "high" || effort === "xhigh"
+    ),
+    defaultReasoningEffort: model.defaultReasoningEffort === "low"
+      || model.defaultReasoningEffort === "medium"
+      || model.defaultReasoningEffort === "high"
+      || model.defaultReasoningEffort === "xhigh"
+      ? model.defaultReasoningEffort
+      : undefined,
     input: model.capabilities.supports.vision ? ["text", "image"] : ["text"],
     contextWindow: model.capabilities.limits.max_context_window_tokens,
     compat: {
@@ -516,6 +525,7 @@ export async function callCopilotWithToolsStreaming(options: {
   sendLog: (message: string) => void;
   sendToken: (token: string) => void;
   history?: Array<{ role: string; content: string }>;
+  reasoning?: string;
   shouldAbort?: () => boolean;
 }): Promise<string> {
   const sdk = await getClient();
@@ -539,6 +549,7 @@ export async function callCopilotWithToolsStreaming(options: {
     session = await sdk.createSession({
       clientName: "Axiom",
       model: options.modelId,
+      reasoningEffort: copilotReasoningEffort(options.reasoning),
       streaming: true,
       includeSubAgentStreamingEvents: false,
       systemMessage: { mode: "append", content: options.systemPrompt },

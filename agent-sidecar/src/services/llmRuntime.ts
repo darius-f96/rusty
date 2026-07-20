@@ -3,8 +3,11 @@ import {
   getProviderDefaults,
   LlmProviderConfig,
   normalizeApiType,
+  parseModelReference,
   ProviderModelConfig,
+  ReasoningEffort,
   remoteModelId,
+  resolveProviderModelSelection,
   resolveProviderApiKey,
 } from "./llmProviders";
 import {
@@ -24,6 +27,7 @@ export interface ResolvedLlmRuntime {
   apiKey: string;
   model: any;
   headers?: Record<string, string>;
+  reasoningEffort?: ReasoningEffort;
 }
 
 export class EmptyLlmResponseError extends Error {
@@ -68,11 +72,6 @@ function isOpenAICodexProvider(provider?: LlmProviderConfig | null): boolean {
   return provider?.transport === "openai-codex-app-server" || provider?.id === OPENAI_CODEX_PROVIDER_ID;
 }
 
-function selectedProviderModel(provider: LlmProviderConfig, modelReference: string): ProviderModelConfig | undefined {
-  const target = remoteModelId(modelReference, provider.id);
-  return provider.models?.find((model) => (model.remoteId || remoteModelId(model.id, provider.id)) === target);
-}
-
 function syntheticModel(provider: LlmProviderConfig, configuredModel: ProviderModelConfig | undefined, modelId: string): any {
   const defaults = getProviderDefaults(provider.id);
   const api = normalizeApiType(configuredModel?.apiType || provider.apiType || defaults?.apiType);
@@ -85,6 +84,8 @@ function syntheticModel(provider: LlmProviderConfig, configuredModel: ProviderMo
     provider: provider.id,
     baseUrl,
     reasoning: configuredModel?.reasoning ?? false,
+    thinkingLevelMap: configuredModel?.thinkingLevelMap,
+    thinkingBudgets: configuredModel?.thinkingBudgets,
     input: configuredModel?.input || ["text"],
     cost: configuredModel?.cost || { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: configuredModel?.contextWindow || 200_000,
@@ -121,12 +122,17 @@ export async function resolveLlmRuntime(
   const providerId = customProvider?.id || providerIdFromReference(modelReference);
   if (!providerId) throw new Error("The selected model does not identify an LLM provider.");
 
-  const configuredModel = customProvider ? selectedProviderModel(customProvider, modelReference) : undefined;
   const fallbackModel = customProvider?.models?.[0];
-  const modelId = remoteModelId(
-    modelReference || fallbackModel?.remoteId || fallbackModel?.id || "",
-    providerId
-  );
+  const fallbackReference = modelReference || fallbackModel?.id || fallbackModel?.remoteId || "";
+  const parsedReference = parseModelReference(fallbackReference);
+  const selection = customProvider
+    ? resolveProviderModelSelection(customProvider, fallbackReference)
+    : {
+        modelId: remoteModelId(parsedReference.baseReference, providerId),
+        reasoningEffort: parsedReference.reasoningEffort,
+      };
+  const configuredModel = selection.model;
+  const modelId = selection.modelId;
   if (!modelId) throw new Error("No model is selected for this provider.");
 
   let model: any;
@@ -149,7 +155,14 @@ export async function resolveLlmRuntime(
     : "";
   if (!apiKey && customProvider) throw new Error(`No API key is configured for ${customProvider.name}.`);
 
-  return { providerId, modelId, apiKey, model, headers: runtimeHeaders(customProvider, model, apiKey, authType) };
+  return {
+    providerId,
+    modelId,
+    apiKey,
+    model,
+    headers: runtimeHeaders(customProvider, model, apiKey, authType),
+    reasoningEffort: selection.reasoningEffort,
+  };
 }
 
 export function textFromPiMessage(message: any): string {
@@ -168,29 +181,31 @@ export async function completeLlmText(options: {
   userMessage: string;
   history?: Array<{ role: string; content: string }>;
   maxTokens?: number;
-  reasoning?: "minimal" | "low" | "medium" | "high" | "xhigh";
+  reasoning?: ReasoningEffort;
   cwd?: string;
   signal?: AbortSignal;
 }): Promise<string> {
   if (isGitHubCopilotProvider(options.customProvider)) {
     const providerId = options.customProvider!.id;
+    const selection = resolveProviderModelSelection(options.customProvider!, options.modelReference);
     return completeCopilotText({
-      modelId: remoteModelId(options.modelReference, providerId),
+      modelId: selection.modelId || remoteModelId(options.modelReference, providerId),
       systemPrompt: options.systemPrompt,
       userMessage: options.userMessage,
       history: options.history,
-      reasoning: options.reasoning,
+      reasoning: options.reasoning || selection.reasoningEffort,
       signal: options.signal,
     });
   }
   if (isOpenAICodexProvider(options.customProvider)) {
     const providerId = options.customProvider!.id;
+    const selection = resolveProviderModelSelection(options.customProvider!, options.modelReference);
     return completeCodexText({
-      modelId: remoteModelId(options.modelReference, providerId),
+      modelId: selection.modelId || remoteModelId(options.modelReference, providerId),
       systemPrompt: options.systemPrompt,
       userMessage: options.userMessage,
       history: options.history,
-      reasoning: options.reasoning,
+      reasoning: options.reasoning || selection.reasoningEffort,
       cwd: options.cwd,
       signal: options.signal,
     });
@@ -217,7 +232,7 @@ export async function completeLlmText(options: {
     apiKey: runtime.apiKey || undefined,
     headers: runtime.headers,
     maxTokens,
-    reasoning: options.reasoning,
+    reasoning: options.reasoning || runtime.reasoningEffort,
     signal: options.signal,
   });
   if (result?.stopReason === "error" || result?.stopReason === "aborted") {
@@ -238,26 +253,30 @@ export async function callLlmWithToolsPiStreaming(options: {
   sendToken: (token: string) => void;
   history?: Array<{ role: string; content: string }>;
   maxRounds?: number;
+  reasoning?: ReasoningEffort;
   cwd?: string;
   shouldAbort?: () => boolean;
 }): Promise<string> {
   if (isGitHubCopilotProvider(options.customProvider)) {
     const providerId = options.customProvider!.id;
+    const selection = resolveProviderModelSelection(options.customProvider!, options.modelReference);
     return callCopilotWithToolsStreaming({
-      modelId: remoteModelId(options.modelReference, providerId),
+      modelId: selection.modelId || remoteModelId(options.modelReference, providerId),
       systemPrompt: options.systemPrompt,
       userMessage: options.userMessage,
       tools: options.tools,
       sendLog: options.sendLog,
       sendToken: options.sendToken,
       history: options.history,
+      reasoning: options.reasoning || selection.reasoningEffort,
       shouldAbort: options.shouldAbort,
     });
   }
   if (isOpenAICodexProvider(options.customProvider)) {
     const providerId = options.customProvider!.id;
+    const selection = resolveProviderModelSelection(options.customProvider!, options.modelReference);
     return callCodexWithToolsStreaming({
-      modelId: remoteModelId(options.modelReference, providerId),
+      modelId: selection.modelId || remoteModelId(options.modelReference, providerId),
       systemPrompt: options.systemPrompt,
       userMessage: options.userMessage,
       tools: options.tools,
@@ -265,6 +284,7 @@ export async function callLlmWithToolsPiStreaming(options: {
       sendToken: options.sendToken,
       history: options.history,
       maxRounds: options.maxRounds,
+      reasoning: options.reasoning || selection.reasoningEffort,
       cwd: options.cwd,
       shouldAbort: options.shouldAbort,
     });
@@ -302,6 +322,7 @@ export async function callLlmWithToolsPiStreaming(options: {
       apiKey: runtime.apiKey || undefined,
       headers: runtime.headers,
       signal: controller.signal,
+      reasoning: options.reasoning || runtime.reasoningEffort,
     });
 
     let result: any;

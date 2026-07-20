@@ -20,15 +20,22 @@ test("empty response errors retain stop-reason diagnostics", () => {
 test("provider-neutral tool loop executes calls and continues to final text", async () => {
   const pi = await importEsm<any>("@earendil-works/pi-ai/compat");
   const registration = pi.registerFauxProvider({ api: "axiom-faux-test", provider: "faux-provider" });
+  const observedReasoning: string[] = [];
   registration.setResponses([
-    pi.fauxAssistantMessage([pi.fauxToolCall("echo", { value: "hello" })], { stopReason: "toolUse" }),
-    pi.fauxAssistantMessage([pi.fauxText("Tool result accepted.")]),
+    (_context: any, options: any) => {
+      observedReasoning.push(options.reasoning);
+      return pi.fauxAssistantMessage([pi.fauxToolCall("echo", { value: "hello" })], { stopReason: "toolUse" });
+    },
+    (_context: any, options: any) => {
+      observedReasoning.push(options.reasoning);
+      return pi.fauxAssistantMessage([pi.fauxText("Tool result accepted.")]);
+    },
   ]);
 
   const streamed: string[] = [];
   try {
     const response = await callLlmWithToolsPiStreaming({
-      modelReference: "faux-provider/faux-model",
+      modelReference: "faux-provider/faux-model::reasoning=high",
       customProvider: {
         id: "faux-provider",
         name: "Faux Provider",
@@ -61,6 +68,7 @@ test("provider-neutral tool loop executes calls and continues to final text", as
     assert.equal(response, "Tool result accepted.");
     assert.equal(streamed.join(""), "Tool result accepted.");
     assert.equal(registration.state.callCount, 2);
+    assert.deepEqual(observedReasoning, ["high", "high"]);
   } finally {
     registration.unregister();
   }

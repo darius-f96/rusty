@@ -8,6 +8,10 @@ export type LlmApiType =
 
 export type LlmAuthType = "bearer" | "anthropic" | "none" | "environment";
 
+export type ReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";
+
+const REASONING_VARIANT_SEPARATOR = "::reasoning=";
+
 export interface ProviderModelConfig {
   id: string;
   name: string;
@@ -17,6 +21,11 @@ export interface ProviderModelConfig {
   supported?: boolean;
   capabilities?: string[];
   reasoning?: boolean;
+  reasoningEffort?: ReasoningEffort;
+  supportedReasoningEfforts?: ReasoningEffort[];
+  defaultReasoningEffort?: ReasoningEffort;
+  thinkingLevelMap?: Record<string, string | null>;
+  thinkingBudgets?: Record<string, number>;
   input?: Array<"text" | "image">;
   contextWindow?: number;
   maxTokens?: number;
@@ -112,6 +121,49 @@ export function providerModelId(providerId: string, modelId: string): string {
   return `${providerId}/${remoteModelId(modelId, providerId)}`;
 }
 
+function reasoningEffort(value: unknown): ReasoningEffort | undefined {
+  return value === "minimal" || value === "low" || value === "medium" || value === "high" || value === "xhigh"
+    ? value
+    : undefined;
+}
+
+function reasoningEfforts(value: unknown): ReasoningEffort[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(reasoningEffort)
+    .filter((effort): effort is ReasoningEffort => Boolean(effort))
+    .filter((effort, index, efforts) => efforts.indexOf(effort) === index);
+}
+
+export function parseModelReference(modelReference: string): {
+  baseReference: string;
+  reasoningEffort?: ReasoningEffort;
+} {
+  const separator = modelReference.lastIndexOf(REASONING_VARIANT_SEPARATOR);
+  if (separator === -1) return { baseReference: modelReference };
+  const effort = reasoningEffort(modelReference.slice(separator + REASONING_VARIANT_SEPARATOR.length));
+  return effort
+    ? { baseReference: modelReference.slice(0, separator), reasoningEffort: effort }
+    : { baseReference: modelReference };
+}
+
+export function resolveProviderModelSelection(
+  provider: LlmProviderConfig,
+  modelReference: string,
+): { model?: ProviderModelConfig; modelId: string; reasoningEffort?: ReasoningEffort } {
+  const parsed = parseModelReference(modelReference);
+  const target = remoteModelId(parsed.baseReference, provider.id);
+  const model = provider.models?.find((candidate) => candidate.id === parsed.baseReference)
+    || provider.models?.find((candidate) =>
+      (candidate.remoteId || remoteModelId(candidate.id, provider.id)) === target
+    );
+  return {
+    model,
+    modelId: model?.remoteId || target,
+    reasoningEffort: parsed.reasoningEffort || model?.reasoningEffort,
+  };
+}
+
 export function getProviderDefaults(providerId: string): ProviderDefaults | undefined {
   return PROVIDER_DEFAULTS[providerId];
 }
@@ -176,9 +228,12 @@ async function loadPiModels(providerId: string): Promise<Map<string, any>> {
   const piProvider = PROVIDER_DEFAULTS[providerId]?.piProvider;
   if (!piProvider) return new Map();
   try {
-    const { getModels } = await importEsm<any>("@earendil-works/pi-ai/compat");
+    const { getModels, getSupportedThinkingLevels } = await importEsm<any>("@earendil-works/pi-ai/compat");
     const models = getModels(piProvider as any) || [];
-    return new Map(models.map((model: any) => [model.id, model]));
+    return new Map(models.map((model: any) => [model.id, {
+      ...model,
+      supportedReasoningEfforts: reasoningEfforts(getSupportedThinkingLevels?.(model)),
+    }]));
   } catch (error) {
     console.warn(`[LLM Providers] Could not load Pi metadata for ${providerId}:`, error);
     return new Map();
@@ -257,6 +312,14 @@ export async function discoverProviderModels(provider: LlmProviderConfig): Promi
       if (!remoteId) return null;
       const piModel = piModels.get(remoteId);
       const capabilities = Array.isArray(raw?.capabilities) ? raw.capabilities.map(String) : [];
+      const supportedReasoningEfforts = reasoningEfforts(
+        piModel?.supportedReasoningEfforts
+        || raw?.supportedReasoningEfforts
+        || raw?.supported_reasoning_efforts,
+      );
+      const defaultReasoningEffort = reasoningEffort(
+        raw?.defaultReasoningEffort || raw?.default_reasoning_effort,
+      );
       const supported = isGitHub
         ? githubModelSupported(raw)
         : provider.id === "openai"
@@ -282,6 +345,10 @@ export async function discoverProviderModels(provider: LlmProviderConfig): Promi
         supported,
         capabilities,
         reasoning: piModel?.reasoning ?? inferredReasoning,
+        supportedReasoningEfforts,
+        defaultReasoningEffort,
+        thinkingLevelMap: piModel?.thinkingLevelMap,
+        thinkingBudgets: piModel?.thinkingBudgets,
         input: piModel?.input || inferredInput,
         contextWindow: piModel?.contextWindow || raw?.limits?.max_input_tokens || raw?.max_input_tokens,
         maxTokens: piModel?.maxTokens || raw?.limits?.max_output_tokens || raw?.max_tokens,

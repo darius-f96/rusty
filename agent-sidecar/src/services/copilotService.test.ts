@@ -34,6 +34,8 @@ test("Copilot catalog models retain SDK capabilities and billing metadata", () =
   assert.deepEqual(model.input, ["text", "image"]);
   assert.deepEqual(model.capabilities, ["tool-calling", "vision", "reasoning"]);
   assert.equal(model.contextWindow, 200_000);
+  assert.deepEqual(model.supportedReasoningEfforts, ["low", "medium", "high"]);
+  assert.equal(model.defaultReasoningEffort, "medium");
   assert.equal(model.compat?.billingMultiplier, 1);
   assert.deepEqual(model.compat?.supportedReasoningEfforts, ["low", "medium", "high"]);
 });

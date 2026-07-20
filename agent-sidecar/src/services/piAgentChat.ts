@@ -2,7 +2,15 @@ import * as fs from "node:fs/promises";
 import { getPiResourceLoader } from "./piMcp";
 import { importEsm } from "./esmImport";
 import { installPiCommandPolicy } from "./piCommandPolicy";
-import { getProviderDefaults, normalizeApiType, remoteModelId, resolveProviderApiKey } from "./llmProviders";
+import {
+  getProviderDefaults,
+  LlmProviderConfig,
+  normalizeApiType,
+  parseModelReference,
+  remoteModelId,
+  resolveProviderApiKey,
+  resolveProviderModelSelection,
+} from "./llmProviders";
 
 interface ActivePiRun {
   stop: (reason: string) => Promise<void>;
@@ -101,30 +109,7 @@ interface RunPiAgentChatOptions {
   conversationHistory: Array<{ role: string; content: string }>;
   message: string;
   tools: PiChatTool[];
-  customProvider?: {
-    id: string;
-    name: string;
-    baseUrl: string;
-    apiKey?: string;
-    apiType: string;
-    transport?: "http" | "github-copilot-sdk" | "openai-codex-app-server";
-    authType?: "bearer" | "anthropic" | "none" | "environment";
-    models: Array<{
-      id: string;
-      name: string;
-      remoteId?: string;
-      apiType?: string;
-      baseUrl?: string;
-      supported?: boolean;
-      reasoning?: boolean;
-      input?: Array<"text" | "image">;
-      contextWindow?: number;
-      maxTokens?: number;
-      cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
-      compat?: Record<string, unknown>;
-      headers?: Record<string, string>;
-    }>;
-  } | null;
+  customProvider?: LlmProviderConfig | null;
   sendLog: (message: string) => void;
   sendToken: (token: string) => void;
   sendSubagentUpdate: (subagent: SubagentUpdate) => void;
@@ -271,8 +256,13 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
     return undefined;
   }
 
-  const [provider, ...modelParts] = options.model.split("/");
-  const modelId = modelParts.join("/");
+  const parsedReference = parseModelReference(options.model);
+  const [provider, ...modelParts] = parsedReference.baseReference.split("/");
+  const fallbackModelId = modelParts.join("/");
+  const selection = options.customProvider
+    ? resolveProviderModelSelection(options.customProvider, options.model)
+    : { modelId: fallbackModelId, reasoningEffort: parsedReference.reasoningEffort };
+  const modelId = selection.modelId;
   if (!provider || !modelId) {
     options.sendLog("Pi delegation could not resolve the selected model; using the compatibility agent runtime.");
     return undefined;
@@ -300,7 +290,7 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
       baseUrl: options.customProvider.baseUrl,
       apiKey: providerApiKey,
       api: normalizeApiType(options.customProvider.apiType),
-      models: options.customProvider.models
+      models: (options.customProvider.models || [])
         .filter((model) => model.supported !== false)
         .map((model) => ({
         id: model.remoteId || remoteModelId(model.id, options.customProvider!.id),
@@ -308,6 +298,8 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
         api: normalizeApiType(model.apiType || options.customProvider!.apiType),
         baseUrl: model.baseUrl || options.customProvider!.baseUrl,
         reasoning: model.reasoning ?? false,
+        thinkingLevelMap: model.thinkingLevelMap,
+        thinkingBudgets: model.thinkingBudgets,
         input: model.input || ["text"],
         cost: model.cost || { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
         contextWindow: model.contextWindow || 200_000,
@@ -390,6 +382,7 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
   const { session } = await createAgentSession({
     cwd: options.workspaceRoot,
     model: selectedModel,
+    thinkingLevel: selection.reasoningEffort,
     modelRegistry,
     tools: toolNames,
     customTools: piCustomTools as any,

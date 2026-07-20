@@ -6,6 +6,7 @@ import { CustomSelect } from "../CustomSelect";
 import { notify } from "../../notificationStore";
 import { llmIntegrationService } from "../../services/llmIntegrationService";
 import type { CodexConnectionStatus, CopilotConnectionStatus } from "../../services/llmIntegrationService";
+import { providerModelVariants } from "../../store/providerHelpers";
 
 const API_PROTOCOL_OPTIONS = [
   { id: "openai-completions", name: "OpenAI Chat Completions" },
@@ -126,7 +127,7 @@ export const LlmSetupTab: React.FC = () => {
   useEffect(() => {
     if (!activeModel && selectedProvider && selectedProvider.models.length > 0) {
       const firstSupportedModel = selectedProvider.models.find((model) => model.supported !== false);
-      if (firstSupportedModel) setActiveModel(firstSupportedModel.id);
+      if (firstSupportedModel) setActiveModel(providerModelVariants(firstSupportedModel)[0].id);
     }
   }, [activeModel, selectedProvider, setActiveModel]);
 
@@ -163,12 +164,14 @@ export const LlmSetupTab: React.FC = () => {
     try {
       const discoveredModels = await llmIntegrationService.discoverModels(provider);
       const models = discoveredModels.map((model) => {
-        const previous = selectedProvider?.models.find((candidate) =>
-          (candidate.remoteId || candidate.id) === (model.remoteId || model.id)
-        );
+        const previous = selectedProvider?.models.find((candidate) => candidate.id === model.id)
+          || selectedProvider?.models.find((candidate) =>
+            (candidate.remoteId || candidate.id) === (model.remoteId || model.id)
+          );
         return { ...previous, ...model };
       });
       const supportedModels = models.filter((model) => model.supported !== false);
+      const selectableModels = supportedModels.flatMap(providerModelVariants);
       updateProviderSettings(provider.id, {
         apiKey: provider.apiKey,
         baseUrl: provider.baseUrl,
@@ -177,8 +180,8 @@ export const LlmSetupTab: React.FC = () => {
         authType: provider.authType,
         models,
       });
-      if (supportedModels.length > 0 && !supportedModels.some((model) => model.id === activeModel)) {
-        setActiveModel(supportedModels[0].id);
+      if (selectableModels.length > 0 && !selectableModels.some((model) => model.id === activeModel)) {
+        setActiveModel(selectableModels[0].id);
       }
       setConnectionStatus((current) => ({ ...current, [provider.id]: "connected" }));
       const unsupportedCount = models.length - supportedModels.length;
@@ -430,7 +433,7 @@ export const LlmSetupTab: React.FC = () => {
                       setActiveCustomProviderId(p.id);
                       const firstSupportedModel = p.models.find((model) => model.supported !== false);
                       if (firstSupportedModel) {
-                        setActiveModel(firstSupportedModel.id);
+                        setActiveModel(providerModelVariants(firstSupportedModel)[0].id);
                       }
                     }}
                     className={`group flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${
@@ -847,6 +850,7 @@ export const LlmSetupTab: React.FC = () => {
                       selectedProvider.models.length > 0
                         ? selectedProvider.models
                             .filter((model) => model.supported !== false)
+                            .flatMap(providerModelVariants)
                             .map((m) => ({ id: m.id, name: `${m.name} (${m.remoteId || m.id})` }))
                         : []
                     }
@@ -854,6 +858,11 @@ export const LlmSetupTab: React.FC = () => {
                       ? `Sign in with ${isCodex ? "OpenAI" : "GitHub"} to load ${isCodex ? "Codex" : "Copilot"} models`
                       : "No supported models available - fetch the provider catalog"}
                   />
+                  {selectedProvider.models.some((model) => providerModelVariants(model).length > 1) && (
+                    <span className="text-[10px] text-[var(--text-muted)] font-mono">
+                      Reasoning-capable models are listed once per supported effort; the selected effort is sent with every request.
+                    </span>
+                  )}
                   {selectedProvider.models.some((model) => model.supported === false) && (
                     <span className="text-[10px] text-[var(--text-muted)] font-mono">
                       {selectedProvider.models.filter((model) => model.supported === false).length} catalog entries are hidden because their protocol or tool capabilities are not supported.

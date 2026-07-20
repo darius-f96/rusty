@@ -4,7 +4,7 @@ import { skillsService } from "../../services/skillsService";
 import { Cpu, Plus, Trash2, Save, Wand2, Plug } from "lucide-react";
 import { CustomSelect } from "../CustomSelect";
 import { notify } from "../../notificationStore";
-import { selectableProviderModels } from "../../store/providerHelpers";
+import { providerHasModelReference, selectableProviderModels } from "../../store/providerHelpers";
 
 const AVAILABLE_TOOLS = [
   { id: "read_file", label: "Read Files" },
@@ -136,7 +136,7 @@ export const SkillsTab: React.FC = () => {
 
     try {
       const provider = customProviders.find((p) =>
-        p.models.some((m) => m.id === model)
+        providerHasModelReference(p, model)
       );
 
       try {

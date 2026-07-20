@@ -17,7 +17,7 @@ import {
   reconciliationOverlayService,
   RECONCILIATION_OVERLAY_CHANGED_EVENT,
 } from "../../services/reconciliationOverlayService";
-import { selectableProviderModels } from "../../store/providerHelpers";
+import { providerHasModelReference, selectableProviderModels } from "../../store/providerHelpers";
 
 interface ReconciliationGraphPaneProps {
   onClose: () => void;
@@ -313,7 +313,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
 
     socket.onopen = () => {
       const provider = customProviders.find((candidate) =>
-        candidate.models.some((candidateModel) => candidateModel.id === selectedModel)
+        providerHasModelReference(candidate, selectedModel)
       ) || customProviders.find((candidate) => candidate.id === activeCustomProviderId);
       addConsoleLog(`Connected to sidecar. Dispatching ${formattedNodes.length} task nodes with ${Object.keys(duplicateFiles).length} overlapping file groups.`);
 

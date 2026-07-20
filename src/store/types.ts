@@ -7,6 +7,8 @@ import type {
 } from "@xyflow/react";
 import type { McpServerConfig } from "../components/mcp/types";
 
+export type ReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";
+
 export interface ProviderModel {
   id: string;
   name: string;
@@ -16,6 +18,11 @@ export interface ProviderModel {
   supported?: boolean;
   capabilities?: string[];
   reasoning?: boolean;
+  reasoningEffort?: ReasoningEffort;
+  supportedReasoningEfforts?: ReasoningEffort[];
+  defaultReasoningEffort?: ReasoningEffort;
+  thinkingLevelMap?: Record<string, string | null>;
+  thinkingBudgets?: Record<string, number>;
   input?: Array<"text" | "image">;
   contextWindow?: number;
   maxTokens?: number;

@@ -10,7 +10,7 @@ import { notify } from "../../notificationStore";
 import { commandPermissionService, handleCommandPermissionMessage } from "../../services/commandPermissionService";
 import { scheduleTreeRefresh } from "../filetree/FileTreePresenter";
 import { appendBoundedText } from "../../services/boundedTextBuffer";
-import { selectableProviderModels } from "../../store/providerHelpers";
+import { providerHasModelReference, selectableProviderModels } from "../../store/providerHelpers";
 
 interface AgentTabProps {
   tab: any;
@@ -345,7 +345,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
       const currentProviders = useWorkspaceStore.getState().customProviders;
       const currentActiveProviderId = useWorkspaceStore.getState().activeCustomProviderId;
       const prov = currentProviders.find((provider) =>
-        provider.models.some((candidate) => candidate.id === selectedModel)
+        providerHasModelReference(provider, selectedModel)
       ) || currentProviders.find((provider) => provider.id === currentActiveProviderId);
       const chatHistory = useWorkspaceStore.getState().agentChats[tab.id] || [];
       const currentSkills = useWorkspaceStore.getState().skills;

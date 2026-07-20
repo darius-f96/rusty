@@ -528,6 +528,14 @@ export function normalizeCodexModel(model: any): DiscoveredProviderModel {
   const input = Array.isArray(model.inputModalities)
     ? model.inputModalities.filter((item: string) => item === "text" || item === "image")
     : ["text"];
+  const supportedReasoningEfforts = Array.isArray(model.supportedReasoningEfforts)
+    ? model.supportedReasoningEfforts
+      .map((item: any) => item?.reasoningEffort)
+      .filter((effort: string) => effort === "minimal" || effort === "low" || effort === "medium" || effort === "high" || effort === "xhigh")
+    : [];
+  const defaultReasoningEffort = supportedReasoningEfforts.includes(model.defaultReasoningEffort)
+    ? model.defaultReasoningEffort
+    : undefined;
   return {
     id: `${OPENAI_CODEX_PROVIDER_ID}/${remoteId}`,
     remoteId,
@@ -536,6 +544,8 @@ export function normalizeCodexModel(model: any): DiscoveredProviderModel {
     supported: model.hidden !== true,
     capabilities: ["reasoning", ...(input.includes("image") ? ["vision"] : [])],
     reasoning: true,
+    supportedReasoningEfforts,
+    defaultReasoningEffort,
     input: input.length ? input : ["text"],
     contextWindow: 200_000,
     maxTokens: 32_000,
@@ -543,9 +553,7 @@ export function normalizeCodexModel(model: any): DiscoveredProviderModel {
     compat: {
       isDefault: Boolean(model.isDefault),
       defaultReasoningEffort: model.defaultReasoningEffort,
-      supportedReasoningEfforts: Array.isArray(model.supportedReasoningEfforts)
-        ? model.supportedReasoningEfforts.map((item: any) => item?.reasoningEffort).filter(Boolean)
-        : [],
+      supportedReasoningEfforts,
     },
   };
 }
@@ -732,6 +740,7 @@ export async function callCodexWithToolsStreaming(options: {
   sendToken: (token: string) => void;
   cwd?: string;
   maxRounds?: number;
+  reasoning?: "minimal" | "low" | "medium" | "high" | "xhigh";
   shouldAbort?: () => boolean;
 }): Promise<string> {
   return runCodexTurn({

@@ -9,7 +9,7 @@ import {
 } from "../../services/inlineChatService";
 import { MarkdownRenderer } from "../ui/MarkdownRenderer";
 import { CustomSelect } from "../CustomSelect";
-import { selectableProviderModels } from "../../store/providerHelpers";
+import { providerHasModelReference, selectableProviderModels } from "../../store/providerHelpers";
 
 interface InlineChatProps {
   sessionId: string;
@@ -78,7 +78,7 @@ export const InlineChat = ({ sessionId, context, position, onClose }: InlineChat
 
     const userMessage: InlineChatMessage = { role: "user", content: prompt };
     const history = [...messages, userMessage];
-    const provider = providers.find((item) => item.models.some((model) => model.id === selectedModel))
+    const provider = providers.find((item) => providerHasModelReference(item, selectedModel))
       || providers.find((item) => item.id === activeProviderId)
       || null;
 

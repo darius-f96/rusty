@@ -15,7 +15,7 @@ import { commandPermissionService, handleCommandPermissionMessage } from "../../
 import { scheduleTreeRefresh } from "../filetree/FileTreePresenter";
 import { appendBoundedText } from "../../services/boundedTextBuffer";
 import { invoke } from "@tauri-apps/api/core";
-import { selectableModelProviders } from "../../store/providerHelpers";
+import { providerHasModelReference, providerModelVariants, selectableModelProviders } from "../../store/providerHelpers";
 export interface GeneratedTaskDraft {
   key: string;
   title: string;
@@ -167,13 +167,16 @@ export const useExplorerWebSocket = (selectedNode: any) => {
   const filteredProviders = selectableModelProviders(providers, activeCustomProviderId);
   const activeProvider = filteredProviders.find((p) => p.id === activeCustomProviderId);
   const availableModels = activeProvider
-    ? activeProvider.models.filter((model) => model.supported !== false)
+    ? activeProvider.models.filter((model) => model.supported !== false).flatMap(providerModelVariants)
     : [];
   const allAvailableModels = filteredProviders.flatMap((prov) =>
-    prov.models.filter((model: any) => model.supported !== false).map((m: any) => ({
-      id: m.id,
-      name: `${prov.name} / ${m.name}`,
-    }))
+    prov.models
+      .filter((model) => model.supported !== false)
+      .flatMap(providerModelVariants)
+      .map((model) => ({
+        id: model.id,
+        name: `${prov.name} / ${model.name}`,
+      }))
   );
 
   const exploreModel = (selectedNode?.data?.exploreModel as string) || activeModel;
@@ -352,7 +355,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       const currentActiveModel = useWorkspaceStore.getState().activeModel;
       const currentExploreModel = selectedNode?.data?.exploreModel || selectedNode?.data?.model || currentActiveModel;
       const prov = currentProviders.find((provider) =>
-        provider.models.some((candidate) => candidate.id === currentExploreModel)
+        providerHasModelReference(provider, currentExploreModel)
       ) || currentProviders.find((provider) => provider.id === currentActiveProviderId);
       const chatHistory = useWorkspaceStore.getState().globalChatHistory[selectedNodeId] || [];
 
@@ -741,7 +744,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       const currentActiveModel = useWorkspaceStore.getState().activeModel;
       const currentSummarizeModel = selectedNode?.data?.summarizeModel || currentActiveModel;
       const prov = currentProviders.find((provider) =>
-        provider.models.some((candidate) => candidate.id === currentSummarizeModel)
+        providerHasModelReference(provider, currentSummarizeModel)
       ) || currentProviders.find((provider) => provider.id === currentActiveProviderId);
 
       // Always use task-auditor skill for summarization on this node type.
@@ -901,7 +904,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
     socket.onopen = () => {
       const state = useWorkspaceStore.getState();
       const provider = state.customProviders.find((candidate) =>
-        candidate.models.some((candidateModel) => candidateModel.id === taskGenerationModel)
+        providerHasModelReference(candidate, taskGenerationModel)
       ) || state.customProviders.find((candidate) => candidate.id === state.activeCustomProviderId);
       socket.send(JSON.stringify({
         type: "generate_task_nodes",

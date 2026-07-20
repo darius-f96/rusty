@@ -2,14 +2,34 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   discoverProviderModels,
+  parseModelReference,
   providerModelId,
   remoteModelId,
+  resolveProviderModelSelection,
 } from "./llmProviders";
 
 test("model references preserve provider-owned slash IDs", () => {
   const reference = providerModelId("github-models", "openai/gpt-4.1");
   assert.equal(reference, "github-models/openai/gpt-4.1");
   assert.equal(remoteModelId(reference, "github-models"), "openai/gpt-4.1");
+});
+
+test("reasoning variants resolve to the provider's remote model", () => {
+  const reference = "opencode/gpt-5.6-sol::reasoning=xhigh";
+  assert.deepEqual(parseModelReference(reference), {
+    baseReference: "opencode/gpt-5.6-sol",
+    reasoningEffort: "xhigh",
+  });
+  assert.deepEqual(resolveProviderModelSelection({
+    id: "opencode",
+    name: "OpenCode Zen",
+    baseUrl: "https://opencode.ai/zen/v1",
+    models: [{ id: "opencode/gpt-5.6-sol", remoteId: "gpt-5.6-sol", name: "GPT-5.6 Sol" }],
+  }, reference), {
+    model: { id: "opencode/gpt-5.6-sol", remoteId: "gpt-5.6-sol", name: "GPT-5.6 Sol" },
+    modelId: "gpt-5.6-sol",
+    reasoningEffort: "xhigh",
+  });
 });
 
 test("Copilot providers cannot fall through to the generic HTTP adapter", async () => {
@@ -138,6 +158,9 @@ test("current OpenCode models retain protocol metadata and stay selectable", asy
     assert.equal(models.length, 8);
     assert.equal(models.filter((model) => model.supported).length, 8);
     assert.equal(models.find((model) => model.remoteId === "gpt-5.6-sol")?.apiType, "openai-responses");
+    assert.deepEqual(models.find((model) => model.remoteId === "gpt-5.6-sol")?.supportedReasoningEfforts, [
+      "minimal", "low", "medium", "high", "xhigh",
+    ]);
     assert.equal(models.find((model) => model.remoteId === "claude-opus-4-8")?.apiType, "anthropic-messages");
     assert.equal(models.find((model) => model.remoteId === "gemini-3.5-flash")?.apiType, "google-generative-ai");
   } finally {
