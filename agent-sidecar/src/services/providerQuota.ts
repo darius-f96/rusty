@@ -2,6 +2,7 @@ import type { LlmProviderConfig } from "./llmProviders";
 import { resolveProviderApiKey } from "./llmProviders";
 import { readCopilotQuota } from "./copilotService";
 import { readCodexQuota } from "./codexService";
+import { readClaudeCodeQuota } from "./claudeCodeService";
 
 export type ProviderQuotaState = "available" | "unavailable" | "unauthenticated";
 
@@ -250,6 +251,53 @@ export function mapCodexQuota(
   };
 }
 
+const CLAUDE_WINDOW_DETAILS: Record<string, { label: string; minutes: number }> = {
+  five_hour: { label: "5-hour limit", minutes: 300 },
+  seven_day: { label: "Weekly limit", minutes: 10_080 },
+  seven_day_opus: { label: "Weekly Opus limit", minutes: 10_080 },
+  seven_day_sonnet: { label: "Weekly Sonnet limit", minutes: 10_080 },
+};
+
+export function mapClaudeCodeQuota(
+  provider: ProviderIdentity,
+  data: { authenticated: boolean; email?: string; plan?: string; usage?: any; message?: string },
+): ProviderQuotaSnapshot {
+  const base = snapshotBase(provider, "anthropic-claude-code");
+  if (!data.authenticated) {
+    return {
+      ...base,
+      state: "unauthenticated",
+      account: data.email,
+      plan: data.plan,
+      message: data.message || "Sign in with Claude Code to read subscription usage.",
+      manageUrl: "https://claude.ai/settings/usage",
+    };
+  }
+  const usage = data.usage || {};
+  const windows = Object.entries(CLAUDE_WINDOW_DETAILS).flatMap(([id, details]): ProviderQuotaWindow[] => {
+    const value = usage[id];
+    if (!value || typeof value !== "object") return [];
+    const usedPercent = percentage(value.utilization ?? value.used_percent ?? value.usedPercent);
+    return [{
+      id,
+      label: details.label,
+      usedPercent,
+      remainingPercent: usedPercent === undefined ? undefined : 100 - usedPercent,
+      resetAt: isoDate(value.resets_at ?? value.resetsAt),
+      windowMinutes: details.minutes,
+    }];
+  });
+  return {
+    ...base,
+    state: windows.length ? "available" : "unavailable",
+    account: data.email,
+    plan: data.plan,
+    windows,
+    message: windows.length ? data.message : data.message || "Anthropic did not return usage windows for this Claude Code account.",
+    manageUrl: "https://claude.ai/settings/usage",
+  };
+}
+
 interface UnavailableProviderDetails {
   source: string;
   message: string;
@@ -322,6 +370,16 @@ export async function fetchProviderQuota(provider: LlmProviderConfig): Promise<P
       plan: result.status.planType,
       rateLimitResult: result.rateLimitResult,
       message: result.status.message,
+    });
+  }
+  if (provider.transport === "anthropic-claude-agent-sdk" || provider.id === "anthropic-claude-code") {
+    const result = await readClaudeCodeQuota();
+    return mapClaudeCodeQuota(provider, {
+      authenticated: result.status.authenticated,
+      email: result.status.email,
+      plan: result.status.planType,
+      usage: result.usage,
+      message: result.message || result.status.message,
     });
   }
 

@@ -2,9 +2,41 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   mapCodexQuota,
+  mapClaudeCodeQuota,
   mapCopilotQuota,
   mapUnavailableProviderQuota,
 } from "./providerQuota";
+
+test("Claude Code quota mapper uses local login and normalizes usage windows", () => {
+  const quota = mapClaudeCodeQuota(
+    { id: "anthropic-claude-code", name: "Claude Code" },
+    {
+      authenticated: true,
+      email: "developer@example.com",
+      plan: "pro",
+      usage: {
+        five_hour: { utilization: 21, resets_at: "2026-07-21T15:00:00Z" },
+        seven_day: { utilization: 64.5, resets_at: "2026-07-27T00:00:00Z" },
+      },
+    },
+  );
+
+  assert.equal(quota.state, "available");
+  assert.equal(quota.account, "developer@example.com");
+  assert.equal(quota.windows[0].label, "5-hour limit");
+  assert.equal(quota.windows[0].remainingPercent, 79);
+  assert.equal(quota.windows[1].label, "Weekly limit");
+  assert.equal(quota.windows[1].remainingPercent, 35.5);
+});
+
+test("Claude Code quota mapper reports sign-in only when Claude itself is logged out", () => {
+  const quota = mapClaudeCodeQuota(
+    { id: "anthropic-claude-code", name: "Claude Code" },
+    { authenticated: false, message: "Sign in with Claude Code first." },
+  );
+  assert.equal(quota.state, "unauthenticated");
+  assert.match(quota.message || "", /Sign in/);
+});
 
 test("Copilot quota mapper normalizes premium requests and unlimited windows", () => {
   const quota = mapCopilotQuota(

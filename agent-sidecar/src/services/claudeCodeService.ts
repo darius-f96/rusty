@@ -1,6 +1,7 @@
 import { execFile, spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import * as os from "node:os";
 import { promisify } from "node:util";
 import { importEsm } from "./esmImport";
 import type { DiscoveredProviderModel } from "./llmProviders";
@@ -28,6 +29,33 @@ let cachedStatus: ClaudeCodeConnectionStatus | null = null;
 let cachedModels: DiscoveredProviderModel[] = [];
 let probePromise: Promise<ClaudeCodeConnectionStatus> | null = null;
 const execFileAsync = promisify(execFile);
+
+function oauthAccessToken(credentials: any): string | undefined {
+  const token = credentials?.claudeAiOauth?.accessToken
+    || credentials?.oauth?.accessToken
+    || credentials?.accessToken;
+  return typeof token === "string" && token.trim() ? token.trim() : undefined;
+}
+
+async function readClaudeCodeOauthToken(): Promise<string | undefined> {
+  const credentialsPath = path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude"), ".credentials.json");
+  try {
+    return oauthAccessToken(JSON.parse(await fs.promises.readFile(credentialsPath, "utf8")));
+  } catch {
+    // Current macOS builds may keep the same JSON payload in Keychain instead.
+  }
+  if (process.platform === "darwin") {
+    try {
+      const { stdout } = await execFileAsync("security", ["find-generic-password", "-s", "Claude Code-credentials", "-w"], {
+        timeout: 10_000,
+      });
+      return oauthAccessToken(JSON.parse(stdout));
+    } catch {
+      // Authentication status below provides the user-facing error.
+    }
+  }
+  return undefined;
+}
 
 function claudeExecutable(): string {
   const explicit = process.env.AXIOM_CLAUDE_CODE_PATH || process.env.CLAUDE_CODE_PATH;
@@ -102,6 +130,36 @@ export async function getClaudeCodeConnectionStatus(force = false): Promise<Clau
     message: error?.message || "Claude Code authentication could not be verified.",
   })).then((status) => (cachedStatus = status)).finally(() => { probePromise = null; });
   return probePromise;
+}
+
+export async function readClaudeCodeQuota(): Promise<{
+  status: ClaudeCodeConnectionStatus;
+  usage?: any;
+  message?: string;
+}> {
+  const status = await getClaudeCodeConnectionStatus(true);
+  if (!status.authenticated) return { status };
+  const token = await readClaudeCodeOauthToken();
+  if (!token) {
+    return {
+      status,
+      message: "Claude Code is connected, but its OAuth credentials could not be read to retrieve usage.",
+    };
+  }
+  try {
+    const response = await fetch("https://api.anthropic.com/api/oauth/usage", {
+      headers: {
+        authorization: `Bearer ${token}`,
+        "anthropic-beta": "oauth-2025-04-20",
+        accept: "application/json",
+      },
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!response.ok) throw new Error(`Anthropic usage request failed (${response.status}).`);
+    return { status, usage: await response.json() };
+  } catch (error: any) {
+    return { status, message: error?.message || "Claude Code usage could not be retrieved." };
+  }
 }
 
 export async function startClaudeCodeLogin(): Promise<ClaudeCodeConnectionStatus> {
