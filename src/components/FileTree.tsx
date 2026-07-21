@@ -96,6 +96,8 @@ export const FileTree: React.FC<FileTreeProps> = ({ entries }) => {
   const [moveDialogNode, setMoveDialogNode] = useState<any | null>(null);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [createDialog, setCreateDialog] = useState<{ type: "file" | "folder"; dir: string; name: string } | null>(null);
+  const [selectedPaths, setSelectedPaths] = useState<Set<string>>(() => new Set());
+  const [focusedPath, setFocusedPath] = useState<string | null>(null);
   const treeContainerRef = useRef<HTMLDivElement>(null);
   const revealPath = useWorkspaceStore((state) => state.revealPath);
   const clearRevealPath = useWorkspaceStore((state) => state.clearRevealPath);
@@ -104,6 +106,142 @@ export const FileTree: React.FC<FileTreeProps> = ({ entries }) => {
   const revealFileInTree = useWorkspaceStore((state) => state.revealFileInTree);
  
   const { confirm, ConfirmModalComponent } = useConfirm();
+
+  const expandedPaths = useWorkspaceStore((state) => state.expandedPaths);
+  const setPathExpanded = useWorkspaceStore((state) => state.setPathExpanded);
+
+  const visibleEntries = React.useMemo(() => {
+    const result: FileEntry[] = [];
+    const visit = (nodes: FileEntry[]) => {
+      nodes.forEach((node) => {
+        result.push(node);
+        if (node.is_dir && expandedPaths[node.path] && node.children) visit(node.children);
+      });
+    };
+    visit(entries);
+    return result;
+  }, [entries, expandedPaths]);
+
+  useEffect(() => {
+    const existingPaths = new Set<string>();
+    const visit = (nodes: FileEntry[]) => nodes.forEach((node) => {
+      existingPaths.add(node.path);
+      if (node.children) visit(node.children);
+    });
+    visit(entries);
+    setSelectedPaths((current) => new Set([...current].filter((path) => existingPaths.has(path))));
+    setFocusedPath((current) => current && existingPaths.has(current) ? current : null);
+  }, [entries]);
+
+  const openFile = async (node: FileEntry) => {
+    if (node.path.includes("/.axiom/canvas/") && node.path.endsWith(".json")) {
+      try {
+        const { canvasFileService } = await import("./tabs/canvas/services/canvasFileService");
+        const parsedData = await canvasFileService.loadCanvasFromFile(node.path);
+        const tabId = parsedData.id || `canvas_${Date.now()}`;
+        parsedData.id = tabId;
+        const hasContents = parsedData.vfsContents && Object.keys(parsedData.vfsContents).length > 0;
+        const hasTracker = parsedData.vfsTracker && Object.keys(parsedData.vfsTracker).length > 0;
+        if (hasContents || hasTracker) {
+          await canvasFileService.restoreCanvasVfs(parsedData.vfsContents || {}, parsedData.vfsTracker || {}, tabId);
+        }
+        useWorkspaceStore.getState().loadCanvasTab(parsedData);
+      } catch (err: any) {
+        notify("Canvas error", `Failed to load canvas: ${err.message || err}`, "error");
+      }
+      return;
+    }
+    useWorkspaceStore.getState().openTab({
+      id: `file_${node.path.replace(/[^a-zA-Z0-9]/g, "_")}`,
+      type: "file",
+      title: node.name,
+      key: node.path,
+    });
+  };
+
+  const activateEntry = (node: FileEntry) => {
+    if (node.is_dir) setPathExpanded(node.path, !expandedPaths[node.path]);
+    else void openFile(node);
+  };
+
+  const handleEntryClick = (event: React.MouseEvent, node: FileEntry) => {
+    treeContainerRef.current?.focus({ preventScroll: true });
+    setFocusedPath(node.path);
+    if (event.metaKey || event.ctrlKey) {
+      setSelectedPaths((current) => {
+        const next = new Set(current);
+        if (next.has(node.path)) next.delete(node.path);
+        else next.add(node.path);
+        return next;
+      });
+      return;
+    }
+    setSelectedPaths(new Set([node.path]));
+    activateEntry(node);
+  };
+
+  const handleTreeKeyDown = (event: React.KeyboardEvent) => {
+    if (renamingPath || visibleEntries.length === 0) return;
+    const foundIndex = visibleEntries.findIndex((node) => node.path === focusedPath);
+    const currentIndex = foundIndex < 0 ? 0 : foundIndex;
+    const current = visibleEntries[currentIndex];
+    let next: FileEntry | undefined;
+    if (event.key === "ArrowDown") next = visibleEntries[foundIndex < 0 ? 0 : Math.min(currentIndex + 1, visibleEntries.length - 1)];
+    else if (event.key === "ArrowUp") next = visibleEntries[foundIndex < 0 ? 0 : Math.max(currentIndex - 1, 0)];
+    else if (event.key === "ArrowRight") {
+      if (current.is_dir && !expandedPaths[current.path]) setPathExpanded(current.path, true);
+      else if (current.is_dir) next = visibleEntries[currentIndex + 1];
+    } else if (event.key === "ArrowLeft") {
+      if (current.is_dir && expandedPaths[current.path]) setPathExpanded(current.path, false);
+      else {
+        next = [...visibleEntries].slice(0, currentIndex).reverse().find((candidate) =>
+          candidate.is_dir && current.path.startsWith(`${candidate.path}/`)
+        );
+      }
+    } else if (event.key === "Enter") activateEntry(current);
+    else if (event.key === " ") {
+      setSelectedPaths((selected) => {
+        const nextSelection = new Set(selected);
+        if (event.metaKey || event.ctrlKey) {
+          if (nextSelection.has(current.path)) nextSelection.delete(current.path);
+          else nextSelection.add(current.path);
+        } else {
+          nextSelection.clear();
+          nextSelection.add(current.path);
+        }
+        return nextSelection;
+      });
+    } else return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (next) {
+      setFocusedPath(next.path);
+      setSelectedPaths(new Set([next.path]));
+      requestAnimationFrame(() => treeContainerRef.current?.querySelector(`[data-file-path="${CSS.escape(next!.path)}"]`)?.scrollIntoView({ block: "nearest" }));
+    }
+  };
+
+  const movePaths = async (paths: string[], destinationDir: string) => {
+    const uniquePaths = [...new Set(paths)].filter((path) =>
+      !paths.some((other) => other !== path && path.startsWith(`${other}/`))
+    );
+    const movable = uniquePaths.filter((path) => path !== destinationDir && !destinationDir.startsWith(`${path}/`));
+    if (movable.length === 0) return;
+    try {
+      for (const srcPath of movable) {
+        const fileName = srcPath.split("/").pop() || "";
+        const destPath = `${destinationDir}/${fileName}`;
+        if (srcPath !== destPath) await invoke("move_file_or_dir", { src: srcPath, dest: destPath });
+      }
+      await refreshTree();
+      setPathExpanded(destinationDir, true);
+      setSelectedPaths(new Set());
+      notify("Items moved", `Moved ${movable.length} item${movable.length === 1 ? "" : "s"}.`, "success");
+    } catch (err: any) {
+      await refreshTree();
+      notify("Move failed", `Some items could not be moved: ${err}`, "error");
+    }
+  };
  
   useEffect(() => {
     if (revealPath && treeContainerRef.current) {
@@ -127,14 +265,8 @@ export const FileTree: React.FC<FileTreeProps> = ({ entries }) => {
       const dataStr = e.dataTransfer.getData("text/plain");
       if (!dataStr) return;
       const dragData = JSON.parse(dataStr);
-      if (!dragData.path) return;
- 
-      const srcPath = dragData.path;
-      const fileName = srcPath.split("/").pop() || "";
-      const destPath = `${rootPath}/${fileName}`;
-      if (srcPath === destPath) return;
- 
-      await fileTreePresenter.moveItem(srcPath, destPath);
+      const paths = Array.isArray(dragData.paths) ? dragData.paths : dragData.path ? [dragData.path] : [];
+      await movePaths(paths, rootPath);
     } catch (err: any) {
       console.error("Failed to move file to root:", err);
     }
@@ -225,9 +357,13 @@ export const FileTree: React.FC<FileTreeProps> = ({ entries }) => {
   return (
     <div 
       ref={treeContainerRef}
+      role="tree"
+      aria-label="Project files"
+      tabIndex={0}
+      onKeyDown={handleTreeKeyDown}
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleDropOnRoot}
-      className="space-y-[1px] select-none font-sans text-xs text-[var(--text-normal)] w-full min-h-[300px] overflow-y-auto"
+      className="space-y-[1px] select-none font-sans text-xs text-[var(--text-normal)] w-full min-h-[300px] overflow-y-auto focus:outline-none"
     >
       {/* Header with reveal button */}
       <div className="flex items-center justify-between px-2 py-1.5 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/50 sticky top-0 z-10">
@@ -255,6 +391,14 @@ export const FileTree: React.FC<FileTreeProps> = ({ entries }) => {
           renamingPath={renamingPath}
           onRenameComplete={() => setRenamingPath(null)}
           onCreateRequest={(type, dir, name) => setCreateDialog({ type, dir, name })}
+          selectedPaths={selectedPaths}
+          focusedPath={focusedPath}
+          onEntryClick={handleEntryClick}
+          onDragSelection={(node) => {
+            setFocusedPath(node.path);
+            setSelectedPaths(new Set([node.path]));
+          }}
+          onMovePaths={movePaths}
         />
       ))}
 
@@ -379,16 +523,18 @@ const FileTreeContextMenu: React.FC<{
 };
 
 const FileTreeNode: React.FC<{ 
-  node: any; 
-  onContextMenu: (e: React.MouseEvent, node: any) => void;
+  node: FileEntry;
+  onContextMenu: (e: React.MouseEvent, node: FileEntry) => void;
   renamingPath: string | null;
   onRenameComplete: () => void;
   onCreateRequest: (type: "file" | "folder", dir: string, name: string) => void;
-}> = ({ node, onContextMenu, renamingPath, onRenameComplete, onCreateRequest }) => {
+  selectedPaths: Set<string>;
+  focusedPath: string | null;
+  onEntryClick: (event: React.MouseEvent, node: FileEntry) => void;
+  onDragSelection: (node: FileEntry) => void;
+  onMovePaths: (paths: string[], destinationDir: string) => Promise<void>;
+}> = ({ node, onContextMenu, renamingPath, onRenameComplete, onCreateRequest, selectedPaths, focusedPath, onEntryClick, onDragSelection, onMovePaths }) => {
   const expandedPaths = useWorkspaceStore((state) => state.expandedPaths);
-  const togglePathExpanded = useWorkspaceStore((state) => state.togglePathExpanded);
-  const setPathExpanded = useWorkspaceStore((state) => state.setPathExpanded);
-  const openTab = useWorkspaceStore((state) => state.openTab);
   const gitStatus = useWorkspaceStore((state) => state.gitStatus);
   const editorGroups = useWorkspaceStore((state) => state.editorGroups);
   const activeGroupId = useWorkspaceStore((state) => state.activeGroupId);
@@ -401,6 +547,8 @@ const FileTreeNode: React.FC<{
   const isRenaming = renamingPath === node.path;
 
   const isOpen = !!expandedPaths[node.path];
+  const isSelected = selectedPaths.has(node.path);
+  const isFocused = focusedPath === node.path;
   const gitState = getGitState(node, gitStatus);
   const isActiveFile = activeTabId === `file_${node.path.replace(/[^a-zA-Z0-9]/g, "_")}`;
 
@@ -420,45 +568,12 @@ const FileTreeNode: React.FC<{
   }, [isRenaming, node.name, node.is_dir]);
 
   const handleDragStart = (e: React.DragEvent) => {
-    const payload = { path: node.path, name: node.name, isDir: !!node.is_dir };
+    const paths = isSelected ? [...selectedPaths] : [node.path];
+    if (!isSelected) onDragSelection(node);
+    const payload = { path: node.path, paths, name: node.name, isDir: !!node.is_dir };
     e.dataTransfer.setData("text/plain", JSON.stringify(payload));
     e.dataTransfer.effectAllowed = "move";
-  };
-
-  const handleDoubleClick = async () => {
-    if (node.path.includes("/.axiom/canvas/") && node.path.endsWith(".json")) {
-      try {
-        const { canvasFileService } = await import("./tabs/canvas/services/canvasFileService");
-        const parsedData = await canvasFileService.loadCanvasFromFile(node.path);
-        // Hydrate the saved VFS before mounting the canvas. Mounting first can
-        // make reconciliation briefly observe an empty owner tracker and mark
-        // every persisted ledger entry as pending again.
-        const tabId = parsedData.id || `canvas_${Date.now()}`;
-        parsedData.id = tabId;
-
-        // Restore VFS contents and tracker if available so the VFS tab shows
-        // the correct node -> file mapping when the canvas is reopened.
-        const hasContents = parsedData.vfsContents && Object.keys(parsedData.vfsContents).length > 0;
-        const hasTracker = parsedData.vfsTracker && Object.keys(parsedData.vfsTracker).length > 0;
-        if (hasContents || hasTracker) {
-          await canvasFileService.restoreCanvasVfs(
-            parsedData.vfsContents || {},
-            parsedData.vfsTracker || {},
-            tabId
-          );
-        }
-        useWorkspaceStore.getState().loadCanvasTab(parsedData);
-      } catch (err: any) {
-        notify("Canvas error", `Failed to load canvas: ${err.message || err}`, "error");
-      }
-      return;
-    }
-    openTab({
-      id: `file_${node.path.replace(/[^a-zA-Z0-9]/g, "_")}`,
-      type: "file",
-      title: node.name,
-      key: node.path
-    });
+    e.dataTransfer.setData("application/x-axiom-files", JSON.stringify(payload));
   };
 
   const handleRename = async () => {
@@ -499,15 +614,8 @@ const FileTreeNode: React.FC<{
       const dataStr = e.dataTransfer.getData("text/plain");
       if (!dataStr) return;
       const dragData = JSON.parse(dataStr);
-      if (!dragData.path) return;
-      const srcPath = dragData.path;
-      if (srcPath === node.path) return;
-      const fileName = srcPath.split("/").pop() || "";
-      const destPath = `${node.path}/${fileName}`;
-      if (srcPath === destPath) return;
-      await invoke("move_file_or_dir", { src: srcPath, dest: destPath });
-      await refreshTree();
-      setPathExpanded(node.path, true);
+      const paths = Array.isArray(dragData.paths) ? dragData.paths : dragData.path ? [dragData.path] : [];
+      await onMovePaths(paths, node.path);
     } catch (err: any) {
       notify("Move failed", `Move failed: ${err}`, "error");
     }
@@ -535,14 +643,18 @@ const FileTreeNode: React.FC<{
     return (
       <div className="w-full">
         <div
+          role="treeitem"
+          aria-expanded={isOpen}
+          aria-selected={isSelected}
+          data-file-path={node.path}
           draggable={true}
           onDragStart={handleDragStart}
           onDragOver={(e) => e.preventDefault()}
           onDrop={handleDropOnNode}
-          onClick={() => !isRenaming && togglePathExpanded(node.path)}
+          onClick={(event) => !isRenaming && onEntryClick(event, node)}
           onContextMenu={(e) => onContextMenu(e, node)}
           style={{ WebkitUserDrag: "element" } as React.CSSProperties}
-          className={`group relative flex items-center justify-between py-0.5 px-1 hover:bg-[var(--accent-bg)] active:bg-[var(--border-color)]/60 cursor-grab active:cursor-grabbing hover:text-[var(--text-light)] transition-colors font-sans text-xs w-full border border-transparent hover:border-[var(--border-color)]/20 ${gitState ? gitState.colorClass : "text-[var(--text-normal)]"}`}
+          className={`group relative flex items-center justify-between py-0.5 px-1 active:bg-[var(--border-color)]/60 cursor-grab active:cursor-grabbing hover:text-[var(--text-light)] transition-colors font-sans text-xs w-full border ${isSelected ? "bg-[var(--accent-bg)] border-[var(--border-active)]" : "hover:bg-[var(--accent-bg)] border-transparent hover:border-[var(--border-color)]/20"} ${isFocused ? "ring-1 ring-inset ring-[var(--accent-color)]/60" : ""} ${gitState ? gitState.colorClass : "text-[var(--text-normal)]"}`}
         >
           <div className="flex items-center min-w-0 flex-1 mr-14">
             <span className="mr-0.5 text-[var(--text-muted)] flex-shrink-0">
@@ -591,7 +703,7 @@ const FileTreeNode: React.FC<{
         {isOpen && node.children && (
           <div className="pl-2 border-l border-[var(--border-color)]/60 ml-1.5 mt-[1px] space-y-[1px]">
             {node.children.map((child: any) => (
-              <FileTreeNode key={child.path} node={child} onContextMenu={onContextMenu} renamingPath={renamingPath} onRenameComplete={onRenameComplete} onCreateRequest={onCreateRequest} />
+              <FileTreeNode key={child.path} node={child} onContextMenu={onContextMenu} renamingPath={renamingPath} onRenameComplete={onRenameComplete} onCreateRequest={onCreateRequest} selectedPaths={selectedPaths} focusedPath={focusedPath} onEntryClick={onEntryClick} onDragSelection={onDragSelection} onMovePaths={onMovePaths} />
             ))}
           </div>
         )}
@@ -601,17 +713,21 @@ const FileTreeNode: React.FC<{
 
   return (
     <div
+      role="treeitem"
+      aria-selected={isSelected}
       draggable={true}
       onDragStart={handleDragStart}
-      onDoubleClick={isRenaming ? undefined : handleDoubleClick}
+      onClick={(event) => !isRenaming && onEntryClick(event, node)}
       onContextMenu={(e) => onContextMenu(e, node)}
       data-file-path={node.path}
       style={{ WebkitUserDrag: "element" } as React.CSSProperties}
       className={`group relative flex items-center justify-between py-1 px-1.5 pl-[18px] transition-all cursor-grab active:cursor-grabbing font-sans text-xs w-full border rounded-md ${
-        isActiveFile
+        isSelected
+          ? "bg-[var(--accent-bg)] border-[var(--border-active)] text-[var(--text-light)] font-medium shadow-sm"
+          : isActiveFile
           ? "bg-[var(--color-surface-sunken)] border-[var(--color-border-subtle)] text-[var(--text-light)] font-medium shadow-sm"
           : "hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] border-transparent hover:border-[var(--border-color)]/20 " + (gitState ? gitState.colorClass : "text-[var(--text-normal)]")
-      }`}
+      } ${isFocused ? "ring-1 ring-inset ring-[var(--accent-color)]/60" : ""}`}
     >
       <div className="flex items-center min-w-0 flex-1 mr-6">
         <FileIcon fileName={node.name} size={13} className="mr-1.5 flex-shrink-0" />
