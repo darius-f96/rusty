@@ -33,6 +33,14 @@ export interface SubagentActivity {
   logs?: string[];
   startedAt?: string;
   updatedAt?: string;
+  parentAgentId?: string;
+  scope?: string[];
+  excludedScope?: string[];
+  expectedOutput?: "findings" | "review" | "recommendation";
+  evidenceRequired?: boolean;
+  timeoutMs?: number;
+  queuePosition?: number;
+  incorporated?: boolean;
 }
 
 interface ChatProps {

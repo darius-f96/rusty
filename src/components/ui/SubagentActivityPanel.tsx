@@ -32,6 +32,7 @@ const subagentStats = (subagent: SubagentActivity) => {
 
 export const SubagentActivityPanel: React.FC<SubagentActivityPanelProps> = ({ subagents }) => {
   const [now, setNow] = useState(() => Date.now());
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 1000);
@@ -90,8 +91,17 @@ export const SubagentActivityPanel: React.FC<SubagentActivityPanelProps> = ({ su
           const active = isSubagentActive(subagent.status);
           const failed = subagent.status === "error" || subagent.status === "aborted" || subagent.status === "stopped";
           const stats = subagentStats(subagent);
+          const expanded = expandedIds.has(subagent.id);
+          const detailsId = `delegation-details-${subagent.id.replace(/[^A-Za-z0-9_-]/g, "-")}`;
+          const hasDetails = !!(
+            subagent.result
+            || subagent.error
+            || subagent.scope?.length
+            || subagent.excludedScope?.length
+            || subagent.parentAgentId
+          );
           return (
-            <div key={subagent.id} className="rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-elevated)] px-3 py-2">
+            <div key={subagent.id} id={`delegation-card-${subagent.id.replace(/[^A-Za-z0-9_-]/g, "-")}`} className="rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-elevated)] px-3 py-2">
               <div className="flex items-start gap-2 text-[11px] font-mono">
                 {failed ? (
                   <AlertCircle size={13} className="mt-0.5 text-[var(--color-status-danger)] flex-shrink-0" />
@@ -109,6 +119,12 @@ export const SubagentActivityPanel: React.FC<SubagentActivityPanelProps> = ({ su
                     </span>
                     <span className="text-[9px] uppercase tracking-wider text-[var(--text-muted)]">{subagentStatusLabel(subagent.status)}</span>
                     {stats && <span className="text-[9px] text-[var(--text-muted)]">{stats}</span>}
+                    {subagent.queuePosition && <span className="text-[9px] text-[var(--text-muted)]">queue #{subagent.queuePosition}</span>}
+                    {subagent.incorporated !== undefined && !active && (
+                      <span className="text-[9px] text-[var(--text-muted)]">
+                        {subagent.incorporated ? "incorporated by parent" : "awaiting parent"}
+                      </span>
+                    )}
                   </div>
                   <div className="text-[var(--text-normal)] break-words">{subagent.description}</div>
                   {active && (
@@ -119,6 +135,41 @@ export const SubagentActivityPanel: React.FC<SubagentActivityPanelProps> = ({ su
                     </div>
                   )}
                   {renderSubagentLogs(subagent)}
+                  {hasDetails && (
+                    <div className="mt-2">
+                      <button
+                        id={`delegation-toggle-${subagent.id.replace(/[^A-Za-z0-9_-]/g, "-")}`}
+                        type="button"
+                        aria-expanded={expanded}
+                        aria-controls={detailsId}
+                        aria-label={`${expanded ? "Hide" : "Show"} details for ${subagent.displayName || subagent.description}`}
+                        onClick={() => setExpandedIds((current) => {
+                          const next = new Set(current);
+                          if (next.has(subagent.id)) next.delete(subagent.id);
+                          else next.add(subagent.id);
+                          return next;
+                        })}
+                        className="rounded border border-[var(--color-border-subtle)] px-2 py-1 text-[9px] uppercase tracking-wider text-[var(--text-muted)] hover:text-[var(--text-normal)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-color)]"
+                      >
+                        {expanded ? "Hide details" : "Inspect details"}
+                      </button>
+                      {expanded && (
+                        <div id={detailsId} className="mt-2 space-y-2 rounded border border-[var(--color-border-subtle)] bg-[var(--color-log-background)] p-2 text-[10px] text-[var(--text-normal)]">
+                          {subagent.parentAgentId && <div><span className="text-[var(--text-muted)]">Parent:</span> {subagent.parentAgentId}</div>}
+                          {subagent.scope?.length ? <div><span className="text-[var(--text-muted)]">Scope:</span> {subagent.scope.join(", ")}</div> : null}
+                          {subagent.excludedScope?.length ? <div><span className="text-[var(--text-muted)]">Excluded:</span> {subagent.excludedScope.join(", ")}</div> : null}
+                          {subagent.expectedOutput && <div><span className="text-[var(--text-muted)]">Deliverable:</span> {subagent.expectedOutput}</div>}
+                          {subagent.error && <div role="alert" className="text-[var(--color-status-danger)] whitespace-pre-wrap">{subagent.error}</div>}
+                          {subagent.result && (
+                            <div>
+                              <div className="mb-1 text-[var(--text-muted)]">Findings</div>
+                              <pre className="max-h-64 overflow-auto whitespace-pre-wrap font-mono">{subagent.result}</pre>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

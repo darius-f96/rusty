@@ -16,6 +16,7 @@ import { scheduleTreeRefresh } from "../filetree/FileTreePresenter";
 import { appendBoundedText } from "../../services/boundedTextBuffer";
 import { invoke } from "@tauri-apps/api/core";
 import { providerHasModelReference, providerModelVariants, selectableModelProviders } from "../../store/providerHelpers";
+import { createAgentHarnessSocket } from "../../services/agentHarnessClient";
 export interface GeneratedTaskDraft {
   key: string;
   title: string;
@@ -101,7 +102,7 @@ const mergeSubagentUpdate = (nodeId: string, incoming: IncomingSubagent): Subage
     agent.id === incoming.id || (!!incoming.previousId && agent.id === incoming.previousId)
   );
   const incomingLogs = [...(incoming.logs || []), ...(incoming.appendLog ? [incoming.appendLog] : [])];
-  const cleanIncoming = { ...incoming, result: undefined, error: undefined };
+  const cleanIncoming = { ...incoming };
   delete cleanIncoming.previousId;
   delete cleanIncoming.appendLog;
 
@@ -322,7 +323,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
     console.log(`[SidePane] Connecting to ws://localhost:4000...`);
     let socket: WebSocket;
     try {
-      socket = new WebSocket("ws://localhost:4000");
+      socket = createAgentHarnessSocket();
       explorerSocketRef.current = socket;
       if (selectedNodeId) {
         activeExplorerSockets.set(selectedNodeId, socket);
@@ -708,7 +709,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
 
     let socket: WebSocket;
     try {
-      socket = new WebSocket("ws://localhost:4000");
+      socket = createAgentHarnessSocket();
       explorerSocketRef.current = socket;
       if (selectedNodeId) {
         activeExplorerSockets.set(selectedNodeId, socket);
@@ -881,7 +882,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
     const additionalInstructions = getTaskGenerationViewState(taskNodeId).instructions.trim();
     let socket: WebSocket;
     try {
-      socket = new WebSocket("ws://localhost:4000");
+      socket = createAgentHarnessSocket();
     } catch (error: any) {
       updateTaskGenerationViewState(taskNodeId, {
         failure: { message: error?.message || String(error) },

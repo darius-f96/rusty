@@ -1,4 +1,5 @@
 import { CustomProvider } from "../store";
+import { agentHarnessClient, RunEvent } from "./agentHarnessClient";
 
 export interface InlineChatMessage {
   role: "user" | "assistant";
@@ -38,54 +39,51 @@ export interface InlineChatRun {
   cancel: () => void;
 }
 
-/** WebSocket transport for editor inline chat. It contains no presentation logic. */
+/** Shared harness transport for editor inline chat. It contains no presentation logic. */
 export const inlineChatService = {
   send(request: InlineChatRequest, callbacks: InlineChatCallbacks): InlineChatRun {
-    const socket = new WebSocket("ws://localhost:4000");
     let settled = false;
+    let cancelRun: (() => Promise<void>) | undefined;
 
     const fail = (message: string) => {
       if (settled) return;
       settled = true;
+      unsubscribe();
       callbacks.onError(message);
-      socket.close();
     };
 
-    socket.onopen = () => {
-      socket.send(JSON.stringify({ type: "inline_chat", ...request }));
-    };
-
-    socket.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data);
-        if (message.sessionId !== request.sessionId) return;
-        if (message.type === "inline_chat_token") {
-          callbacks.onToken(String(message.content || ""));
-        } else if (message.type === "inline_chat_complete") {
-          settled = true;
-          callbacks.onComplete(String(message.response || ""));
-          socket.close();
-        } else if (message.type === "inline_chat_error") {
-          fail(String(message.error || "Inline chat failed."));
-        }
-      } catch (error: any) {
-        fail(error?.message || "The inline chat response was invalid.");
+    const handleEvent = (message: RunEvent) => {
+      if (message.sessionId !== request.sessionId) return;
+      if (message.type === "inline_chat_token") {
+        callbacks.onToken(String(message.content || ""));
+      } else if (message.type === "inline_chat_complete") {
+        settled = true;
+        unsubscribe();
+        callbacks.onComplete(String(message.response || ""));
+      } else if (message.type === "inline_chat_error") {
+        fail(String(message.error || "Inline chat failed."));
       }
     };
+    const unsubscribe = agentHarnessClient.subscribe(request.sessionId, handleEvent);
 
-    socket.onerror = () => fail("Could not connect to the Pi sidecar on port 4000.");
-    socket.onclose = () => {
-      if (!settled) fail("The inline chat connection closed before a response was received.");
-    };
+    void agentHarnessClient.startRun({
+      type: "inline_chat",
+      ...request,
+      runId: request.sessionId,
+      conversationId: request.sessionId,
+    }).then((handle) => {
+      cancelRun = handle.cancel;
+      if (settled) void handle.cancel();
+    }).catch((error: unknown) => {
+      fail(error instanceof Error ? error.message : "Could not connect to the agent sidecar on port 4000.");
+    });
 
     return {
       cancel: () => {
         if (settled) return;
         settled = true;
-        if (socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({ type: "inline_chat_stop", sessionId: request.sessionId }));
-        }
-        socket.close();
+        unsubscribe();
+        if (cancelRun) void cancelRun();
       },
     };
   },

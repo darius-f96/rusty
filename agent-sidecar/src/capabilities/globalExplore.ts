@@ -9,7 +9,7 @@
 import { WebSocket } from "ws";
 import path from "path";
 import fs from "fs";
-import { safeSend, getNextId, registerPendingRequest } from "../services/websocket";
+import { safeSend, request, validateRpcResponse } from "../services/websocket";
 import { createListFilesTool, createSearchCodebaseTool, listFilesRecursive } from "../services/tools";
 import { callLlmWithToolsPiStreaming } from "../services/llmRuntime";
 import { createMcpTools, McpServerConfig } from "../services/mcpClient";
@@ -54,25 +54,23 @@ export async function globalExplore(ws: WebSocket, data: any): Promise<void> {
         }
 
         sendLog(`Reading file: ${filePath}`);
-        return new Promise((resolve, reject) => {
-          const requestId = getNextId();
-          registerPendingRequest(requestId, ws, (res) => {
-            if (res.error) {
-              const errorMsg = String(res.error).toLowerCase();
-              if (errorMsg.includes("not found") || errorMsg.includes("no such file") || errorMsg.includes("exist")) {
-                console.log(`WebSocket [Server] global_explore read_file target not found, returning placeholder: ${resolvedPath}`);
-                resolve("[File does not exist yet. You can create it by calling write_file with content.]");
-              } else {
-                console.error(`WebSocket [Server] read_file error: ${res.error}`);
-                reject(new Error(res.error));
-              }
-            } else {
-              console.log(`WebSocket [Server] read_file success: ${filePath} (${res.content?.length || 0} chars)`);
-              resolve(res.content);
-            }
-          });
-          safeSend(ws, { type: "read_file", requestId, path: resolvedPath });
+        const res = await request(ws, {
+          type: "read_file",
+          runId: nodeId,
+          payload: { path: resolvedPath },
+          validateResponse: validateRpcResponse,
         });
+        if (res.error) {
+          const errorMsg = String(res.error).toLowerCase();
+          if (errorMsg.includes("not found") || errorMsg.includes("no such file") || errorMsg.includes("exist")) {
+            console.log(`WebSocket [Server] global_explore read_file target not found, returning placeholder: ${resolvedPath}`);
+            return "[File does not exist yet. You can create it by calling write_file with content.]";
+          }
+          console.error(`WebSocket [Server] read_file error: ${res.error}`);
+          throw new Error(String(res.error));
+        }
+        console.log(`WebSocket [Server] read_file success: ${filePath} (${String(res.content || "").length} chars)`);
+        return res.content;
       }
     };
 

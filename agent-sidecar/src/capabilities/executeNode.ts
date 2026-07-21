@@ -8,7 +8,7 @@
 
 import { WebSocket } from "ws";
 import path from "path";
-import { safeSend, getNextId, registerPendingRequest } from "../services/websocket";
+import { safeSend, request, validateRpcResponse } from "../services/websocket";
 import { createListFilesTool, createSearchCodebaseTool } from "../services/tools";
 import { createMcpTools, McpServerConfig } from "../services/mcpClient";
 import { createLspTools } from "../services/lspTools";
@@ -67,25 +67,23 @@ export async function executeNode(ws: WebSocket, data: any): Promise<void> {
         console.log(`WebSocket [Server] tool read_file requested: ${filePath}`);
         sendLog(`AI reading file context: ${filePath}`);
         const resolvedPath = path.isAbsolute(filePath) ? filePath : path.join(workspaceRoot, filePath);
-        return new Promise((resolve, reject) => {
-          const requestId = getNextId();
-          registerPendingRequest(requestId, ws, (res) => {
-            if (res.error) {
-              const errorMsg = String(res.error).toLowerCase();
-              if (errorMsg.includes("not found") || errorMsg.includes("no such file") || errorMsg.includes("exist")) {
-                console.log(`WebSocket [Server] read_file target not found, returning placeholder for new file creation: ${resolvedPath}`);
-                resolve("[File does not exist yet. You can create it by calling write_file with content.]");
-              } else {
-                console.error(`WebSocket [Server] read_file failed for: ${resolvedPath}`, res.error);
-                reject(new Error(res.error));
-              }
-            } else {
-              console.log(`WebSocket [Server] read_file success for: ${resolvedPath} (${res.content?.length || 0} chars)`);
-              resolve(res.content);
-            }
-          });
-          safeSend(ws, { type: "read_file", requestId, path: resolvedPath });
+        const res = await request(ws, {
+          type: "read_file",
+          runId: nodeId,
+          payload: { path: resolvedPath },
+          validateResponse: validateRpcResponse,
         });
+        if (res.error) {
+          const errorMsg = String(res.error).toLowerCase();
+          if (errorMsg.includes("not found") || errorMsg.includes("no such file") || errorMsg.includes("exist")) {
+            console.log(`WebSocket [Server] read_file target not found, returning placeholder for new file creation: ${resolvedPath}`);
+            return "[File does not exist yet. You can create it by calling write_file with content.]";
+          }
+          console.error(`WebSocket [Server] read_file failed for: ${resolvedPath}`, res.error);
+          throw new Error(String(res.error));
+        }
+        console.log(`WebSocket [Server] read_file success for: ${resolvedPath} (${String(res.content || "").length} chars)`);
+        return res.content;
       }
     };
 
@@ -106,19 +104,18 @@ export async function executeNode(ws: WebSocket, data: any): Promise<void> {
         const resolvedPath = path.isAbsolute(filePath) ? filePath : path.join(workspaceRoot, filePath);
         modifiedFiles.add(resolvedPath);
         
-        return new Promise((resolve, reject) => {
-          const requestId = getNextId();
-          registerPendingRequest(requestId, ws, (res) => {
-            if (res.error) {
-              console.error(`WebSocket [Server] write_file failed for: ${resolvedPath}`, res.error);
-              reject(new Error(res.error));
-            } else {
-              console.log(`WebSocket [Server] write_file success for: ${resolvedPath}`);
-              resolve(`File successfully written to: ${resolvedPath}`);
-            }
-          });
-          safeSend(ws, { type: "write_file", requestId, path: resolvedPath, content });
+        const res = await request(ws, {
+          type: "write_file",
+          runId: nodeId,
+          payload: { path: resolvedPath, content },
+          validateResponse: validateRpcResponse,
         });
+        if (res.error) {
+          console.error(`WebSocket [Server] write_file failed for: ${resolvedPath}`, res.error);
+          throw new Error(String(res.error));
+        }
+        console.log(`WebSocket [Server] write_file success for: ${resolvedPath}`);
+        return `File successfully written to: ${resolvedPath}`;
       }
     };
 

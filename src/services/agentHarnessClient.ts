@@ -1,0 +1,405 @@
+import {
+  AGENT_PROTOCOL_CAPABILITIES,
+  AGENT_PROTOCOL_VERSION,
+  AgentEnvelope,
+  isRecord,
+  parseAgentMessage,
+  unwrapEnvelope,
+} from "../../shared/agentProtocol";
+
+export type ConnectionState = "disconnected" | "connecting" | "connected" | "reconnecting";
+export type RunEvent = Record<string, unknown> & { type: string; runId: string };
+export type RunEventListener = (event: RunEvent) => void;
+export type Unsubscribe = () => void;
+
+export interface StartRunInput extends Record<string, unknown> {
+  type: string;
+  conversationId?: string;
+  runId?: string;
+  agentId?: string;
+}
+
+export interface RunHandle {
+  conversationId: string;
+  runId: string;
+  cancel: () => Promise<void>;
+  subscribe: (listener: RunEventListener) => Unsubscribe;
+}
+
+export class AgentHarnessClientError extends Error {
+  constructor(public readonly code: string, message: string, options?: { cause?: unknown }) {
+    super(message);
+    this.name = "AgentHarnessClientError";
+    if (options && "cause" in options) (this as Error & { cause?: unknown }).cause = options.cause;
+  }
+}
+
+export interface AgentHarnessClientOptions {
+  endpoint?: string;
+  createWebSocket?: (url: string) => WebSocket;
+  handshakeTimeoutMs?: number;
+  maxReconnectAttempts?: number;
+}
+
+export class AgentHarnessClient {
+  private socket?: WebSocket;
+  private state: ConnectionState = "disconnected";
+  private connectPromise?: Promise<void>;
+  private reconnectAttempt = 0;
+  private reconnectTimer?: ReturnType<typeof setTimeout>;
+  private intentionallyDisconnected = false;
+  private readonly listeners = new Map<string, Set<RunEventListener>>();
+  private readonly allListeners = new Set<RunEventListener>();
+  private readonly outgoingSequences = new Map<string, number>();
+  private readonly incomingSequences = new Map<string, number>();
+  private selectedCapabilities: string[] = [];
+  private connectionId = "";
+
+  private readonly endpoint: string;
+  private readonly createWebSocket: (url: string) => WebSocket;
+  private readonly handshakeTimeoutMs: number;
+  private readonly maxReconnectAttempts: number;
+
+  constructor(options: AgentHarnessClientOptions = {}) {
+    this.endpoint = options.endpoint || "ws://localhost:4000";
+    this.createWebSocket = options.createWebSocket || ((url) => new WebSocket(url));
+    this.handshakeTimeoutMs = options.handshakeTimeoutMs ?? 5_000;
+    this.maxReconnectAttempts = options.maxReconnectAttempts ?? 6;
+  }
+
+  getConnectionState(): ConnectionState {
+    return this.state;
+  }
+
+  getCapabilities(): readonly string[] {
+    return this.selectedCapabilities;
+  }
+
+  getConnectionId(): string {
+    return this.connectionId;
+  }
+
+  connect(): Promise<void> {
+    if (this.socket?.readyState === WebSocket.OPEN && this.state === "connected") return Promise.resolve();
+    if (this.connectPromise) return this.connectPromise;
+    this.intentionallyDisconnected = false;
+    this.state = this.reconnectAttempt > 0 ? "reconnecting" : "connecting";
+
+    this.connectPromise = new Promise<void>((resolve, reject) => {
+      const socket = this.createWebSocket(this.endpoint);
+      this.socket = socket;
+      let welcomed = false;
+      const timer = setTimeout(() => {
+        if (welcomed) return;
+        socket.close(1002, "Protocol handshake timed out.");
+        reject(new AgentHarnessClientError("HANDSHAKE_TIMEOUT", "Agent sidecar protocol handshake timed out."));
+      }, this.handshakeTimeoutMs);
+
+      socket.onopen = () => {
+        socket.send(JSON.stringify({
+          type: "protocol.hello",
+          supportedVersions: [AGENT_PROTOCOL_VERSION],
+          capabilities: [...AGENT_PROTOCOL_CAPABILITIES],
+        }));
+      };
+      socket.onmessage = (event) => {
+        let value: unknown;
+        try {
+          value = JSON.parse(String(event.data));
+        } catch (error) {
+          this.emitDiagnostic("client.invalid_json", { error: String(error) });
+          return;
+        }
+        if (isRecord(value) && value.type === "protocol.welcome") {
+          welcomed = true;
+          clearTimeout(timer);
+          this.state = "connected";
+          this.reconnectAttempt = 0;
+          this.selectedCapabilities = Array.isArray(value.capabilities)
+            ? value.capabilities.filter((item): item is string => typeof item === "string")
+            : [];
+          this.connectionId = typeof value.connectionId === "string" ? value.connectionId : "";
+          this.connectPromise = undefined;
+          resolve();
+          return;
+        }
+        if (isRecord(value) && value.type === "protocol.error") {
+          const message = isRecord(value.error) && typeof value.error.message === "string"
+            ? value.error.message
+            : "Agent protocol negotiation failed.";
+          clearTimeout(timer);
+          reject(new AgentHarnessClientError("PROTOCOL_ERROR", message));
+          return;
+        }
+        this.handleIncoming(value);
+      };
+      socket.onerror = () => {
+        if (!welcomed) {
+          clearTimeout(timer);
+          this.connectPromise = undefined;
+          reject(new AgentHarnessClientError("CONNECTION_FAILED", "Could not connect to the agent sidecar."));
+        }
+      };
+      socket.onclose = () => {
+        clearTimeout(timer);
+        this.socket = undefined;
+        this.connectPromise = undefined;
+        this.state = "disconnected";
+        if (!welcomed) reject(new AgentHarnessClientError("CONNECTION_CLOSED", "Agent sidecar connection closed during handshake."));
+        if (!this.intentionallyDisconnected) this.scheduleReconnect();
+      };
+    });
+    return this.connectPromise;
+  }
+
+  disconnect(): void {
+    this.intentionallyDisconnected = true;
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = undefined;
+    this.socket?.close(1000, "Client disconnected.");
+    this.socket = undefined;
+    this.connectPromise = undefined;
+    this.state = "disconnected";
+  }
+
+  async startRun(input: StartRunInput): Promise<RunHandle> {
+    await this.connect();
+    const runId = input.runId || crypto.randomUUID();
+    const conversationId = input.conversationId || String(input.tabId || input.nodeId || runId);
+    this.sendEnvelope({ ...input, runId, conversationId });
+    return {
+      conversationId,
+      runId,
+      cancel: () => this.cancelRun(runId, input),
+      subscribe: (listener) => this.subscribe(runId, listener),
+    };
+  }
+
+  async cancelRun(runId: string, routing: Record<string, unknown> = {}): Promise<void> {
+    await this.connect();
+    const requestType = String(routing.type || "agent_chat");
+    const cancelType = requestType === "inline_chat"
+      ? "inline_chat_stop"
+      : requestType === "generate_task_nodes"
+        ? "generate_task_nodes_stop"
+        : "agent_chat_stop";
+    this.sendEnvelope({ ...routing, type: cancelType, runId });
+  }
+
+  async respondToQuestion(input: { runId: string; requestId: string; answer: string }): Promise<void> {
+    await this.connect();
+    this.sendEnvelope({ type: "agent_question_response", ...input });
+  }
+
+  async send(input: StartRunInput): Promise<void> {
+    await this.connect();
+    this.sendEnvelope(input);
+  }
+
+  async respondToRpc(requestEvent: RunEvent, payload: Record<string, unknown>): Promise<void> {
+    await this.connect();
+    const requestId = String(requestEvent.requestId || "");
+    if (!requestId) throw new AgentHarnessClientError("INVALID_RPC_REQUEST", "RPC request event is missing requestId.");
+    this.sendEnvelope({
+      type: `${requestEvent.type}_response`,
+      ...payload,
+      runId: requestEvent.runId,
+      requestId,
+      correlationId: requestId,
+    });
+  }
+
+  async replayRun(workspaceRoot: string, runId: string, afterSequence = 0): Promise<{ events: unknown[]; state: unknown }> {
+    await this.connect();
+    const requestId = crypto.randomUUID();
+    return new Promise((resolve, reject) => {
+      let timer: number | undefined;
+      const unsubscribe = this.subscribe(runId, (event) => {
+        if (event.requestId !== requestId) return;
+        if (event.type === "run_events_error") {
+          if (timer !== undefined) window.clearTimeout(timer);
+          unsubscribe();
+          reject(new AgentHarnessClientError("EVENT_REPLAY_FAILED", String(event.error || "Run event replay failed.")));
+        } else if (event.type === "run_events_result") {
+          if (timer !== undefined) window.clearTimeout(timer);
+          unsubscribe();
+          resolve({ events: Array.isArray(event.events) ? event.events : [], state: event.state });
+        }
+      });
+      timer = window.setTimeout(() => {
+        unsubscribe();
+        reject(new AgentHarnessClientError("EVENT_REPLAY_TIMEOUT", "Run event replay timed out."));
+      }, 10_000);
+      this.sendEnvelope({ type: "run_events_query", workspaceRoot, runId, requestId, afterSequence });
+    });
+  }
+
+  subscribe(runId: string, listener: RunEventListener): Unsubscribe {
+    const listeners = this.listeners.get(runId) || new Set<RunEventListener>();
+    listeners.add(listener);
+    this.listeners.set(runId, listeners);
+    return () => {
+      listeners.delete(listener);
+      if (listeners.size === 0) this.listeners.delete(runId);
+    };
+  }
+
+  subscribeAll(listener: RunEventListener): Unsubscribe {
+    this.allListeners.add(listener);
+    return () => this.allListeners.delete(listener);
+  }
+
+  private sendEnvelope(value: StartRunInput): void {
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN || this.state !== "connected") {
+      throw new AgentHarnessClientError("NOT_CONNECTED", "Agent harness client is not connected.");
+    }
+    const { type, conversationId = String(value.runId), runId = crypto.randomUUID(), agentId = "user", ...payload } = value;
+    const sequence = (this.outgoingSequences.get(runId) || 0) + 1;
+    this.outgoingSequences.set(runId, sequence);
+    const envelope: AgentEnvelope = {
+      protocolVersion: AGENT_PROTOCOL_VERSION,
+      conversationId,
+      runId,
+      messageId: crypto.randomUUID(),
+      correlationId: typeof value.correlationId === "string" ? value.correlationId : undefined,
+      agentId,
+      sequence,
+      timestamp: new Date().toISOString(),
+      type,
+      payload,
+    };
+    this.socket.send(JSON.stringify(envelope));
+  }
+
+  private handleIncoming(value: unknown): void {
+    const parsed = parseAgentMessage(value);
+    if (parsed.kind === "invalid" || parsed.kind === "hello") {
+      this.emitDiagnostic("client.invalid_message", { detail: parsed.kind === "invalid" ? parsed.error.error.message : "Unexpected hello." });
+      return;
+    }
+    const flat = parsed.kind === "modern" ? unwrapEnvelope(parsed.value) : parsed.value;
+    if (typeof flat.type !== "string") return;
+    const runId = parsed.kind === "modern"
+      ? parsed.value.runId
+      : String(flat.runId || flat.tabId || flat.nodeId || flat.sessionId || "legacy");
+    if (parsed.kind === "modern") {
+      const previous = this.incomingSequences.get(runId) || 0;
+      if (parsed.value.sequence <= previous) return;
+      if (previous > 0 && parsed.value.sequence > previous + 1) {
+        this.emitDiagnostic("client.sequence_gap", { runId, expected: previous + 1, received: parsed.value.sequence });
+      }
+      this.incomingSequences.set(runId, parsed.value.sequence);
+    }
+    const event = { ...flat, type: flat.type, runId } as RunEvent;
+    for (const listener of this.listeners.get(runId) || []) listener(event);
+    for (const listener of this.allListeners) listener(event);
+  }
+
+  private emitDiagnostic(type: string, payload: Record<string, unknown>): void {
+    const event = { type, runId: String(payload.runId || "client"), ...payload } as RunEvent;
+    for (const listener of this.allListeners) listener(event);
+  }
+
+  private scheduleReconnect(): void {
+    if (this.reconnectAttempt >= this.maxReconnectAttempts) {
+      this.emitDiagnostic("client.reconnect_exhausted", { attempts: this.reconnectAttempt });
+      return;
+    }
+    this.reconnectAttempt += 1;
+    this.state = "reconnecting";
+    const delayMs = Math.min(10_000, 250 * 2 ** (this.reconnectAttempt - 1));
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = undefined;
+      void this.connect().catch((error) => this.emitDiagnostic("client.reconnect_failed", { error: String(error) }));
+    }, delayMs);
+  }
+}
+
+export const agentHarnessClient = new AgentHarnessClient();
+
+/**
+ * Transitional WebSocket-shaped facade. It lets legacy UI handlers share the
+ * single negotiated connection while each surface is converted to typed events.
+ */
+export function createAgentHarnessSocket(): WebSocket {
+  let readyState: number = WebSocket.CONNECTING;
+  let closed = false;
+  const runIds = new Set<string>();
+  const requestRuns = new Map<string, string>();
+  const activeRuns = new Map<string, string>();
+  let onopen: ((this: WebSocket, ev: Event) => unknown) | null = null;
+  let onmessage: ((this: WebSocket, ev: MessageEvent) => unknown) | null = null;
+  let onerror: ((this: WebSocket, ev: Event) => unknown) | null = null;
+  let onclose: ((this: WebSocket, ev: CloseEvent) => unknown) | null = null;
+
+  const facade = {
+    get readyState() { return readyState; },
+    get bufferedAmount() { return 0; },
+    get url() { return "ws://localhost:4000"; },
+    get protocol() { return `axiom-agent-v${AGENT_PROTOCOL_VERSION}`; },
+    get extensions() { return ""; },
+    get binaryType() { return "blob" as BinaryType; },
+    set binaryType(_value: BinaryType) {},
+    onopen,
+    onmessage,
+    onerror,
+    onclose,
+    send(data: string | ArrayBufferLike | Blob | ArrayBufferView) {
+      if (closed || readyState !== WebSocket.OPEN) throw new DOMException("Socket is not open.", "InvalidStateError");
+      if (typeof data !== "string") throw new TypeError("Agent harness messages must be JSON strings.");
+      const parsed = JSON.parse(data) as StartRunInput;
+      const correlatedRun = typeof parsed.requestId === "string" ? requestRuns.get(parsed.requestId) : undefined;
+      const routingId = String(parsed.tabId || parsed.nodeId || parsed.sessionId || parsed.requestId || "");
+      const startTypes = new Set(["agent_chat", "inline_chat", "execute_node", "global_explore", "reconciliate_edge", "reconciliate_graph", "generate_task_nodes", "generate_skill"]);
+      const isStop = String(parsed.type).endsWith("_stop") || parsed.type === "command_session_close";
+      const generatedRun = startTypes.has(parsed.type) ? crypto.randomUUID() : undefined;
+      const runId = String(parsed.runId || correlatedRun || (isStop ? activeRuns.get(routingId) : undefined) || generatedRun || routingId || crypto.randomUUID());
+      if (startTypes.has(parsed.type) && routingId) activeRuns.set(routingId, runId);
+      runIds.add(runId);
+      if (routingId) runIds.add(routingId);
+      void agentHarnessClient.send({ ...parsed, runId }).catch((error) => {
+        onerror?.call(facade as unknown as WebSocket, new ErrorEvent("error", { error }));
+      });
+    },
+    close(code = 1000, reason = "Virtual client closed.") {
+      if (closed) return;
+      closed = true;
+      readyState = WebSocket.CLOSED;
+      unsubscribe();
+      onclose?.call(facade as unknown as WebSocket, new CloseEvent("close", { code, reason, wasClean: code === 1000 }));
+    },
+    addEventListener() {},
+    removeEventListener() {},
+    dispatchEvent() { return true; },
+  };
+
+  const unsubscribe = agentHarnessClient.subscribeAll((event) => {
+    if (closed || !runIds.has(event.runId)) return;
+    if (typeof event.requestId === "string") requestRuns.set(event.requestId, event.runId);
+    if (event.type.endsWith("_complete") || event.type.endsWith("_error") || event.type.endsWith("_stopped")) {
+      for (const [routingId, activeRunId] of activeRuns) {
+        if (activeRunId === event.runId) activeRuns.delete(routingId);
+      }
+    }
+    onmessage?.call(facade as unknown as WebSocket, new MessageEvent("message", { data: JSON.stringify(event) }));
+  });
+  void agentHarnessClient.connect().then(() => {
+    if (closed) return;
+    readyState = WebSocket.OPEN;
+    if (agentHarnessClient.getConnectionId()) runIds.add(agentHarnessClient.getConnectionId());
+    onopen?.call(facade as unknown as WebSocket, new Event("open"));
+  }).catch((error) => {
+    if (closed) return;
+    readyState = WebSocket.CLOSED;
+    onerror?.call(facade as unknown as WebSocket, new ErrorEvent("error", { error }));
+    onclose?.call(facade as unknown as WebSocket, new CloseEvent("close", { code: 1006, reason: String(error) }));
+  });
+
+  Object.defineProperties(facade, {
+    onopen: { get: () => onopen, set: (value) => { onopen = value; } },
+    onmessage: { get: () => onmessage, set: (value) => { onmessage = value; } },
+    onerror: { get: () => onerror, set: (value) => { onerror = value; } },
+    onclose: { get: () => onclose, set: (value) => { onclose = value; } },
+  });
+  return facade as unknown as WebSocket;
+}

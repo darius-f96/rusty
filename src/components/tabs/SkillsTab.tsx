@@ -5,6 +5,7 @@ import { Cpu, Plus, Trash2, Save, Wand2, Plug } from "lucide-react";
 import { CustomSelect } from "../CustomSelect";
 import { notify } from "../../notificationStore";
 import { providerHasModelReference, selectableProviderModels } from "../../store/providerHelpers";
+import { createAgentHarnessSocket } from "../../services/agentHarnessClient";
 
 const AVAILABLE_TOOLS = [
   { id: "read_file", label: "Read Files" },
@@ -140,7 +141,7 @@ export const SkillsTab: React.FC = () => {
       );
 
       try {
-        wsRef.current = new WebSocket("ws://localhost:4000");
+        wsRef.current = createAgentHarnessSocket();
       } catch (err: any) {
         console.error("Failed to construct Skills WebSocket:", err);
         setGenerateError(`WebSocket connection failed: ${err.message || String(err)}`);

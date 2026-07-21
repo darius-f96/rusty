@@ -11,6 +11,7 @@ import { useWorkspaceStore } from "../../store";
 import { VfsRegistry } from "../../services/vfs";
 import { notify } from "../../notificationStore";
 import { providerHasModelReference } from "../../store/providerHelpers";
+import { createAgentHarnessSocket } from "../../services/agentHarnessClient";
 
 export const useEdgeWebSocket = (
   edgeId: string | null,
@@ -57,7 +58,7 @@ export const useEdgeWebSocket = (
 
     let socket: WebSocket;
     try {
-      socket = new WebSocket("ws://localhost:4000");
+      socket = createAgentHarnessSocket();
     } catch (err: any) {
       console.error("Failed to construct Edge WebSocket:", err);
       setChatMessages((prev) => [

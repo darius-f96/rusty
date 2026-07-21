@@ -8,7 +8,7 @@
 
 import { WebSocket } from "ws";
 import path from "path";
-import { safeSend, getNextId, registerPendingRequest } from "../services/websocket";
+import { safeSend, request, validateRpcResponse } from "../services/websocket";
 import { createListFilesTool, createSearchCodebaseTool } from "../services/tools";
 import { callLlmWithToolsPiStreaming } from "../services/llmRuntime";
 
@@ -27,23 +27,21 @@ export async function reconciliateEdge(ws: WebSocket, data: any): Promise<void> 
       },
       execute: async ({ path: filePath }: { path: string }) => {
         const resolvedPath = path.isAbsolute(filePath) ? filePath : path.join(workspaceRoot, filePath);
-        return new Promise((resolve, reject) => {
-          const requestId = getNextId();
-          registerPendingRequest(requestId, ws, (res) => {
-            if (res.error) {
-              const errorMsg = String(res.error).toLowerCase();
-              if (errorMsg.includes("not found") || errorMsg.includes("no such file") || errorMsg.includes("exist")) {
-                console.log(`WebSocket [Server] reconciliate_edge read_file target not found, returning placeholder: ${resolvedPath}`);
-                resolve("[File does not exist yet. You can create it by calling write_file with content.]");
-              } else {
-                reject(new Error(res.error));
-              }
-            } else {
-              resolve(res.content);
-            }
-          });
-          safeSend(ws, { type: "read_file", requestId, path: resolvedPath });
+        const res = await request(ws, {
+          type: "read_file",
+          runId: edgeId,
+          payload: { path: resolvedPath },
+          validateResponse: validateRpcResponse,
         });
+        if (res.error) {
+          const errorMsg = String(res.error).toLowerCase();
+          if (errorMsg.includes("not found") || errorMsg.includes("no such file") || errorMsg.includes("exist")) {
+            console.log(`WebSocket [Server] reconciliate_edge read_file target not found, returning placeholder: ${resolvedPath}`);
+            return "[File does not exist yet. You can create it by calling write_file with content.]";
+          }
+          throw new Error(String(res.error));
+        }
+        return res.content;
       }
     };
 
@@ -60,14 +58,14 @@ export async function reconciliateEdge(ws: WebSocket, data: any): Promise<void> 
       },
       execute: async ({ path: filePath, content }: { path: string; content: string }) => {
         const resolvedPath = path.isAbsolute(filePath) ? filePath : path.join(workspaceRoot, filePath);
-        return new Promise((resolve, reject) => {
-          const requestId = getNextId();
-          registerPendingRequest(requestId, ws, (res) => {
-            if (res.error) reject(new Error(res.error));
-            else resolve(`File successfully written to: ${resolvedPath}`);
-          });
-          safeSend(ws, { type: "write_file", requestId, path: resolvedPath, content });
+        const res = await request(ws, {
+          type: "write_file",
+          runId: edgeId,
+          payload: { path: resolvedPath, content },
+          validateResponse: validateRpcResponse,
         });
+        if (res.error) throw new Error(String(res.error));
+        return `File successfully written to: ${resolvedPath}`;
       }
     };
 

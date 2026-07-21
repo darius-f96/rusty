@@ -16,6 +16,7 @@ import { buildReconciliationTaskFileRecords, normalizeReconciliationPath } from 
 import { providerHasModelReference, selectableProviderModels } from "../../store/providerHelpers";
 import { VfsExplorer } from "./components/VfsExplorer";
 import type { ReconciliationLedgerEntry, ReconciliationSnapshot } from "../../store/types";
+import { createAgentHarnessSocket } from "../../services/agentHarnessClient";
 import {
   ManualReconciliationEditor,
   type ManualReconciliationVariant,
@@ -525,7 +526,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
 
     let socket: WebSocket;
     try {
-      socket = new WebSocket("ws://localhost:4000");
+      socket = createAgentHarnessSocket();
       socketRef.current = socket;
     } catch (err: any) {
       console.error("Failed to construct WebSocket:", err);

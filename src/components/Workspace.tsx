@@ -22,6 +22,7 @@ import { canvasFileService } from "./tabs/canvas/services/canvasFileService";
 import { CommandPermissionPresenter } from "./permissions/CommandPermissionPresenter";
 import { commandPermissionService, handleCommandPermissionMessage } from "../services/commandPermissionService";
 import { scheduleTreeRefresh } from "./filetree/FileTreePresenter";
+import { createAgentHarnessSocket } from "../services/agentHarnessClient";
 import { appendBoundedText } from "../services/boundedTextBuffer";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -372,7 +373,7 @@ export const Workspace: React.FC = () => {
 
     let socket: WebSocket;
     try {
-      socket = new WebSocket("ws://localhost:4000");
+      socket = createAgentHarnessSocket();
       socketsRef.current.set(nodeId, socket);
     } catch (err: any) {
       console.error("Failed to construct WebSocket:", err);

@@ -11,6 +11,7 @@ import { commandPermissionService, handleCommandPermissionMessage } from "../../
 import { scheduleTreeRefresh } from "../filetree/FileTreePresenter";
 import { appendBoundedText } from "../../services/boundedTextBuffer";
 import { providerHasModelReference, selectableProviderModels } from "../../store/providerHelpers";
+import { createAgentHarnessSocket } from "../../services/agentHarnessClient";
 
 interface AgentTabProps {
   tab: any;
@@ -344,7 +345,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
 
     let socket: WebSocket;
     try {
-      socket = new WebSocket("ws://localhost:4000");
+      socket = createAgentHarnessSocket();
       agentSocketRef.current = socket;
     } catch (err: any) {
       console.error("Failed to construct Agent WebSocket:", err);
@@ -455,11 +456,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
               ...(Array.isArray(incoming.logs) ? incoming.logs : []),
               ...(incoming.appendLog ? [incoming.appendLog] : []),
             ];
-            // Subagent conclusions are intentionally not retained in the activity
-            // panel. The parent agent receives them for the final aggregation, but
-            // showing them here makes the live-status view turn into a second,
-            // very long answer.
-            const cleanIncoming = { ...incoming, result: undefined, error: undefined };
+            const cleanIncoming = { ...incoming };
             delete cleanIncoming.appendLog;
             delete cleanIncoming.previousId;
             if (index === -1) {
@@ -567,8 +564,6 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
             // Keep the panel focused on status and its last few activity lines.
             setSubagents(msg.subagents.map((subagent: SubagentActivity) => ({
               ...subagent,
-              result: undefined,
-              error: undefined,
               logs: (subagent.logs || []).slice(-4),
             })));
           }

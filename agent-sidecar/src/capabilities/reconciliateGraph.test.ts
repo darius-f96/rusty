@@ -92,8 +92,8 @@ test("writes an overlap fix while leaving ordinary changed files TaskNode-owned"
         if (message.type === "write_file") vfs.set(message.path, message.content);
         const pending = pendingRequests.get(message.requestId);
         pending?.resolver(message.type === "read_file"
-          ? { content: vfs.get(message.path) ?? "" }
-          : {});
+          ? { requestId: message.requestId, content: vfs.get(message.path) ?? "" }
+          : { requestId: message.requestId });
         pendingRequests.delete(message.requestId);
       });
     },
@@ -176,8 +176,8 @@ test("reviews multiple overlaps as independent single-file model calls", async (
         if (message.type === "write_file") vfs.set(message.path, message.content);
         const pending = pendingRequests.get(message.requestId);
         pending?.resolver(message.type === "read_file"
-          ? { content: vfs.get(message.path) ?? "" }
-          : {});
+          ? { requestId: message.requestId, content: vfs.get(message.path) ?? "" }
+          : { requestId: message.requestId });
         pendingRequests.delete(message.requestId);
       });
     },
@@ -259,8 +259,8 @@ test("records completed cases and identifies the exact file when a later case fa
       queueMicrotask(() => {
         const pending = pendingRequests.get(message.requestId);
         pending?.resolver(message.type === "read_file"
-          ? { content: vfs.get(message.path) ?? "" }
-          : {});
+          ? { requestId: message.requestId, content: vfs.get(message.path) ?? "" }
+          : { requestId: message.requestId });
         pendingRequests.delete(message.requestId);
       });
     },
@@ -317,7 +317,9 @@ test("leaves non-overlapping task files outside the reconciliation owner", async
       if (message.type !== "read_file" && message.type !== "write_file") return;
       queueMicrotask(() => {
         const pending = pendingRequests.get(message.requestId);
-        pending?.resolver(message.type === "read_file" ? { content } : {});
+        pending?.resolver(message.type === "read_file"
+          ? { requestId: message.requestId, content }
+          : { requestId: message.requestId });
         pendingRequests.delete(message.requestId);
       });
     },
@@ -353,7 +355,9 @@ test("does not inspect or rewrite a stale non-overlapping TaskNode VFS key", asy
       if (message.type !== "read_file" && message.type !== "write_file") return;
       queueMicrotask(() => {
         const pending = pendingRequests.get(message.requestId);
-        pending?.resolver(message.type === "read_file" ? { content } : {});
+        pending?.resolver(message.type === "read_file"
+          ? { requestId: message.requestId, content }
+          : { requestId: message.requestId });
         pendingRequests.delete(message.requestId);
       });
     },

@@ -8,7 +8,7 @@
 
 import { WebSocket } from "ws";
 import path from "path";
-import { safeSend, getNextId, registerPendingRequest } from "../services/websocket";
+import { safeSend, getNextId, request, validateRpcResponse } from "../services/websocket";
 import { createListFilesTool, createSearchCodebaseTool } from "../services/tools";
 import { callLlmWithToolsPiStreaming } from "../services/llmRuntime";
 import { createLspTools } from "../services/lspTools";
@@ -16,6 +16,8 @@ import { createMcpTools, McpServerConfig } from "../services/mcpClient";
 import { createWebSearchTool } from "../services/webSearchTool";
 import { DeferredUserQuestion, SubagentUpdate, hasActiveBackgroundSubagents, runPiAgentChat } from "../services/piAgentChat";
 import { createRunCommandTool } from "./tools/runCommandTool";
+import { FileEventPersistence, RunEventRecorder } from "../services/eventPersistence";
+import { DelegatedTask, DelegationManager } from "../services/delegationManager";
 import {
   AGENT_TAB_HARNESS_POLICY,
   GLOBAL_CHAT_TASK_DEPENDENCY_POLICY,
@@ -30,10 +32,36 @@ type AgentTool = {
   execute: (args: any) => Promise<any>;
 };
 
+const activeDelegationManagers = new Map<string, { manager: DelegationManager; runId: string }>();
+
+export async function stopAgentChatDelegations(runOrTabId: string, reason?: string): Promise<boolean> {
+  const active = activeDelegationManagers.get(runOrTabId);
+  if (!active) return false;
+  await active.manager.cancelRun(active.runId, reason);
+  return true;
+}
+
 export async function agentChat(ws: WebSocket, data: any): Promise<void> {
   const { tabId, message, model, workspaceRoot, chatHistory, customProvider, skill, lspSettings, mcpServers, planOnly, vfsOnly } = data;
+  const runId = typeof data.runId === "string" && data.runId ? data.runId : getNextId();
+  const conversationId = typeof data.conversationId === "string" && data.conversationId ? data.conversationId : tabId;
+  const eventRecorder = new RunEventRecorder(
+    new FileEventPersistence(workspaceRoot),
+    { conversationId, runId, agentId: "parent" },
+  );
+  const eventWrites: Promise<void>[] = [];
+  const recordEvent = (type: string, payload: unknown, correlationId?: string) => {
+    const write = eventRecorder.record(type, payload, correlationId).catch((error) => {
+      console.error(`Run event persistence failed for ${type}:`, error);
+    });
+    eventWrites.push(write);
+  };
   (ws as any).__activeAgentTabId = tabId;
-  console.log(`WebSocket [Server] agent_chat starting`, { tabId, workspaceRoot, model, hasSkill: !!skill, lspEnabled: lspSettings?.enabled, mcpCount: mcpServers?.length || 0 });
+  const socketRunIds: Set<string> = (ws as any).__activeAgentRunIds || new Set<string>();
+  socketRunIds.add(tabId);
+  socketRunIds.add(runId);
+  (ws as any).__activeAgentRunIds = socketRunIds;
+  console.log(`WebSocket [Server] agent_chat starting`, { tabId, runId, workspaceRoot, model, hasSkill: !!skill, lspEnabled: lspSettings?.enabled, mcpCount: mcpServers?.length || 0 });
 
   const modifiedFiles = new Set<string>();
   const mcpDisposers: Array<() => void> = [];
@@ -44,14 +72,55 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
   const sendLog = (logMessage: string) => {
     lastActivityAt = Date.now();
     console.log(`[Agent:${tabId}] ${logMessage}`);
-    safeSend(ws, { type: "log", tabId, message: logMessage });
+    safeSend(ws, { type: "log", tabId, runId, conversationId, message: logMessage });
   };
 
   const sendSubagentUpdate = (subagent: SubagentUpdate) => {
-    safeSend(ws, { type: "subagent_update", tabId, subagent });
+    safeSend(ws, { type: "subagent_update", tabId, runId, conversationId, subagent });
+    const status = subagent.status === "completed" || subagent.status === "steered"
+      ? "completed"
+      : subagent.status === "error"
+        ? "failed"
+        : subagent.status === "aborted" || subagent.status === "stopped"
+          ? "cancelled"
+          : "status_changed";
+    recordEvent(`delegation.${status}`, subagent);
   };
+  const delegationManager = new DelegationManager(3, ({ type, handle, result }) => {
+    sendSubagentUpdate({
+      id: handle.agentId,
+      agentId: handle.agentId,
+      displayName: "Investigator",
+      description: handle.task.objective,
+      subagentType: "read-only",
+      status: handle.status === "failed" || handle.status === "timed_out"
+        ? "error"
+        : handle.status === "cancelled"
+          ? "stopped"
+          : handle.status,
+      activity: type.replace("delegation.", "").replace(/_/g, " "),
+      result: result?.findings,
+      error: result?.error,
+      turnCount: result?.metadata.turnsUsed,
+      maxTurns: handle.task.maxTurns,
+      toolUses: result?.metadata.toolsCalled.length,
+      startedAt: handle.startedAt,
+      parentAgentId: handle.parentAgentId,
+      scope: handle.task.scope,
+      excludedScope: handle.task.excludedScope,
+      expectedOutput: handle.task.expectedOutput,
+      evidenceRequired: handle.task.evidenceRequired,
+      timeoutMs: handle.task.timeoutMs,
+      queuePosition: handle.queuePosition,
+      incorporated: handle.resultConsumed,
+      updatedAt: new Date().toISOString(),
+    });
+  });
+  activeDelegationManagers.set(tabId, { manager: delegationManager, runId });
+  activeDelegationManagers.set(runId, { manager: delegationManager, runId });
 
   try {
+    recordEvent("run.started", { tabId, model, provider: customProvider?.id, planOnly: !!planOnly, vfsOnly: !!vfsOnly });
     const readVfsTool = {
       name: "read_file",
       description: "Read a file's content from the workspace.",
@@ -66,24 +135,22 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
         console.log(`WebSocket [Server] agent_chat read_file tool: ${filePath}`);
         const resolvedPath = path.isAbsolute(filePath) ? filePath : path.join(workspaceRoot, filePath);
         sendLog(`Reading file: ${filePath}`);
-        return new Promise((resolve, reject) => {
-          const requestId = getNextId();
-          registerPendingRequest(requestId, ws, (res) => {
-            if (res.error) {
-              const errorMsg = String(res.error).toLowerCase();
-              if (errorMsg.includes("not found") || errorMsg.includes("no such file") || errorMsg.includes("exist")) {
-                resolve(planOnly
-                  ? "[File does not exist.]"
-                  : "[File does not exist yet. You can create it by calling write_file with content.]");
-              } else {
-                reject(new Error(res.error));
-              }
-            } else {
-              resolve(res.content);
-            }
-          });
-          safeSend(ws, { type: "read_file", requestId, path: resolvedPath });
+        const res = await request(ws, {
+          type: "read_file",
+          runId,
+          payload: { path: resolvedPath },
+          validateResponse: validateRpcResponse,
         });
+        if (res.error) {
+          const errorMsg = String(res.error).toLowerCase();
+          if (errorMsg.includes("not found") || errorMsg.includes("no such file") || errorMsg.includes("exist")) {
+            return planOnly
+              ? "[File does not exist.]"
+              : "[File does not exist yet. You can create it by calling write_file with content.]";
+          }
+          throw new Error(String(res.error));
+        }
+        return res.content;
       }
     };
 
@@ -103,17 +170,14 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
         sendLog(`Modifying file: ${filePath}`);
         const resolvedPath = path.isAbsolute(filePath) ? filePath : path.join(workspaceRoot, filePath);
         modifiedFiles.add(resolvedPath);
-        return new Promise((resolve, reject) => {
-          const requestId = getNextId();
-          registerPendingRequest(requestId, ws, (res) => {
-            if (res.error) {
-              reject(new Error(res.error));
-            } else {
-              resolve(`File successfully written to: ${resolvedPath}`);
-            }
-          });
-          safeSend(ws, { type: "write_file", requestId, path: resolvedPath, content });
+        const res = await request(ws, {
+          type: "write_file",
+          runId,
+          payload: { path: resolvedPath, content },
+          validateResponse: validateRpcResponse,
         });
+        if (res.error) throw new Error(String(res.error));
+        return `File successfully written to: ${resolvedPath}`;
       }
     };
 
@@ -137,22 +201,14 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
           throw new Error("Plan filename must use only letters, numbers, hyphens, or underscores and end in .md.");
         }
         sendLog(`Saving plan: plans/${normalizedFilename}`);
-        return new Promise((resolve, reject) => {
-          const requestId = getNextId();
-          registerPendingRequest(requestId, ws, (res) => {
-            if (res.error) {
-              reject(new Error(res.error));
-            } else {
-              resolve(`Plan saved to: ${res.path || path.join(workspaceRoot, "plans", normalizedFilename)}`);
-            }
-          });
-          safeSend(ws, {
-            type: "write_plan",
-            requestId,
-            filename: normalizedFilename,
-            content
-          });
+        const res = await request(ws, {
+          type: "write_plan",
+          runId,
+          payload: { filename: normalizedFilename, content },
+          validateResponse: validateRpcResponse,
         });
+        if (res.error) throw new Error(String(res.error));
+        return `Plan saved to: ${res.path || path.join(workspaceRoot, "plans", normalizedFilename)}`;
       }
     };
 
@@ -174,23 +230,25 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
       }
     };
 
-    const requestUserQuestion = (request: DeferredUserQuestion) => {
-      const requestId = `agent_question_${getNextId()}`;
-      sendLog(`Awaiting user input: ${request.question}`);
-      safeSend(ws, { type: "agent_question", tabId, requestId, ...request });
-      return new Promise<string>((resolve, reject) => {
-        registerPendingRequest(requestId, ws, (response) => {
-          if (response?.error) {
-            const error = String(response.error);
-            sendLog(`User question was not answered: ${error}`);
-            reject(new Error(error));
-            return;
-          }
-          const answer = String(response?.answer || "").trim();
-          sendLog(`User answered: ${answer || "(no answer)"}`);
-          resolve(answer || "The user did not provide an answer.");
-        }, 10 * 60_000);
+    const requestUserQuestion = async (questionRequest: DeferredUserQuestion) => {
+      sendLog(`Awaiting user input: ${questionRequest.question}`);
+      recordEvent("agent.question_asked", questionRequest);
+      const response = await request(ws, {
+        type: "agent_question",
+        runId,
+        payload: { tabId, runId, conversationId, ...questionRequest },
+        timeoutMs: 10 * 60_000,
+        validateResponse: validateRpcResponse,
       });
+      if (response.error) {
+        const error = String(response.error);
+        sendLog(`User question was not answered: ${error}`);
+        throw new Error(error);
+      }
+      const answer = String(response.answer || "").trim();
+      recordEvent("agent.question_answered", { answer }, String(response.requestId || ""));
+      sendLog(`User answered: ${answer || "(no answer)"}`);
+      return answer || "The user did not provide an answer.";
     };
 
     const askUserQuestionTool = {
@@ -270,101 +328,83 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
     if (!vfsOnly && providerUsesManagedRuntime) {
       const delegateTaskTool: AgentTool = {
         name: "delegate_task",
-        description: "Delegate one bounded, read-only codebase investigation or review to an independent subagent. Call this tool two or three times in the same turn when subtasks are independent. The tool returns the subagent's findings; the parent agent remains responsible for all edits.",
+        description: "Delegate one structured, bounded, read-only investigation or review. The harness owns concurrency, queuing, timeout, identity, cancellation, and result collection.",
         inputSchema: {
           type: "object",
           properties: {
             description: { type: "string", description: "A short 3-8 word label for the delegated task." },
             prompt: { type: "string", description: "A precise read-only investigation with a concrete findings deliverable." },
+            scope: { type: "array", items: { type: "string" }, description: "Workspace paths or concerns the subagent may inspect." },
+            excludedScope: { type: "array", items: { type: "string" }, description: "Paths or concerns the subagent must not inspect." },
+            expectedOutput: { type: "string", enum: ["findings", "review", "recommendation"] },
+            evidenceRequired: { type: "boolean" },
+            maxTurns: { type: "integer", minimum: 1, maximum: 20 },
+            timeoutMs: { type: "integer", minimum: 1000, maximum: 600000 },
+            benefit: { type: "string", enum: ["coverage", "parallelism", "independent_review", "specialization"] },
           },
           required: ["description", "prompt"],
         },
-        execute: async ({ description, prompt }: { description: string; prompt: string }) => {
+        execute: async (args: {
+          description: string;
+          prompt: string;
+          scope?: string[];
+          excludedScope?: string[];
+          expectedOutput?: DelegatedTask["expectedOutput"];
+          evidenceRequired?: boolean;
+          maxTurns?: number;
+          timeoutMs?: number;
+          benefit?: DelegatedTask["benefit"];
+        }) => {
+          const { description, prompt } = args;
           const normalizedDescription = String(description || "Codebase investigation").trim().slice(0, 120);
           const normalizedPrompt = String(prompt || "").trim();
           if (!normalizedPrompt) throw new Error("A delegated task requires a concrete prompt.");
-
-          const id = `delegated-${getNextId()}`;
-          const startedAt = Date.now();
-          let toolUses = 0;
-          let sawText = false;
-          const update = (partial: Partial<SubagentUpdate>) => sendSubagentUpdate({
-            id,
-            displayName: "Investigator",
-            description: normalizedDescription,
-            subagentType: "read-only",
-            status: "running",
-            updatedAt: new Date().toISOString(),
-            startedAt: new Date(startedAt).toISOString(),
-            toolUses,
-            ...partial,
-          });
-
-          update({ activity: "Starting delegated investigation.", appendLog: "Subagent dispatched." });
           sendLog(`Delegated subagent: ${normalizedDescription}.`);
-
-          const wrapTool = (tool: AgentTool): AgentTool => ({
-            ...tool,
-            execute: async (args: any) => {
-              toolUses++;
-              const target = typeof args?.path === "string"
-                ? args.path
-                : typeof args?.pattern === "string"
-                  ? args.pattern
-                  : "workspace";
-              const activity = `${tool.name.replace(/_/g, " ")}: ${String(target).slice(0, 140)}`;
-              update({ activity, appendLog: activity, toolUses });
-              return tool.execute(args);
-            },
-          });
-
-          try {
-            const result = await callLlmWithToolsPiStreaming({
-              modelReference,
-              customProvider,
-              systemPrompt: `You are a read-only Axiom subagent. Investigate only the assigned task using the provided harness tools.
+          const task: DelegatedTask = {
+            objective: normalizedDescription,
+            scope: Array.isArray(args.scope) && args.scope.length > 0 ? args.scope.map(String) : [workspaceRoot],
+            excludedScope: Array.isArray(args.excludedScope) ? args.excludedScope.map(String) : undefined,
+            expectedOutput: args.expectedOutput || "findings",
+            evidenceRequired: args.evidenceRequired ?? true,
+            maxTurns: Math.max(1, Math.min(20, Number(args.maxTurns) || 8)),
+            timeoutMs: Math.max(1_000, Math.min(600_000, Number(args.timeoutMs) || 120_000)),
+            benefit: args.benefit || "coverage",
+          };
+          const handle = await delegationManager.spawn(runId, "parent", task, {
+            execute: async (delegatedTask, context) => {
+              let turnsUsed = 0;
+              const wrapTool = (tool: AgentTool): AgentTool => ({
+                ...tool,
+                execute: async (toolArgs: any) => {
+                  context.reportTool(tool.name);
+                  return tool.execute(toolArgs);
+                },
+              });
+              const findings = await callLlmWithToolsPiStreaming({
+                modelReference,
+                customProvider,
+                systemPrompt: `You are a read-only Axiom subagent. Investigate only the assigned task using the provided harness tools.
 - Do not create, edit, move, or delete files.
 - Do not run commands and do not delegate further.
 - Return a concise findings memo with relevant file paths, concrete evidence, risks, and a clear recommendation for the parent agent.
-- Stop as soon as the requested evidence is sufficient.`,
-              userMessage: normalizedPrompt,
-              tools: [readVfsTool, listFilesTool, searchCodebaseTool].map(wrapTool),
-              sendLog: (subagentLog) => {
-                const compact = subagentLog.replace(/\s+/g, " ").trim().slice(0, 220);
-                if (!compact) return;
-                update({ activity: compact, appendLog: compact, toolUses });
-              },
-              sendToken: () => {
-                if (sawText) return;
-                sawText = true;
-                update({ activity: "Writing the findings memo.", appendLog: "Subagent began reporting findings." });
-              },
-              maxRounds: 8,
-              cwd: workspaceRoot,
-              shouldAbort: () => ws.readyState !== WebSocket.OPEN,
-            });
-            update({
-              status: "completed",
-              activity: "Findings returned to the parent agent.",
-              appendLog: "Subagent completed.",
-              result,
-              toolUses,
-              durationMs: Date.now() - startedAt,
-            });
-            sendLog(`Subagent completed: ${normalizedDescription}.`);
-            return result;
-          } catch (error: any) {
-            const errorMessage = error?.message || String(error);
-            update({
-              status: "error",
-              activity: "Delegated investigation failed.",
-              appendLog: `Subagent failed: ${errorMessage.slice(0, 180)}`,
-              error: errorMessage,
-              toolUses,
-              durationMs: Date.now() - startedAt,
-            });
-            throw error;
-          }
+- Stop as soon as the requested evidence is sufficient.
+- Scope: ${delegatedTask.scope.join(", ")}.
+${delegatedTask.excludedScope?.length ? `- Excluded scope: ${delegatedTask.excludedScope.join(", ")}.` : ""}`,
+                userMessage: normalizedPrompt,
+                tools: [readVfsTool, listFilesTool, searchCodebaseTool].map(wrapTool),
+                sendLog: () => { turnsUsed++; },
+                sendToken: () => undefined,
+                maxRounds: delegatedTask.maxTurns,
+                cwd: workspaceRoot,
+                shouldAbort: () => context.signal.aborted || ws.readyState !== WebSocket.OPEN,
+              });
+              return { findings, turnsUsed };
+            },
+          });
+          const result = await delegationManager.join(handle.agentId);
+          if (result.status !== "completed") throw new Error(result.error || `Delegation ${result.status}.`);
+          sendLog(`Subagent completed: ${normalizedDescription}.`);
+          return result.findings;
         },
       };
       tools.push(delegateTaskTool);
@@ -478,7 +518,7 @@ Questions:
 
     const sendToken = (token: string) => {
       lastActivityAt = Date.now();
-      safeSend(ws, { type: "token", tabId, content: token });
+      safeSend(ws, { type: "token", tabId, runId, conversationId, content: token });
     };
 
     const piResponse = await runPiAgentChat({
@@ -524,9 +564,12 @@ Questions:
     safeSend(ws, {
       type: "agent_chat_complete",
       tabId,
+      runId,
+      conversationId,
       response: responseText,
       modifiedFiles: Array.from(modifiedFiles)
     });
+    recordEvent("run.completed", { response: responseText, modifiedFiles: Array.from(modifiedFiles) });
 
     // Ensure the message is sent before returning
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -536,9 +579,17 @@ Questions:
     safeSend(ws, {
       type: "agent_chat_error",
       tabId,
+      runId,
+      conversationId,
       error: err.message
     });
+    recordEvent("run.failed", { error: err.message });
   } finally {
+    await delegationManager.cancelRun(runId, "Parent run finished.");
+    activeDelegationManagers.delete(tabId);
+    activeDelegationManagers.delete(runId);
+    socketRunIds.delete(tabId);
+    socketRunIds.delete(runId);
     if (activityHeartbeat) clearInterval(activityHeartbeat);
     // Clean up MCP server connections
     for (const dispose of mcpDisposers) {
@@ -548,5 +599,6 @@ Questions:
         console.error("Error disposing MCP connection:", err);
       }
     }
+    await Promise.allSettled(eventWrites);
   }
 }

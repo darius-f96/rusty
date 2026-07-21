@@ -9,7 +9,7 @@
  */
 import path from "node:path";
 import { WebSocket } from "ws";
-import { getNextId, registerPendingRequest, safeSend } from "./websocket";
+import { request, validateRpcResponse } from "./websocket";
 
 export type CommandPermissionDecision = "deny" | "allow_once" | "allow_session";
 export type CommandRisk = "normal" | "elevated" | "destructive";
@@ -157,24 +157,22 @@ export async function authorizeCommand(
   const grantKey = commandGrantKey(command, risk);
   if (sessionGrants.get(sessionId)?.has(grantKey)) return;
 
-  const requestId = getNextId();
-  const decision = await new Promise<CommandPermissionDecision>((resolve, reject) => {
-    registerPendingRequest(requestId, ws, (response) => {
-      if (response.error) return reject(new Error(response.error));
-      resolve(response.decision as CommandPermissionDecision);
-    }, 10 * 60_000);
-
-    safeSend(ws, {
-      type: "command_permission_request",
-      requestId,
+  const response = await request(ws, {
+    type: "command_permission_request",
+    runId: sessionId,
+    timeoutMs: 10 * 60_000,
+    payload: {
       sessionId,
       command,
       risk,
       sessionGrantScope,
       sessionGrantProgram: programName(command),
       description: `The agent wants to run: ${[command.program, ...command.args].join(" ")}`,
-    });
+    },
+    validateResponse: validateRpcResponse,
   });
+  if (response.error) throw new Error(String(response.error));
+  const decision = response.decision as CommandPermissionDecision;
 
   if (decision === "deny") throw new Error("Command denied by the user.");
   if (decision !== "allow_once" && decision !== "allow_session") {

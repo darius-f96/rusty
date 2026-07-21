@@ -1,7 +1,7 @@
 import path from "path";
 import { WebSocket } from "ws";
 import { callLlmWithToolsPiStreaming } from "../services/llmRuntime";
-import { getNextId, registerPendingRequest, safeSend } from "../services/websocket";
+import { request, safeSend, validateRpcResponse } from "../services/websocket";
 
 interface ReconciliationNode {
   id: string;
@@ -254,30 +254,28 @@ export async function reconciliateGraph(ws: WebSocket, data: any): Promise<void>
       throw new Error("No task-owned VFS files are available to reconcile.");
     }
 
-    const requestVfsFile = (resolvedPath: string): Promise<string> => {
-      return new Promise((resolve, reject) => {
-        const requestId = getNextId();
-        registerPendingRequest(requestId, ws, (res) => {
-          if (res.error) reject(new Error(res.error));
-          else resolve(String(res.content ?? ""));
-        });
-        safeSend(ws, { type: "read_file", requestId, path: resolvedPath });
+    const requestVfsFile = async (resolvedPath: string): Promise<string> => {
+      const res = await request(ws, {
+        type: "read_file",
+        runId: reconciliationStreamId,
+        payload: { path: resolvedPath },
+        validateResponse: validateRpcResponse,
       });
+      if (res.error) throw new Error(String(res.error));
+      return String(res.content ?? "");
     };
 
-    const persistReconciledFile = (resolvedPath: string, content: string): Promise<string> => {
-      return new Promise((resolve, reject) => {
-        const requestId = getNextId();
-        registerPendingRequest(requestId, ws, (res) => {
-          if (res.error) reject(new Error(res.error));
-          else {
-            finalizedFiles.add(resolvedPath);
-            allTaskFilePaths.set(resolvedPath, resolvedPath);
-            resolve(`File successfully finalized under the reconciliation owner in the canvas VFS: ${resolvedPath}`);
-          }
-        });
-        safeSend(ws, { type: "write_file", requestId, path: resolvedPath, content });
+    const persistReconciledFile = async (resolvedPath: string, content: string): Promise<string> => {
+      const res = await request(ws, {
+        type: "write_file",
+        runId: reconciliationStreamId,
+        payload: { path: resolvedPath, content },
+        validateResponse: validateRpcResponse,
       });
+      if (res.error) throw new Error(String(res.error));
+      finalizedFiles.add(resolvedPath);
+      allTaskFilePaths.set(resolvedPath, resolvedPath);
+      return `File successfully finalized under the reconciliation owner in the canvas VFS: ${resolvedPath}`;
     };
 
     const toolsForFile = (targetPath: string) => {

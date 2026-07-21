@@ -42,12 +42,21 @@ import http from "http";
 import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
+import { randomUUID } from "node:crypto";
+import {
+  AGENT_PROTOCOL_CAPABILITIES,
+  negotiateProtocol,
+  parseAgentMessage,
+  unwrapEnvelope,
+} from "../../shared/agentProtocol";
 
 // Services
 import { 
-  pendingRequests, 
   cleanupPendingRequests, 
-  safeSend 
+  enableProtocolConnection,
+  resolvePendingResponse,
+  safeSend,
+  sendProtocolControl,
 } from "./services/websocket";
 
 // Capabilities
@@ -56,7 +65,7 @@ import { stopPiAgentRun } from "./services/piAgentChat";
 import { globalExplore } from "./capabilities/globalExplore";
 import { reconciliateEdge } from "./capabilities/reconciliateEdge";
 import { reconciliateGraph } from "./capabilities/reconciliateGraph";
-import { agentChat } from "./capabilities/agentChat";
+import { agentChat, stopAgentChatDelegations } from "./capabilities/agentChat";
 import { generateSkill } from "./capabilities/generateSkill";
 import { inlineChat } from "./capabilities/inlineChat";
 import { generateTaskNodes, stopTaskNodeGeneration } from "./capabilities/generateTaskNodes";
@@ -84,6 +93,8 @@ import {
   testClaudeCodeConnection,
 } from "./services/claudeCodeService";
 import { fetchProviderQuota } from "./services/providerQuota";
+import { harnessTelemetry } from "./services/observability";
+import { FileEventPersistence, replayRun } from "./services/eventPersistence";
 
 dotenv.config();
 
@@ -363,12 +374,52 @@ wss.on("connection", (ws: WebSocket, req: http.IncomingMessage) => {
   });
 
   ws.on("message", async (messageStr: string) => {
-    let data;
+    let rawData: unknown;
     try {
-      data = JSON.parse(messageStr);
+      rawData = JSON.parse(messageStr);
     } catch (e) {
       console.error("WebSocket [Server] Invalid JSON received", e);
+      sendProtocolControl(ws, {
+        type: "protocol.error",
+        error: { code: "PROTOCOL_INVALID_MESSAGE", message: "Message is not valid JSON." },
+      });
       return;
+    }
+
+    const parsedMessage = parseAgentMessage(rawData);
+    if (parsedMessage.kind === "invalid") {
+      sendProtocolControl(ws, parsedMessage.error);
+      return;
+    }
+    if (parsedMessage.kind === "hello") {
+      const selectedVersion = negotiateProtocol(parsedMessage.value);
+      if (!selectedVersion) {
+        sendProtocolControl(ws, {
+          type: "protocol.error",
+          error: {
+            code: "PROTOCOL_UNSUPPORTED_VERSION",
+            message: "Client and sidecar do not share a supported protocol version.",
+            supportedVersions: [2],
+          },
+        });
+        ws.close(1002, "Unsupported agent protocol version.");
+        return;
+      }
+      const connectionId = randomUUID();
+      sendProtocolControl(ws, {
+        type: "protocol.welcome",
+        protocolVersion: selectedVersion,
+        capabilities: AGENT_PROTOCOL_CAPABILITIES.filter((capability) => parsedMessage.value.capabilities.includes(capability)),
+        connectionId,
+      });
+      enableProtocolConnection(ws, connectionId, selectedVersion);
+      return;
+    }
+    const data: any = parsedMessage.kind === "modern"
+      ? unwrapEnvelope(parsedMessage.value)
+      : parsedMessage.value;
+    if (parsedMessage.kind === "legacy") {
+      console.warn(`WebSocket [Protocol] Legacy message received: ${String(data.type || "unknown")}`);
     }
 
     console.log(`WebSocket [Server] Received message type: ${data.type}`);
@@ -376,25 +427,39 @@ wss.on("connection", (ws: WebSocket, req: http.IncomingMessage) => {
     // Pair interactive tool responses with the originating Sidecar request.
     if (data.type === "read_file_response" || data.type === "write_file_response" || data.type === "write_plan_response" || data.type === "agent_question_response" || data.type === "command_permission_response") {
       console.log(`WebSocket [Server] Resolving pending request: ${data.requestId}`, { hasError: !!data.error });
-      const pending = pendingRequests.get(data.requestId);
-      if (pending && (data.type !== "command_permission_response" || pending.ws === ws)) {
-        pending.resolver(data);
-        pendingRequests.delete(data.requestId);
-      } else if (pending) {
-        console.warn(`WebSocket [Server] Ignored command permission response from a different client: ${data.requestId}`);
+      const resolution = resolvePendingResponse(ws, data);
+      if (resolution.status !== "resolved") {
+        console.warn(`WebSocket [Server] RPC response ${resolution.status}:`, resolution.error.code, resolution.requestId);
       }
       return;
     }
 
     // Inject capabilities
     try {
-      if (data.type === "agent_chat_stop") {
+      if (data.type === "run_events_query") {
+        if (typeof data.workspaceRoot !== "string" || typeof data.runId !== "string") {
+          safeSend(ws, { type: "run_events_error", runId: String(data.runId || "invalid"), requestId: data.requestId, error: "workspaceRoot and runId are required." });
+          return;
+        }
+        const events = await new FileEventPersistence(data.workspaceRoot).query(data.runId, {
+          afterSequence: Number.isInteger(data.afterSequence) ? data.afterSequence : undefined,
+        });
+        safeSend(ws, {
+          type: "run_events_result",
+          runId: data.runId,
+          requestId: data.requestId,
+          events,
+          state: replayRun(events, true),
+        });
+      } else if (data.type === "agent_chat_stop") {
         const stopped = await stopPiAgentRun(data.tabId, "Stop requested by user; cancelling all agent tasks.");
+        const stoppedDelegations = await stopAgentChatDelegations(data.runId || data.tabId, "Stop requested by user.");
         const stoppedCommands = stopCommandsForSession(data.tabId);
         safeSend(ws, {
           type: "agent_chat_stopped",
           tabId: data.tabId,
           stopped,
+          stoppedDelegations,
           stoppedCommands,
         });
       } else if (data.type === "inline_chat_stop") {
@@ -433,10 +498,20 @@ wss.on("connection", (ws: WebSocket, req: http.IncomingMessage) => {
   ws.on("close", (code, reason) => {
     console.log(`WebSocket [Server] Client disconnected (code: ${code}, reason: "${reason ? reason.toString() : ""}"`);
     cleanupPendingRequests(ws);
-    const tabId = (ws as any).__activeAgentTabId;
-    if (typeof tabId === "string") {
-      void stopPiAgentRun(tabId, "Client disconnected; cancelling all agent tasks.");
-      stopCommandsForSession(tabId);
+    const activeRunIds = (ws as any).__activeAgentRunIds;
+    if (activeRunIds instanceof Set) {
+      for (const activeRunId of activeRunIds) {
+        if (typeof activeRunId !== "string") continue;
+        void stopPiAgentRun(activeRunId, "Client disconnected; cancelling all agent tasks.");
+        void stopAgentChatDelegations(activeRunId, "Client disconnected.");
+        stopCommandsForSession(activeRunId);
+      }
+    } else {
+      const tabId = (ws as any).__activeAgentTabId;
+      if (typeof tabId === "string") {
+        void stopPiAgentRun(tabId, "Client disconnected; cancelling all agent tasks.");
+        stopCommandsForSession(tabId);
+      }
     }
   });
 });
@@ -449,6 +524,10 @@ app.get("/health", (req, res) => {
     nodeVersion: process.versions.node,
     execPath: process.execPath
   });
+});
+
+app.get("/metrics", (_req, res) => {
+  res.json(harnessTelemetry.snapshot());
 });
 
 const PORT = Number(process.env.PORT || 4000);
