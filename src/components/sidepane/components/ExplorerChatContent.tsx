@@ -1,5 +1,5 @@
 import React from "react";
-import { X, Check, AlertTriangle, GitBranch, Sparkles, Code2 } from "lucide-react";
+import { X, Check, AlertTriangle, GitBranch, Sparkles, Code2, Loader2 } from "lucide-react";
 import { CustomSelect } from "../../CustomSelect";
 import { useWorkspaceStore } from "../../../store";
 import { Chat } from "../../ui/Chat";
@@ -75,6 +75,43 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
   );
   const updateNode = useWorkspaceStore((state) => state.updateTaskNode);
   const taskTitlesByKey = new Map(generatedTaskDraft.map((task) => [task.key, task.title]));
+  const [isCreatingNodes, setIsCreatingNodes] = React.useState(false);
+  const isCreatingNodesRef = React.useRef(false);
+
+  const handleCreateTaskNodes = async () => {
+    if (isCreatingNodesRef.current) return;
+
+    const selectedTasks = generatedTaskDraft.filter((task) => task.selected && task.title.trim() && task.description.trim());
+    const selectedKeys = new Set(selectedTasks.map((task) => task.key));
+    const tasks = selectedTasks.map(({ key, title, description, dependsOn }) => ({
+      key,
+      title: title.trim(),
+      description: description.trim(),
+      dependsOn: dependsOn.filter((dependency) => selectedKeys.has(dependency)),
+    }));
+    const contexts = generatedContextDraft
+      .filter((context) => context.selected && context.title.trim() && context.content.trim())
+      .map(({ key, title, content, taskKeys }) => ({
+        key,
+        title: title.trim(),
+        content: content.trim(),
+        taskKeys: taskKeys.filter((taskKey) => selectedKeys.has(taskKey)),
+      }))
+      .filter((context) => context.taskKeys.length > 0);
+
+    if (!tasks.length) return;
+
+    isCreatingNodesRef.current = true;
+    setIsCreatingNodes(true);
+    try {
+      await onCreateTaskNodes(tasks, contexts);
+      setGeneratedTaskDraft([]);
+      setGeneratedContextDraft([]);
+    } finally {
+      isCreatingNodesRef.current = false;
+      setIsCreatingNodes(false);
+    }
+  };
 
   const chatMessages = globalChatHistory.map((msg, idx) => ({
     id: msg.id || `global-msg-${idx}`,
@@ -253,33 +290,13 @@ export const ExplorerChatContent: React.FC<ExplorerChatContentProps> = ({
             </div>
           )}
           <button
-            onClick={async () => {
-              const selectedTasks = generatedTaskDraft.filter((task) => task.selected && task.title.trim() && task.description.trim());
-              const selectedKeys = new Set(selectedTasks.map((task) => task.key));
-              const tasks = selectedTasks.map(({ key, title, description, dependsOn }) => ({
-                key,
-                title: title.trim(),
-                description: description.trim(),
-                dependsOn: dependsOn.filter((dependency) => selectedKeys.has(dependency)),
-              }));
-              const contexts = generatedContextDraft
-                .filter((context) => context.selected && context.title.trim() && context.content.trim())
-                .map(({ key, title, content, taskKeys }) => ({
-                  key,
-                  title: title.trim(),
-                  content: content.trim(),
-                  taskKeys: taskKeys.filter((taskKey) => selectedKeys.has(taskKey)),
-                }))
-                .filter((context) => context.taskKeys.length > 0);
-              await onCreateTaskNodes(tasks, contexts);
-              if (tasks.length) {
-                setGeneratedTaskDraft([]);
-                setGeneratedContextDraft([]);
-              }
-            }}
-            disabled={!generatedTaskDraft.some((task) => task.selected && task.title.trim() && task.description.trim())}
-            className="mt-2 w-full bg-[var(--color-status-success-bg)] hover:bg-[var(--color-status-success-solid)] disabled:opacity-40 text-[var(--color-status-success)] hover:text-[var(--color-status-success-solid-foreground)] rounded px-3 py-2 text-xs font-semibold flex items-center justify-center gap-1.5"
-          ><Check size={13} /> Add selected graph</button>
+            onClick={handleCreateTaskNodes}
+            disabled={isCreatingNodes || !generatedTaskDraft.some((task) => task.selected && task.title.trim() && task.description.trim())}
+            className="mt-2 w-full bg-[var(--color-status-success-bg)] hover:bg-[var(--color-status-success-solid)] disabled:opacity-40 disabled:cursor-not-allowed text-[var(--color-status-success)] hover:text-[var(--color-status-success-solid-foreground)] rounded px-3 py-2 text-xs font-semibold flex items-center justify-center gap-1.5"
+          >
+            {isCreatingNodes ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+            {isCreatingNodes ? "Adding graph…" : "Add selected graph"}
+          </button>
         </div>
       )}
 
