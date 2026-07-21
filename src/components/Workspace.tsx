@@ -484,11 +484,17 @@ export const Workspace: React.FC = () => {
           try {
             console.log(`WebSocket [write_file] intercept for: ${data.path}`);
             if (!currentExecutionOriginalFiles.has(data.path)) {
-              try {
-                const original = await invoke<string>("read_file_disk", { path: data.path });
-                currentExecutionOriginalFiles.set(data.path, original);
-              } catch {
-                currentExecutionOriginalFiles.set(data.path, "");
+              // Use the upstream task's VFS state as the baseline so the diff
+              // shows only what THIS task changed, not inherited upstream changes.
+              if (connectedUpstreamVfsFiles.has(data.path)) {
+                currentExecutionOriginalFiles.set(data.path, connectedUpstreamVfsFiles.get(data.path)!);
+              } else {
+                try {
+                  const original = await invoke<string>("read_file_disk", { path: data.path });
+                  currentExecutionOriginalFiles.set(data.path, original);
+                } catch {
+                  currentExecutionOriginalFiles.set(data.path, "");
+                }
               }
             }
             await vfs.writeFile(data.path, data.content, nodeId);

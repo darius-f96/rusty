@@ -69,6 +69,7 @@ import { agentChat, stopAgentChatDelegations } from "./capabilities/agentChat";
 import { generateSkill } from "./capabilities/generateSkill";
 import { inlineChat } from "./capabilities/inlineChat";
 import { generateTaskNodes, stopTaskNodeGeneration } from "./capabilities/generateTaskNodes";
+import { testBuild } from "./capabilities/testBuild";
 import { stopCommandsForSession } from "./services/commandExecution";
 import { clearCommandSession } from "./services/commandPermissions";
 import { discoverProviderModels, testProviderConnection } from "./services/llmProviders";
@@ -484,6 +485,8 @@ wss.on("connection", (ws: WebSocket, req: http.IncomingMessage) => {
       } else if (data.type === "generate_task_nodes_stop") {
         const stopped = stopTaskNodeGeneration(data.requestId);
         safeSend(ws, { type: "generate_task_nodes_stopped", requestId: data.requestId, nodeId: data.nodeId, stopped });
+      } else if (data.type === "test_build") {
+        await testBuild(ws, data);
       } else if (data.type === "command_session_close") {
         stopCommandsForSession(data.sessionId);
         clearCommandSession(data.sessionId);

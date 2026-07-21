@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { GitMerge, Play, Loader2, FileCode, MessageSquare, X, Send, AlertTriangle, Maximize2, Minimize2, Terminal, Octagon, RotateCcw, Folder, Trash2, CheckCircle2, CircleDashed, PencilLine } from "lucide-react";
+import { GitMerge, Play, Loader2, FileCode, MessageSquare, X, Send, AlertTriangle, Maximize2, Minimize2, Terminal, Octagon, RotateCcw, Folder, Trash2, CheckCircle2, CircleDashed, Hammer, XCircle } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
 import { VfsRegistry, VFS_CHANGED_EVENT, type VfsChangedDetail } from "../../services/vfs";
 import { notify } from "../../notificationStore";
 import { PRDiffView } from "./components/PRDiffView";
+import type { TaskVersion } from "./components/PRDiffView";
 import { useResizable } from "./useResizable";
 import { CustomSelect } from "../CustomSelect";
 import { queryDuplicateTrackedFiles } from "../../services/vfs/orchestrators/queryOrchestrator";
@@ -16,11 +17,9 @@ import { buildReconciliationTaskFileRecords, normalizeReconciliationPath } from 
 import { providerHasModelReference, selectableProviderModels } from "../../store/providerHelpers";
 import { VfsExplorer } from "./components/VfsExplorer";
 import type { ReconciliationLedgerEntry, ReconciliationSnapshot } from "../../store/types";
+import { invoke } from "@tauri-apps/api/core";
 import { createAgentHarnessSocket } from "../../services/agentHarnessClient";
-import {
-  ManualReconciliationEditor,
-  type ManualReconciliationVariant,
-} from "./components/ManualReconciliationEditor";
+
 
 interface ReconciliationGraphPaneProps {
   onClose: () => void;
@@ -42,7 +41,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
 
   // States
   const [selectedModel, setSelectedModel] = useState(activeModel || "");
-  const [activeTab, setActiveTab] = useState<"overview" | "manual" | "chat" | "console" | "files" | "vfs">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "chat" | "console" | "files" | "vfs">("overview");
   const [isReconciling, setIsReconciling] = useState(false);
   const [chatMessages, setChatMessages] = useState<{ role: string; content: string }[]>([]);
   const [chatInput, setChatInput] = useState("");
@@ -51,8 +50,10 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
   const [isResetting, setIsResetting] = useState(false);
   const [reconciledFiles, setReconciledFiles] = useState<string[]>([]);
   const [reconciliationRevision, setReconciliationRevision] = useState(0);
-  const [manualFilePath, setManualFilePath] = useState("");
   const [chatFilePath, setChatFilePath] = useState("");
+  const [isTesting, setIsTesting] = useState(false);
+  const [buildCommand, setBuildCommand] = useState(() => localStorage.getItem(`axiom_build_command_${tabId}`) || "");
+  const testSocketRef = useRef<WebSocket | null>(null);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<WebSocket | null>(null);
@@ -97,6 +98,33 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
     [taskFileRecords],
   );
 
+  // Per-file task versions used by PRDiffView for attribution decorations
+  const taskVersionsPerFile = useMemo<Record<string, TaskVersion[]>>(() => {
+    const result: Record<string, TaskVersion[]> = {};
+    for (const [filePath, entry] of Object.entries(
+      reconciliationSnapshot?.ledger || {}
+    )) {
+      if (entry.status !== "reconciled" || !entry.taskIds?.length) continue;
+      const versions = formattedNodes
+        .filter((n) => entry.taskIds.includes(n.id))
+        .flatMap((n) => {
+          const contentEntry = Object.entries(n.generatedFileContents).find(
+            ([candidate]) => {
+              try {
+                return normalizeReconciliationPath(rootPath, candidate) === filePath;
+              } catch {
+                return candidate === filePath;
+              }
+            }
+          );
+          if (!contentEntry?.[1]) return [];
+          return [{ taskId: n.id, taskName: String(n.name || n.id), content: contentEntry[1] }];
+        });
+      if (versions.length) result[filePath] = versions;
+    }
+    return result;
+  }, [reconciliationSnapshot?.ledger, formattedNodes, rootPath]);
+
   const reconciliationLedger = useMemo<Record<string, ReconciliationLedgerEntry>>(() => {
     if (reconciliationSnapshot?.ledger) return reconciliationSnapshot.ledger;
     return Object.fromEntries((reconciliationSnapshot?.files || []).map((filePath) => [filePath, {
@@ -114,49 +142,6 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
       return entry?.status !== "reconciled" || entry.sourceSignature !== taskFileRecords[filePath]?.sourceSignature;
     }),
   ), [duplicateFiles, reconciliationLedger, taskFileRecords]);
-
-  const manualVariants = useMemo<ManualReconciliationVariant[]>(() => {
-    if (!manualFilePath) return [];
-    return formattedNodes.flatMap((node) => {
-      const sourcePath = node.modifiedFiles.find((candidate) => {
-        try {
-          return normalizeReconciliationPath(rootPath, candidate) === manualFilePath;
-        } catch {
-          return candidate === manualFilePath;
-        }
-      });
-      if (!sourcePath) return [];
-      const contentEntry = Object.entries(node.generatedFileContents).find(([candidate]) => {
-        try {
-          return normalizeReconciliationPath(rootPath, candidate) === manualFilePath;
-        } catch {
-          return candidate === manualFilePath;
-        }
-      });
-      return [{
-        taskId: node.id,
-        taskName: String(node.name || node.id),
-        sourcePath: contentEntry?.[0] || sourcePath,
-        content: contentEntry?.[1],
-        prompt: String(node.prompt || ""),
-      }];
-    });
-  }, [formattedNodes, manualFilePath, rootPath]);
-
-  useEffect(() => {
-    if (activeTab !== "manual") return;
-    const collisionPaths = Object.keys(duplicateFiles);
-    if (!manualFilePath || !duplicateFiles[manualFilePath]) {
-      setManualFilePath(collisionPaths[0] || "");
-    }
-  }, [activeTab, duplicateFiles, manualFilePath]);
-
-  const openManualReconciliation = (filePath: string) => {
-    setManualFilePath(filePath);
-    setChatFilePath(filePath);
-    setActiveTab("manual");
-    setIsMaximized(true);
-  };
 
   useEffect(() => {
     const collisionPaths = Object.keys(duplicateFiles);
@@ -343,60 +328,6 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
     });
   };
 
-  const handleManualReconciliationSave = async (filePath: string, content: string) => {
-    try {
-      if (isReconciling || isResetting) {
-        throw new Error("Wait for the active reconciliation or reset operation to finish before saving a manual result.");
-      }
-      const currentDuplicates = await queryDuplicateTrackedFiles(tabId, rootPath);
-      if (!currentDuplicates[filePath]) {
-        throw new Error("This file no longer has overlapping TaskNode changes.");
-      }
-      const ownerFiles = await reconciliationService.getFiles(tabId);
-      const currentRecords = buildReconciliationTaskFileRecords(rootPath, formattedNodes, ownerFiles);
-      const record = currentRecords[filePath];
-      if (!record) throw new Error("The TaskNode versions for this file are no longer available.");
-      if (!(await ensureReconciliationSnapshot([filePath], currentRecords))) {
-        throw new Error("The original VFS version could not be captured.");
-      }
-
-      await VfsRegistry.getOrCreate(tabId).writeFile(filePath, content, reconciliationNodeId);
-      const snapshot = useWorkspaceStore.getState().canvasContexts[tabId]?.reconciliationSnapshot;
-      if (!snapshot) throw new Error("The reconciliation snapshot is missing.");
-      const ledger = { ...(snapshot.ledger || reconciliationLedger) };
-      ledger[filePath] = {
-        path: filePath,
-        status: "reconciled",
-        sourceSignature: record.sourceSignature,
-        taskIds: record.taskIds,
-        updatedAt: new Date().toISOString(),
-        modified: content !== snapshot.originalFileContents[filePath],
-        method: "manual",
-        response: "Reconciled manually by the user.",
-      };
-      const files = Array.from(new Set([...snapshot.files, filePath]));
-      useWorkspaceStore.getState().updateCanvasContext(tabId, {
-        reconciliationSnapshot: {
-          ...snapshot,
-          files,
-          generatedFileContents: { ...snapshot.generatedFileContents, [filePath]: content },
-          ledger,
-          updatedAt: new Date().toISOString(),
-        },
-        isPipelineApplied: false,
-      });
-      setReconciledFiles(files);
-      setReconciliationRevision((revision) => revision + 1);
-      appendChatMessage({ role: "system", content: `${filePath} was reconciled manually and added to the ledger.` });
-      const { canvasFileService } = await import("../tabs/canvas/services/canvasFileService");
-      await canvasFileService.autoSaveCanvas(tabId);
-      await loadDuplicates();
-      notify("Manual Reconciliation Saved", "The file was saved to the reconciliation VFS and marked as manually reconciled.", "success");
-    } catch (error: any) {
-      notify("Manual Reconciliation Failed", error?.message || String(error), "error");
-      throw error;
-    }
-  };
 
   const handleRemoveReconciledFile = async (filePath: string) => {
     if (isReconciling || isResetting) return;
@@ -766,6 +697,187 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
     };
   };
 
+  const handleStopTestBuild = () => {
+    addConsoleLog("Test build stopped by user.");
+    if (testSocketRef.current) {
+      if (testSocketRef.current.readyState === WebSocket.OPEN) {
+        testSocketRef.current.close(1000, "User requested stop");
+      }
+      testSocketRef.current = null;
+    }
+    setIsTesting(false);
+  };
+
+  const handleTestBuild = async () => {
+    if (isReconciling || isResetting || isTesting) return;
+    if (!buildCommand.trim()) {
+      notify("Build Command Required", "Enter a build command (e.g. npm run build) before running a test build.", "info");
+      return;
+    }
+
+    // Collect all files that should be applied: reconciled collisions + ordinary task-owned files
+    const allApplyFiles = Array.from(new Set([...reconciledFiles, ...ordinaryChangedFiles]));
+    if (!allApplyFiles.length) {
+      notify("Nothing to Test", "No task-owned files are available to apply for a test build.", "info");
+      return;
+    }
+
+    setIsTesting(true);
+    setActiveTab("console");
+    clearConsoleLog();
+    addConsoleLog("Snapshotting disk state before test build...");
+
+    const vfs = VfsRegistry.getOrCreate(tabId);
+
+    // 1. Snapshot current disk content so we can restore afterwards
+    const diskSnapshot: Record<string, string> = {};
+    for (const filePath of allApplyFiles) {
+      try {
+        diskSnapshot[filePath] = await invoke<string>("read_file_disk", { path: filePath });
+      } catch {
+        diskSnapshot[filePath] = ""; // file not on disk yet
+      }
+    }
+
+    // 2. Apply VFS to disk
+    addConsoleLog(`Applying ${allApplyFiles.length} file(s) to disk for test...`);
+    try {
+      // Sync ordinary task files into VFS before applying
+      for (const filePath of ordinaryChangedFiles) {
+        const record = taskFileRecords[filePath];
+        const sourcePath = record?.sourcePath || filePath;
+        const content = record?.taskContent ?? await vfs.readFile(sourcePath);
+        if (sourcePath !== filePath || content !== undefined) {
+          await vfs.writeFile(filePath, content);
+        }
+      }
+      await vfs.applyToDisk(allApplyFiles);
+    } catch (err: any) {
+      addConsoleLog(`Failed to apply files to disk: ${err.message}`);
+      setIsTesting(false);
+      notify("Test Build Failed", `Could not apply files to disk: ${err.message}`, "error");
+      return;
+    }
+
+    const restoreDisk = async (finalFiles?: Record<string, string>) => {
+      // Update VFS and snapshot with model-fixed content (if any)
+      if (finalFiles && Object.keys(finalFiles).length > 0) {
+        const snapshot = useWorkspaceStore.getState().canvasContexts[tabId]?.reconciliationSnapshot;
+        if (snapshot) {
+          const updatedGenerated = { ...snapshot.generatedFileContents };
+          for (const [filePath, content] of Object.entries(finalFiles)) {
+            if (reconciledFiles.includes(filePath)) {
+              updatedGenerated[filePath] = content;
+              try { await vfs.writeFile(filePath, content, reconciliationNodeId); } catch { /* skip */ }
+            }
+          }
+          useWorkspaceStore.getState().updateCanvasContext(tabId, {
+            reconciliationSnapshot: { ...snapshot, generatedFileContents: updatedGenerated, updatedAt: new Date().toISOString() },
+            isPipelineApplied: false,
+          });
+        }
+      }
+      // Restore disk
+      addConsoleLog("Restoring disk to pre-test state...");
+      for (const [filePath, content] of Object.entries(diskSnapshot)) {
+        try {
+          await invoke("write_file_disk", { path: filePath, content });
+        } catch (err: any) {
+          console.error(`[TestBuild] Failed to restore disk file ${filePath}:`, err);
+        }
+      }
+      addConsoleLog("Disk restored.");
+    };
+
+    // 3. Open WebSocket and start test build
+    let socket: WebSocket;
+    try {
+      socket = createAgentHarnessSocket();
+      testSocketRef.current = socket;
+    } catch (err: any) {
+      await restoreDisk();
+      setIsTesting(false);
+      notify("Test Build Failed", `Connection error: ${err.message}`, "error");
+      return;
+    }
+
+    const provider = customProviders.find((c) => providerHasModelReference(c, selectedModel))
+      || customProviders.find((c) => c.id === activeCustomProviderId);
+
+    socket.onopen = () => {
+      addConsoleLog(`Connected. Running: ${buildCommand}`);
+      socket.send(JSON.stringify({
+        type: "test_build",
+        tabId,
+        buildCommand,
+        workspaceRoot: rootPath,
+        reconciledFiles: allApplyFiles,
+        model: selectedModel,
+        customProvider: provider || null,
+      }));
+    };
+
+    socket.onmessage = (event) => {
+      void (async () => {
+        try {
+          const msg = JSON.parse(event.data);
+
+          if (msg.type === "test_build_log") {
+            addConsoleLog(msg.message);
+            return;
+          }
+
+          if (msg.type === "test_build_iteration") {
+            addConsoleLog(`\n=== Build attempt ${msg.attempt}/${msg.maxAttempts} ===`);
+            return;
+          }
+
+          if (msg.type === "test_build_complete") {
+            await restoreDisk(msg.finalFiles);
+            setIsTesting(false);
+            testSocketRef.current = null;
+            socket.close();
+            if (msg.success) {
+              notify(
+                "Test Build Passed",
+                `Build succeeded after ${msg.attempts} attempt${msg.attempts === 1 ? "" : "s"}. Disk restored. You can now Apply Axiom to permanently write the working code.`,
+                "success",
+              );
+            } else {
+              notify(
+                "Test Build Failed",
+                `Build did not pass after ${msg.attempts} attempts. Model's best attempt is saved in the VFS. Check console for details.`,
+                "error",
+              );
+            }
+            return;
+          }
+
+          if (msg.type === "test_build_error") {
+            addConsoleLog(`Error: ${msg.error}`);
+            await restoreDisk();
+            setIsTesting(false);
+            testSocketRef.current = null;
+            socket.close();
+            notify("Test Build Error", msg.error, "error");
+            return;
+          }
+        } catch (err: any) {
+          console.error("[TestBuild] Message parse error:", err);
+        }
+      })();
+    };
+
+    socket.onerror = () => {
+      addConsoleLog("WebSocket connection failed.");
+      void restoreDisk().then(() => setIsTesting(false));
+    };
+
+    socket.onclose = () => {
+      if (isTesting) setIsTesting(false);
+    };
+  };
+
   const handleSendChat = () => {
     if (!chatInput.trim() || isReconciling || !chatFilePath) return;
     const text = chatInput.trim();
@@ -870,19 +982,6 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
         >
           <GitMerge size={13} />
           <span>Overview</span>
-        </button>
-        <button
-          onClick={() => {
-            setActiveTab("manual");
-            setManualFilePath((current) => current || Object.keys(duplicateFiles)[0] || "");
-            setIsMaximized(true);
-          }}
-          className={`flex flex-shrink-0 items-center space-x-1.5 px-3 py-2 text-xs font-mono font-semibold transition-all border-b-2 hover:text-[var(--text-light)] cursor-pointer ${
-            activeTab === "manual" ? "border-[var(--color-status-danger-border)] text-[var(--color-status-danger)]" : "border-transparent text-[var(--text-muted)]"
-          }`}
-        >
-          <PencilLine size={13} />
-          <span>Manual</span>
         </button>
         <button
           onClick={() => setActiveTab("chat")}
@@ -995,15 +1094,6 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
                                 Manual
                               </span>
                             )}
-                            <button
-                              onClick={() => openManualReconciliation(filePath)}
-                              disabled={isReconciling || isResetting}
-                              className="flex items-center gap-1 rounded border border-[var(--border-color)] px-1.5 py-1 text-[8px] font-mono font-bold text-[var(--text-muted)] hover:border-[var(--color-status-warning-border)] hover:text-[var(--color-status-warning)] disabled:opacity-40"
-                              title="Open this file in the manual reconciliation editor"
-                            >
-                              <PencilLine size={10} />
-                              <span>Manual</span>
-                            </button>
                             {status === "reconciled" && (
                               <button
                                 onClick={() => void handleRemoveReconciledFile(filePath)}
@@ -1072,47 +1162,6 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
                 </div>
               )}
             </div>
-          </div>
-        )}
-
-        {activeTab === "manual" && (
-          <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
-            <div className="flex flex-shrink-0 items-center gap-3 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/30 px-3 py-2 font-mono">
-              <span className="text-[9px] font-bold uppercase text-[var(--text-muted)]">Collision file</span>
-              <CustomSelect
-                value={manualFilePath}
-                onChange={setManualFilePath}
-                options={duplicateFilesEntries.map(([filePath]) => ({
-                  id: filePath,
-                  name: filePath.replace(/\\/g, "/").split("/").pop() || filePath,
-                }))}
-                placeholder="Select an overlapping file"
-                className="w-72 text-xs font-mono"
-                direction="down"
-              />
-              <span className="min-w-0 truncate text-[9px] text-[var(--text-muted)]" title={manualFilePath}>{manualFilePath}</span>
-            </div>
-            {manualFilePath && duplicateFiles[manualFilePath] ? (
-              <ManualReconciliationEditor
-                key={manualFilePath}
-                tabId={tabId}
-                filePath={manualFilePath}
-                sourcePath={taskFileRecords[manualFilePath]?.sourcePath || manualFilePath}
-                variants={manualVariants}
-                onSave={(content) => handleManualReconciliationSave(manualFilePath, content)}
-                onAskModel={async (prompt) => {
-                  setChatFilePath(manualFilePath);
-                  await startReconciliation(prompt, manualFilePath);
-                }}
-                modelBusy={isReconciling || isResetting}
-                refreshKey={reconciliationRevision}
-              />
-            ) : (
-              <div className="flex flex-1 flex-col items-center justify-center gap-2 px-8 text-center text-xs font-mono text-[var(--text-muted)]">
-                <PencilLine size={28} className="text-[var(--color-status-warning)]" />
-                <span>No overlapping file is available for manual reconciliation.</span>
-              </div>
-            )}
           </div>
         )}
 
@@ -1229,10 +1278,9 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
             modifiedFiles={reconciledFiles}
             ownerNodeId={reconciliationNodeId}
             persistenceTabId={tabId}
-            originalFileContents={reconciliationSnapshot?.originalFileContents}
+            taskVersionsPerFile={taskVersionsPerFile}
             refreshKey={reconciliationRevision}
             onFileSaved={handleReconciledFileSaved}
-            onOpenManual={openManualReconciliation}
           />
         )}
 
@@ -1242,34 +1290,72 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
       </div>
 
       {/* Footer Actions */}
-      <div className="p-3 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/20 flex items-center justify-between gap-3 flex-shrink-0">
-        <button
-          onClick={() => void handleResetReconciliation()}
-          disabled={Object.keys(reconciliationLedger).length === 0 || isReconciling || isResetting}
-          title={Object.keys(reconciliationLedger).length > 0 ? "Clear the reconciliation ledger and restore completed collision files" : "No reconciliation to reset"}
-          className="border border-[var(--color-status-warning-border)] bg-[var(--color-status-warning-bg)] hover:bg-[var(--color-status-warning-bg)] disabled:opacity-40 disabled:cursor-not-allowed text-[var(--color-status-warning)] text-xs font-mono font-bold px-3 py-2 rounded-lg flex items-center space-x-1.5 transition-all cursor-pointer"
-        >
-          {isResetting ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
-          <span>{isResetting ? "Resetting" : "Reset"}</span>
-        </button>
-        {isReconciling ? (
+      <div className="border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/20 flex-shrink-0">
+        {/* Build command input row */}
+        <div className="flex items-center gap-2 px-3 pt-2 pb-1">
+          <Hammer size={11} className="text-[var(--text-muted)] flex-shrink-0" />
+          <input
+            type="text"
+            value={buildCommand}
+            onChange={(e) => {
+              setBuildCommand(e.target.value);
+              localStorage.setItem(`axiom_build_command_${tabId}`, e.target.value);
+            }}
+            placeholder="Build command (e.g. npm run build)"
+            disabled={isTesting}
+            className="flex-1 bg-[var(--bg-app)] border border-[var(--border-color)] rounded px-2 py-1 text-[10px] font-mono text-[var(--text-normal)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--border-active)] disabled:opacity-50"
+          />
+          {isTesting ? (
+            <button
+              onClick={handleStopTestBuild}
+              className="flex-shrink-0 flex items-center gap-1 px-2 py-1 text-[10px] font-mono font-bold bg-[var(--color-status-danger-bg)] border border-[var(--color-status-danger-border)] text-[var(--color-status-danger)] rounded cursor-pointer"
+              title="Stop test build"
+            >
+              <XCircle size={11} />
+              <span>Stop</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => void handleTestBuild()}
+              disabled={isReconciling || isResetting || reconciledFiles.length === 0}
+              title={reconciledFiles.length === 0 ? "Reconcile files first" : "Temporarily apply, build, auto-fix if needed, then rollback"}
+              className="flex-shrink-0 flex items-center gap-1 px-2 py-1 text-[10px] font-mono font-bold bg-[var(--bg-sidebar)] border border-[var(--border-color)] text-[var(--text-muted)] hover:border-[var(--color-status-warning-border)] hover:text-[var(--color-status-warning)] disabled:opacity-40 disabled:cursor-not-allowed rounded cursor-pointer transition-colors"
+            >
+              <Hammer size={11} />
+              <span>Test Build</span>
+            </button>
+          )}
+        </div>
+        {/* Main action row */}
+        <div className="flex items-center justify-between gap-3 px-3 pb-3 pt-1">
           <button
-            onClick={() => handleStopReconciliation()}
-            className="bg-[var(--color-status-danger-solid)] hover:bg-[var(--color-status-danger-solid)] text-[var(--color-status-danger-solid-foreground)] text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer animate-pulse"
+            onClick={() => void handleResetReconciliation()}
+            disabled={Object.keys(reconciliationLedger).length === 0 || isReconciling || isResetting}
+            title={Object.keys(reconciliationLedger).length > 0 ? "Clear the reconciliation ledger and restore completed collision files" : "No reconciliation to reset"}
+            className="border border-[var(--color-status-warning-border)] bg-[var(--color-status-warning-bg)] hover:bg-[var(--color-status-warning-bg)] disabled:opacity-40 disabled:cursor-not-allowed text-[var(--color-status-warning)] text-xs font-mono font-bold px-3 py-2 rounded-lg flex items-center space-x-1.5 transition-all cursor-pointer"
           >
-            <Octagon size={13} />
-            <span>Stop Execution</span>
+            {isResetting ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
+            <span>{isResetting ? "Resetting" : "Reset"}</span>
           </button>
-        ) : (
-          <button
-            onClick={() => void startReconciliation()}
-            disabled={taskModifiedFiles.length === 0 || isResetting}
-            className="bg-[var(--color-status-danger-solid)] hover:bg-[var(--color-status-danger-solid)] disabled:opacity-50 disabled:cursor-not-allowed text-[var(--color-status-danger-solid-foreground)] text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer"
-          >
-            <Play size={13} />
-            <span>{pendingCount > 0 ? `Reconcile ${pendingCount} Pending` : "Check Reconciliation"}</span>
-          </button>
-        )}
+          {isReconciling ? (
+            <button
+              onClick={() => handleStopReconciliation()}
+              className="bg-[var(--color-status-danger-solid)] hover:bg-[var(--color-status-danger-solid)] text-[var(--color-status-danger-solid-foreground)] text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer animate-pulse"
+            >
+              <Octagon size={13} />
+              <span>Stop Execution</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => void startReconciliation()}
+              disabled={taskModifiedFiles.length === 0 || isResetting || isTesting}
+              className="bg-[var(--color-status-danger-solid)] hover:bg-[var(--color-status-danger-solid)] disabled:opacity-50 disabled:cursor-not-allowed text-[var(--color-status-danger-solid-foreground)] text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer"
+            >
+              <Play size={13} />
+              <span>{pendingCount > 0 ? `Reconcile ${pendingCount} Pending` : "Check Reconciliation"}</span>
+            </button>
+          )}
+        </div>
       </div>
       {ConfirmModalComponent}
     </div>
