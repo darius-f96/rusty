@@ -20,6 +20,11 @@ import {
   completeCodexText,
   OPENAI_CODEX_PROVIDER_ID,
 } from "./codexService";
+import {
+  ANTHROPIC_CLAUDE_CODE_PROVIDER_ID,
+  callClaudeCodeWithToolsStreaming,
+  completeClaudeCodeText,
+} from "./claudeCodeService";
 
 export interface ResolvedLlmRuntime {
   providerId: string;
@@ -70,6 +75,10 @@ function isGitHubCopilotProvider(provider?: LlmProviderConfig | null): boolean {
 
 function isOpenAICodexProvider(provider?: LlmProviderConfig | null): boolean {
   return provider?.transport === "openai-codex-app-server" || provider?.id === OPENAI_CODEX_PROVIDER_ID;
+}
+
+function isClaudeCodeProvider(provider?: LlmProviderConfig | null): boolean {
+  return provider?.transport === "anthropic-claude-agent-sdk" || provider?.id === ANTHROPIC_CLAUDE_CODE_PROVIDER_ID;
 }
 
 function syntheticModel(provider: LlmProviderConfig, configuredModel: ProviderModelConfig | undefined, modelId: string): any {
@@ -210,6 +219,19 @@ export async function completeLlmText(options: {
       signal: options.signal,
     });
   }
+  if (isClaudeCodeProvider(options.customProvider)) {
+    const providerId = options.customProvider!.id;
+    const selection = resolveProviderModelSelection(options.customProvider!, options.modelReference);
+    return completeClaudeCodeText({
+      modelId: selection.modelId || remoteModelId(options.modelReference, providerId),
+      systemPrompt: options.systemPrompt,
+      userMessage: options.userMessage,
+      history: options.history,
+      reasoning: options.reasoning || selection.reasoningEffort,
+      cwd: options.cwd,
+      signal: options.signal,
+    });
+  }
 
   const runtime = await resolveLlmRuntime(options.modelReference, options.customProvider);
   const { completeSimple } = await importEsm<any>("@earendil-works/pi-ai/compat");
@@ -286,6 +308,22 @@ export async function callLlmWithToolsPiStreaming(options: {
       sendToken: options.sendToken,
       history: options.history,
       maxRounds: options.maxRounds,
+      reasoning: options.reasoning || selection.reasoningEffort,
+      cwd: options.cwd,
+      shouldAbort: options.shouldAbort,
+    });
+  }
+  if (isClaudeCodeProvider(options.customProvider)) {
+    const providerId = options.customProvider!.id;
+    const selection = resolveProviderModelSelection(options.customProvider!, options.modelReference);
+    return callClaudeCodeWithToolsStreaming({
+      modelId: selection.modelId || remoteModelId(options.modelReference, providerId),
+      systemPrompt: options.systemPrompt,
+      userMessage: options.userMessage,
+      tools: options.tools,
+      sendLog: options.sendLog,
+      sendToken: options.sendToken,
+      history: options.history,
       reasoning: options.reasoning || selection.reasoningEffort,
       cwd: options.cwd,
       shouldAbort: options.shouldAbort,

@@ -38,7 +38,7 @@ export interface CustomProvider {
   apiKey: string;
   apiType: string;
   /** Subscription providers use their official local runtimes instead of Pi's HTTP adapters. */
-  transport?: "http" | "github-copilot-sdk" | "openai-codex-app-server";
+  transport?: "http" | "github-copilot-sdk" | "openai-codex-app-server" | "anthropic-claude-agent-sdk";
   authType?: "bearer" | "anthropic" | "none" | "environment";
   catalogUrl?: string;
   models: ProviderModel[];

@@ -26,6 +26,8 @@ export interface CodexConnectionStatus {
   diagnostics?: string[];
 }
 
+export type ClaudeCodeConnectionStatus = CodexConnectionStatus;
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${SIDECAR_HTTP_URL}${path}`, init);
   const payload = await response.json().catch(() => ({}));
@@ -74,5 +76,13 @@ export const llmIntegrationService = {
     return request<CodexConnectionStatus>("/llm/codex/login", {
       method: "POST",
     });
+  },
+
+  async getClaudeCodeStatus(): Promise<ClaudeCodeConnectionStatus> {
+    return request<ClaudeCodeConnectionStatus>("/llm/claude-code/status");
+  },
+
+  async startClaudeCodeLogin(): Promise<ClaudeCodeConnectionStatus> {
+    return request<ClaudeCodeConnectionStatus>("/llm/claude-code/login", { method: "POST" });
   },
 };

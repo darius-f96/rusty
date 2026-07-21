@@ -77,6 +77,12 @@ import {
   startCodexLogin,
   testCodexConnection,
 } from "./services/codexService";
+import {
+  discoverClaudeCodeModels,
+  getClaudeCodeConnectionStatus,
+  startClaudeCodeLogin,
+  testClaudeCodeConnection,
+} from "./services/claudeCodeService";
 import { fetchProviderQuota } from "./services/providerQuota";
 
 dotenv.config();
@@ -141,6 +147,8 @@ app.post("/llm/models", async (req, res) => {
       ? await discoverCopilotModels()
       : provider.transport === "openai-codex-app-server" || provider.id === "openai-codex"
         ? await discoverCodexModels()
+        : provider.transport === "anthropic-claude-agent-sdk" || provider.id === "anthropic-claude-code"
+          ? await discoverClaudeCodeModels()
         : await discoverProviderModels(provider);
     res.json({ models });
   } catch (err: any) {
@@ -156,6 +164,8 @@ app.post("/llm/test", async (req, res) => {
       ? await testCopilotConnection()
       : provider.transport === "openai-codex-app-server" || provider.id === "openai-codex"
         ? await testCodexConnection()
+        : provider.transport === "anthropic-claude-agent-sdk" || provider.id === "anthropic-claude-code"
+          ? await testClaudeCodeConnection()
         : await testProviderConnection(provider);
     res.json({ ok: true, ...result });
   } catch (err: any) {
@@ -210,6 +220,22 @@ app.get("/llm/codex/models", async (_req, res) => {
     res.json({ models: await discoverCodexModels() });
   } catch (err: any) {
     res.status(502).json({ error: err?.message || "Could not load OpenAI Codex models." });
+  }
+});
+
+app.get("/llm/claude-code/status", async (_req, res) => {
+  res.json(await getClaudeCodeConnectionStatus());
+});
+
+app.post("/llm/claude-code/login", async (_req, res) => {
+  res.status(202).json(await startClaudeCodeLogin());
+});
+
+app.get("/llm/claude-code/models", async (_req, res) => {
+  try {
+    res.json({ models: await discoverClaudeCodeModels() });
+  } catch (err: any) {
+    res.status(502).json({ error: err?.message || "Could not load Claude Code models." });
   }
 });
 

@@ -251,6 +251,10 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
     options.sendLog("Using the OpenAI Codex app-server agent runtime.");
     return undefined;
   }
+  if (options.customProvider?.transport === "anthropic-claude-agent-sdk" || options.customProvider?.id === "anthropic-claude-code") {
+    options.sendLog("Using the Claude Agent SDK runtime.");
+    return undefined;
+  }
   if (!supportsPiRuntime()) {
     options.sendLog(`Pi delegation requires Node 22.19+; current runtime is Node ${process.versions.node} at ${process.execPath}. Using the compatibility agent runtime.`);
     return undefined;

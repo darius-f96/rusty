@@ -40,7 +40,7 @@ export interface LlmProviderConfig {
   baseUrl: string;
   apiKey?: string;
   apiType?: LlmApiType | string;
-  transport?: "http" | "github-copilot-sdk" | "openai-codex-app-server";
+  transport?: "http" | "github-copilot-sdk" | "openai-codex-app-server" | "anthropic-claude-agent-sdk";
   authType?: LlmAuthType;
   catalogUrl?: string;
   models?: ProviderModelConfig[];
@@ -279,6 +279,9 @@ export async function discoverProviderModels(provider: LlmProviderConfig): Promi
   }
   if (provider.transport === "openai-codex-app-server" || provider.id === "openai-codex") {
     throw new Error("OpenAI Codex model discovery must use the Codex app-server adapter.");
+  }
+  if (provider.transport === "anthropic-claude-agent-sdk" || provider.id === "anthropic-claude-code") {
+    throw new Error("Claude Code model discovery must use the Claude Agent SDK adapter.");
   }
   const { url, headers } = catalogRequest(provider);
   const controller = new AbortController();

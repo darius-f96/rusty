@@ -5,7 +5,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { CustomSelect } from "../CustomSelect";
 import { notify } from "../../notificationStore";
 import { llmIntegrationService } from "../../services/llmIntegrationService";
-import type { CodexConnectionStatus, CopilotConnectionStatus } from "../../services/llmIntegrationService";
+import type { ClaudeCodeConnectionStatus, CodexConnectionStatus, CopilotConnectionStatus } from "../../services/llmIntegrationService";
 import { providerModelVariants } from "../../store/providerHelpers";
 
 const API_PROTOCOL_OPTIONS = [
@@ -34,7 +34,8 @@ export const LlmSetupTab: React.FC = () => {
   const selectedProvider = customProviders.find((p) => p.id === activeCustomProviderId);
   const isCopilot = selectedProvider?.transport === "github-copilot-sdk" || selectedProvider?.id === "github-copilot";
   const isCodex = selectedProvider?.transport === "openai-codex-app-server" || selectedProvider?.id === "openai-codex";
-  const isManagedAuthProvider = isCopilot || isCodex;
+  const isClaudeCode = selectedProvider?.transport === "anthropic-claude-agent-sdk" || selectedProvider?.id === "anthropic-claude-code";
+  const isManagedAuthProvider = isCopilot || isCodex || isClaudeCode;
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [catalogUrl, setCatalogUrl] = useState("");
@@ -46,7 +47,10 @@ export const LlmSetupTab: React.FC = () => {
   const [connectionStatus, setConnectionStatus] = useState<Record<string, "connected" | "failed">>({});
   const [copilotStatus, setCopilotStatus] = useState<CopilotConnectionStatus | null>(null);
   const [codexStatus, setCodexStatus] = useState<CodexConnectionStatus | null>(null);
-  const managedStatus = isCodex ? codexStatus : copilotStatus;
+  const [claudeCodeStatus, setClaudeCodeStatus] = useState<ClaudeCodeConnectionStatus | null>(null);
+  const managedStatus = isCodex ? codexStatus : isClaudeCode ? claudeCodeStatus : copilotStatus;
+  const managedVendor = isCodex ? "OpenAI" : isClaudeCode ? "Anthropic" : "GitHub";
+  const managedProduct = isCodex ? "Codex" : isClaudeCode ? "Claude Code" : "Copilot";
   const managedAutoLoadRef = useRef("");
 
   useEffect(() => {
@@ -111,6 +115,24 @@ export const LlmSetupTab: React.FC = () => {
       if (timer) clearTimeout(timer);
     };
   }, [isCodex]);
+
+  useEffect(() => {
+    if (!isClaudeCode) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const status = await llmIntegrationService.getClaudeCodeStatus();
+        if (cancelled) return;
+        setClaudeCodeStatus(status);
+        if (status.authenticated) setConnectionStatus((current) => ({ ...current, "anthropic-claude-code": "connected" }));
+      } catch (error: any) {
+        if (!cancelled) setClaudeCodeStatus({ state: "failed", authenticated: false, message: error?.message });
+      }
+    };
+    void poll();
+    const timer = setInterval(poll, 10_000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [isClaudeCode]);
 
   // Sync inputs with selected provider
   useEffect(() => {
@@ -218,19 +240,23 @@ export const LlmSetupTab: React.FC = () => {
     try {
       const status = isCodex
         ? await llmIntegrationService.startCodexLogin()
-        : await llmIntegrationService.startCopilotLogin();
+        : isClaudeCode
+          ? await llmIntegrationService.startClaudeCodeLogin()
+          : await llmIntegrationService.startCopilotLogin();
       if (isCodex) setCodexStatus(status as CodexConnectionStatus);
+      else if (isClaudeCode) setClaudeCodeStatus(status as ClaudeCodeConnectionStatus);
       else setCopilotStatus(status as CopilotConnectionStatus);
       notify(
-        isCodex ? "OpenAI authorization" : "GitHub authorization",
-        `Complete the ${isCodex ? "Codex" : "Copilot"} sign-in flow in your browser.`,
+        `${managedVendor} authorization`,
+        isClaudeCode ? "Run claude and /login in a terminal, then refresh models here." : `Complete the ${managedProduct} sign-in flow in your browser.`,
         "info",
       );
     } catch (error: any) {
       const failed = { state: "failed" as const, authenticated: false, message: error?.message };
       if (isCodex) setCodexStatus(failed);
+      else if (isClaudeCode) setClaudeCodeStatus(failed);
       else setCopilotStatus(failed);
-      notify("Sign-in failed", error?.message || `Could not start ${isCodex ? "OpenAI" : "GitHub"} authorization.`, "error");
+      notify("Sign-in failed", error?.message || `Could not start ${managedVendor} authorization.`, "error");
     }
   };
 
@@ -238,7 +264,7 @@ export const LlmSetupTab: React.FC = () => {
     if (!managedStatus?.userCode) return;
     try {
       await navigator.clipboard.writeText(managedStatus.userCode);
-      notify("Code copied", `The ${isCodex ? "OpenAI" : "GitHub"} device code was copied to your clipboard.`, "success");
+      notify("Code copied", `The ${managedVendor} device code was copied to your clipboard.`, "success");
     } catch (error: any) {
       notify("Copy failed", error?.message || "Could not copy the device code.", "error");
     }
@@ -258,7 +284,7 @@ export const LlmSetupTab: React.FC = () => {
     if (!managedStatus?.diagnostics?.length) return;
     try {
       await navigator.clipboard.writeText(managedStatus.diagnostics.join("\n"));
-      notify("Diagnostics copied", `Paste these redacted ${isCodex ? "Codex" : "Copilot"} authentication logs into the issue or chat.`, "success");
+      notify("Diagnostics copied", `Paste these redacted ${managedProduct} authentication logs into the issue or chat.`, "success");
     } catch (error: any) {
       notify("Copy failed", error?.message || "Could not copy the authentication diagnostics.", "error");
     }
@@ -350,6 +376,8 @@ export const LlmSetupTab: React.FC = () => {
         return "Uses your existing OpenAI Codex sign-in through the bundled official Codex app-server. Credentials are shared with the Codex CLI/Desktop via ~/.codex, available models come from your account, and Axiom keeps control of workspace tools and permissions.";
       case "anthropic":
         return "Connects directly to Anthropic's Claude API. If API Key is left blank, it falls back to the ANTHROPIC_API_KEY environment variable defined in the agent sidecar startup environment.";
+      case "anthropic-claude-code":
+        return "Uses Anthropic's official Claude Agent SDK and the local Claude Code authentication. Sign in with Claude Code using /login, or provide ANTHROPIC_API_KEY in the sidecar environment. Axiom supplies and controls the workspace tools.";
       case "opencode":
         return "Connects to OpenCode Zen. If the key is blank, the sidecar uses OPENCODE_API_KEY. Model discovery enriches the Zen catalog with the protocol required by each model. OpenCode Go should be registered separately with provider ID opencode-go and base URL https://opencode.ai/zen/go/v1.";
       case "github-models":
@@ -387,8 +415,9 @@ export const LlmSetupTab: React.FC = () => {
                 const isActive = p.id === activeCustomProviderId;
                 const isCopilotProvider = p.transport === "github-copilot-sdk" || p.id === "github-copilot";
                 const isCodexProvider = p.transport === "openai-codex-app-server" || p.id === "openai-codex";
-                const isManagedProvider = isCopilotProvider || isCodexProvider;
-                const providerStatus = isCodexProvider ? codexStatus : copilotStatus;
+                const isClaudeCodeProvider = p.transport === "anthropic-claude-agent-sdk" || p.id === "anthropic-claude-code";
+                const isManagedProvider = isCopilotProvider || isCodexProvider || isClaudeCodeProvider;
+                const providerStatus = isCodexProvider ? codexStatus : isClaudeCodeProvider ? claudeCodeStatus : copilotStatus;
                 
                 // Connection indicator status text & color
                 const testedStatus = connectionStatus[p.id];
@@ -452,6 +481,8 @@ export const LlmSetupTab: React.FC = () => {
                           ? "Copilot subscription via GitHub"
                           : isCodexProvider
                             ? "Codex plan via OpenAI sign-in"
+                            : isClaudeCodeProvider
+                              ? "Claude Code via Anthropic sign-in"
                             : p.baseUrl || "Built-in API endpoint"}
                       </span>
                     </div>
@@ -620,16 +651,20 @@ export const LlmSetupTab: React.FC = () => {
                         <div className="space-y-1">
                           <div className="font-mono text-xs font-bold text-[var(--text-light)]">
                             {managedStatus?.state === "connecting"
-                              ? `Waiting for ${isCodex ? "OpenAI" : "GitHub"} authorization`
+                              ? `Waiting for ${managedVendor} authorization`
                               : managedStatus?.authenticated
                                 ? `Connected${isCodex
                                   ? codexStatus?.email ? ` as ${codexStatus.email}` : ""
-                                  : copilotStatus?.login ? ` as ${copilotStatus.login}` : ""}`
-                                : `${isCodex ? "OpenAI" : "GitHub"} sign-in required`}
+                                  : isClaudeCode
+                                    ? claudeCodeStatus?.email ? ` as ${claudeCodeStatus.email}` : ""
+                                    : copilotStatus?.login ? ` as ${copilotStatus.login}` : ""}`
+                                : `${managedVendor} sign-in required`}
                           </div>
                           <p className="text-[10px] leading-relaxed text-[var(--text-muted)]">
                             {managedStatus?.message || (isCodex
                               ? "Use the OpenAI account connected to your Codex plan."
+                              : isClaudeCode
+                                ? "Use the Anthropic account connected to Claude Code."
                               : "Use the GitHub account that owns your Copilot subscription.")}
                           </p>
                           {isCopilot && copilotStatus?.host && (
@@ -637,6 +672,9 @@ export const LlmSetupTab: React.FC = () => {
                           )}
                           {isCodex && codexStatus?.planType && (
                             <p className="font-mono text-[9px] text-[var(--text-muted)]">Plan: {codexStatus.planType}</p>
+                          )}
+                          {isClaudeCode && claudeCodeStatus?.planType && (
+                            <p className="font-mono text-[9px] text-[var(--text-muted)]">Plan: {claudeCodeStatus.planType}</p>
                           )}
                         </div>
                       </div>
@@ -650,13 +688,13 @@ export const LlmSetupTab: React.FC = () => {
                           ? "Signing in…"
                           : managedStatus?.authenticated
                             ? "Re-authenticate"
-                            : `Sign in with ${isCodex ? "OpenAI" : "GitHub"}`}
+                            : isClaudeCode ? "Check Claude Login" : `Sign in with ${managedVendor}`}
                       </button>
                     </div>
                     {managedStatus?.state === "connecting" && managedStatus.userCode && (
                       <div className="rounded-xl border border-[var(--accent-color)]/40 bg-[var(--accent-bg)]/10 p-4 text-center">
                         <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-[var(--text-muted)]">
-                          {isCodex ? "OpenAI" : "GitHub"} device code
+                          {managedVendor} device code
                         </div>
                         <button
                           type="button"
@@ -711,6 +749,8 @@ export const LlmSetupTab: React.FC = () => {
                     <div className="border-t border-[var(--border-color)]/50 pt-3 text-[10px] leading-relaxed text-[var(--text-muted)]">
                       {isCodex
                         ? "The official Codex app-server manages credentials in the same ~/.codex account used by Codex CLI/Desktop. Axiom never stores the OAuth token in provider settings."
+                        : isClaudeCode
+                          ? "The official Claude Agent SDK uses the local Claude Code account or sidecar API environment. Axiom never copies Claude OAuth credentials into provider settings."
                         : "GitHub Copilot CLI manages credentials, using the system credential store when available. Axiom never stores the OAuth token in provider settings."}
                     </div>
                   </div>
@@ -855,7 +895,7 @@ export const LlmSetupTab: React.FC = () => {
                         : []
                     }
                     placeholder={isManagedAuthProvider && !managedStatus?.authenticated
-                      ? `Sign in with ${isCodex ? "OpenAI" : "GitHub"} to load ${isCodex ? "Codex" : "Copilot"} models`
+                      ? `Sign in with ${managedVendor} to load ${managedProduct} models`
                       : "No supported models available - fetch the provider catalog"}
                   />
                   {selectedProvider.models.some((model) => providerModelVariants(model).length > 1) && (

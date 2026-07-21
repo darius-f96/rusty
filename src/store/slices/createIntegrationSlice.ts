@@ -75,6 +75,16 @@ const defaultProviders: CustomProvider[] = [
     models: [],
   },
   {
+    id: "anthropic-claude-code",
+    name: "Claude Code",
+    baseUrl: "",
+    apiKey: "",
+    apiType: "claude-agent-sdk",
+    transport: "anthropic-claude-agent-sdk",
+    authType: "environment",
+    models: [],
+  },
+  {
     id: "github-copilot",
     name: "GitHub Copilot",
     baseUrl: "",
