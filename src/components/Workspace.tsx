@@ -15,6 +15,7 @@ import { WorkspaceTab } from "./tabs/WorkspaceTab";
 import { AgentTab } from "./tabs/AgentTab";
 import { SkillsTab } from "./tabs/SkillsTab";
 import { McpIntegrationTab } from "./mcp/McpIntegrationTab";
+import { OnboardingTab } from "./tabs/OnboardingTab";
 import { createPortal } from "react-dom";
 import { AlertTriangle, X, Save, HelpCircle } from "lucide-react";
 import { canvasFileService } from "./tabs/canvas/services/canvasFileService";
@@ -816,6 +817,9 @@ export const Workspace: React.FC = () => {
           )}
           {tab.type === "agent" && (
             <AgentTab tab={tab} groupId={groupId} />
+          )}
+          {tab.type === "onboarding" && (
+            <OnboardingTab />
           )}
         </div>
       );

@@ -1,5 +1,5 @@
 import React, { RefObject } from "react";
-import { X, Cpu, Settings, GitCommit, ChevronDown, FolderOpen, Columns, Wand2 } from "lucide-react";
+import { X, Cpu, Settings, GitCommit, ChevronDown, FolderOpen, Columns, Wand2, BookOpen } from "lucide-react";
 import { FileIcon } from "../services/fileTypeService";
 import { AxiomIcon } from "./AxiomIcon";
 
@@ -177,6 +177,12 @@ export const TabBarView: React.FC<TabBarViewProps> = ({
                   }
                 />
               )}
+              {tab.type === "onboarding" && (
+                <BookOpen
+                  size={11}
+                  className={isActive ? "text-[var(--accent-color)]" : "text-[var(--text-muted)]"}
+                />
+              )}
 
               <span className="truncate max-w-[120px]">{tab.title}</span>
 
@@ -257,6 +263,7 @@ export const TabBarView: React.FC<TabBarViewProps> = ({
                       {tab.type === "git-history" && <GitCommit size={11} />}
                       {tab.type === "git-diff" && <GitCommit size={11} />}
                       {tab.type === "workspace" && <FolderOpen size={11} />}
+                      {tab.type === "onboarding" && <BookOpen size={11} />}
                       <span className="truncate">{tab.title}</span>
                     </div>
 

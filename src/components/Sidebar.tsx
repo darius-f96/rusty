@@ -92,6 +92,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         return activeTabId === "mcp-integration";
       case "settings":
         return activeTabId === "settings";
+      case "onboarding":
+        return activeTab?.type === "onboarding";
       default:
         return false;
     }
@@ -103,7 +105,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     createAgentTab: state.createAgentTab,
     gitStatus: state.gitStatus,
   })));
-  const topIcons = SIDEBAR_ICONS.filter((item) => item.id !== "settings");
+  const topIcons = SIDEBAR_ICONS.filter((item) => item.id !== "settings" && item.id !== "onboarding");
+  const helpIcon = SIDEBAR_ICONS.find((item) => item.id === "onboarding");
   const settingsIcon = SIDEBAR_ICONS.find((item) => item.id === "settings");
 
   return (
@@ -114,6 +117,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       fileTree={fileTree}
       containerRef={containerRef}
       topIcons={topIcons}
+      helpIcon={helpIcon}
       settingsIcon={settingsIcon}
       store={store}
       helpers={helpers}

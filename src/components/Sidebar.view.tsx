@@ -15,6 +15,7 @@ interface SidebarViewProps {
   fileTree: any[];
   containerRef?: React.RefObject<HTMLDivElement | null>;
   topIcons: SidebarIconItem[];
+  helpIcon?: SidebarIconItem;
   settingsIcon?: SidebarIconItem;
   store: SidebarStoreState;
   helpers: SidebarHelpers;
@@ -32,6 +33,7 @@ export const SidebarView: React.FC<SidebarViewProps> = ({
   fileTree,
   containerRef,
   topIcons,
+  helpIcon,
   settingsIcon,
   store,
   helpers,
@@ -79,25 +81,28 @@ export const SidebarView: React.FC<SidebarViewProps> = ({
         </div>
 
         {/* Bottom General Settings Icon */}
-        {settingsIcon && (() => {
-          const Icon = settingsIcon.icon;
-          const active = isItemActive(settingsIcon.id);
-          return (
-            <button
-              onClick={() => settingsIcon.onClick(store, helpers)}
-              className={`p-2.5 rounded-lg transition-all cursor-pointer relative group ${
-                active
-                  ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
-                  : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
-              }`}
-            >
-              <Icon size={20} />
-              <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-[var(--color-surface-sunken)] text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-[var(--color-border-subtle)] whitespace-nowrap">
-                {settingsIcon.label}
-              </span>
-            </button>
-          );
-        })()}
+        <div className="flex flex-col items-center gap-2">
+          {[helpIcon, settingsIcon].filter((item): item is SidebarIconItem => !!item).map((item) => {
+            const Icon = item.icon;
+            const active = isItemActive(item.id);
+            return (
+              <button
+                key={item.id}
+                onClick={() => item.onClick(store, helpers)}
+                className={`p-2.5 rounded-lg transition-all cursor-pointer relative group ${
+                  active
+                    ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
+                    : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
+                }`}
+              >
+                <Icon size={20} />
+                <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-[var(--color-surface-sunken)] text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-[var(--color-border-subtle)] whitespace-nowrap">
+                  {item.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* 2. Sidebar View Panel Container */}

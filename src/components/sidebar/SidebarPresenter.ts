@@ -1,4 +1,4 @@
-import { FolderOpen, Files, GitBranch, Cpu, Settings, Bot, Wand2, Plug } from "lucide-react";
+import { FolderOpen, Files, GitBranch, Cpu, Settings, Bot, Wand2, Plug, BookOpen } from "lucide-react";
 import React from "react";
 import type { WorkspaceState } from "../../store";
 import { AxiomIcon } from "../AxiomIcon";
@@ -132,6 +132,19 @@ export const SIDEBAR_ICONS: SidebarIconItem[] = [
         type: "mcp-integration",
         title: "MCP Integration",
         key: "mcp-integration",
+      });
+    },
+  },
+  {
+    id: "onboarding",
+    label: "Axiom Guide",
+    icon: BookOpen,
+    onClick: (store) => {
+      store.openTab({
+        id: "welcome",
+        type: "onboarding",
+        title: "Welcome to Axiom",
+        key: "onboarding",
       });
     },
   },
