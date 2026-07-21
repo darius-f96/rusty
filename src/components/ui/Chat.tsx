@@ -87,12 +87,13 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
   const renderMessage = (msg: Message) => {
     if (msg.role === "console") {
       const isThisStreaming = isStreaming && streamingMessageId === msg.id;
+      const messageSubagents = streamingMessageId === msg.id ? subagents : [];
       return (
         <AgentActivityCard
           key={msg.id}
           content={msg.content}
           isStreaming={isThisStreaming}
-          subagents={subagents}
+          subagents={messageSubagents}
         />
       );
     }
@@ -160,19 +161,25 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
     );
   };
 
+  const visibleMessages = messages.filter((message) =>
+    message.role !== "console"
+    || Boolean(message.content.trim())
+    || (streamingMessageId === message.id && (isStreaming || subagents.length > 0))
+  );
+
   return (
     <div
       ref={containerRef}
       onScroll={handleScroll}
       className={`flex-1 overflow-y-auto ${compact ? "px-1" : "px-4"} py-4 space-y-4 scrollbar-wider min-h-0 min-w-0`}
     >
-      {messages.filter((message) => message.role !== "console" || message.content.trim()).length === 0 ? (
+      {visibleMessages.length === 0 ? (
         <div className="h-full flex flex-col items-center justify-center text-center text-[var(--text-muted)] select-none py-12">
           <Terminal size={32} className="text-[var(--accent-color)]/30 mb-3 animate-pulse" />
           <p className="text-xs font-mono">Agent interface initialized. Ready to receive commands.</p>
         </div>
       ) : (
-        messages.filter((message) => message.role !== "console" || message.content.trim()).map(renderMessage)
+        visibleMessages.map(renderMessage)
       )}
       {isStreaming && (
         <div className="flex items-center gap-2 px-3 py-2 text-[11px] font-mono text-[var(--text-muted)]" aria-live="polite">

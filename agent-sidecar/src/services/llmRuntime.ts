@@ -326,6 +326,7 @@ export async function callLlmWithToolsPiStreaming(options: {
       history: options.history,
       reasoning: options.reasoning || selection.reasoningEffort,
       cwd: options.cwd,
+      maxTurns: options.maxRounds,
       shouldAbort: options.shouldAbort,
     });
   }

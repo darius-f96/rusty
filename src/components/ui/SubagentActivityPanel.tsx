@@ -50,7 +50,7 @@ export const SubagentActivityPanel: React.FC<SubagentActivityPanelProps> = ({ su
   const renderSubagentLogs = (subagent: SubagentActivity) => {
     const logs = subagent.logs || [];
     if (logs.length === 0 && !subagent.outputFile) return null;
-    const visibleLogs = logs.slice(-4);
+    const visibleLogs = logs.slice(-12);
 
     return (
       <div className="mt-2 rounded bg-[var(--color-log-background)] border border-[var(--color-border-subtle)] overflow-hidden">
@@ -60,7 +60,7 @@ export const SubagentActivityPanel: React.FC<SubagentActivityPanelProps> = ({ su
             <span className="normal-case tracking-normal">last {visibleLogs.length} of {logs.length}</span>
           )}
         </div>
-        <div className="px-2 py-1.5 font-mono text-[10px] leading-relaxed text-[var(--color-log-foreground)]">
+        <div className="px-2 py-1.5 max-h-56 overflow-y-auto font-mono text-[10px] leading-relaxed text-[var(--color-log-foreground)]">
           {visibleLogs.map((log, idx) => (
             <div key={`${subagent.id}_log_${idx}`} className="whitespace-pre-wrap break-words">
               {log}
@@ -136,7 +136,7 @@ export const AgentActivityCard: React.FC<AgentActivityCardProps> = ({
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const consoleLines = content.split("\n").filter((line) => line.trim());
-  const visibleConsoleLines = consoleLines.slice(-4);
+  const visibleConsoleLines = consoleLines.slice(-12);
 
   return (
     <div className="mb-4 bg-[var(--color-log-surface)] border border-[var(--color-border-default)] rounded-lg overflow-hidden shadow-sm">
@@ -153,13 +153,18 @@ export const AgentActivityCard: React.FC<AgentActivityCardProps> = ({
           <span className="uppercase tracking-wider font-semibold">
             {isStreaming ? "Agent activity & reasoning summary..." : "Agent activity & reasoning summary"}
           </span>
+          {consoleLines.length > visibleConsoleLines.length && (
+            <span className="text-[9px] normal-case tracking-normal text-[var(--text-muted)]">
+              last {visibleConsoleLines.length} of {consoleLines.length}
+            </span>
+          )}
         </div>
         {isStreaming && <Loader2 size={11} className="animate-spin text-[var(--accent-color)]" />}
       </button>
 
       {!isCollapsed && (
         <div className="bg-[var(--color-log-background)] border-t border-[var(--color-border-subtle)]">
-          <div className="px-4 py-3 font-mono text-[11px] leading-relaxed text-[var(--color-log-foreground)]">
+          <div className="px-4 py-3 max-h-64 overflow-y-auto font-mono text-[11px] leading-relaxed text-[var(--color-log-foreground)]">
             <pre className="whitespace-pre-wrap font-mono">
               {visibleConsoleLines.join("\n") || "// Initializing agent workflow..."}
             </pre>

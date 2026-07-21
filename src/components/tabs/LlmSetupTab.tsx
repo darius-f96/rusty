@@ -53,6 +53,8 @@ export const LlmSetupTab: React.FC = () => {
   const managedProduct = isCodex ? "Codex" : isClaudeCode ? "Claude Code" : "Copilot";
   const managedAutoLoadRef = useRef("");
 
+  // Copilot status is polled unconditionally so the integrations list always reflects
+  // the real sign-in state, regardless of which provider is currently selected.
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -84,8 +86,9 @@ export const LlmSetupTab: React.FC = () => {
     };
   }, []);
 
+  // Codex status is polled unconditionally (not just when Codex is the active provider)
+  // so the integrations list shows the correct connected/failed/sign-in state at all times.
   useEffect(() => {
-    if (!isCodex) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {
@@ -114,10 +117,11 @@ export const LlmSetupTab: React.FC = () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [isCodex]);
+  }, []);
 
+  // Claude Code status is polled unconditionally so the integrations list reflects the
+  // real sign-in state even when Claude Code is not the currently active provider.
   useEffect(() => {
-    if (!isClaudeCode) return;
     let cancelled = false;
     const poll = async () => {
       try {
@@ -132,7 +136,7 @@ export const LlmSetupTab: React.FC = () => {
     void poll();
     const timer = setInterval(poll, 10_000);
     return () => { cancelled = true; clearInterval(timer); };
-  }, [isClaudeCode]);
+  }, []);
 
   // Sync inputs with selected provider
   useEffect(() => {
@@ -417,7 +421,7 @@ export const LlmSetupTab: React.FC = () => {
                 const isCodexProvider = p.transport === "openai-codex-app-server" || p.id === "openai-codex";
                 const isClaudeCodeProvider = p.transport === "anthropic-claude-agent-sdk" || p.id === "anthropic-claude-code";
                 const isManagedProvider = isCopilotProvider || isCodexProvider || isClaudeCodeProvider;
-                const providerStatus = isCodexProvider ? codexStatus : isClaudeCodeProvider ? claudeCodeStatus : copilotStatus;
+                const providerStatus = isCodexProvider ? codexStatus : isClaudeCodeProvider ? claudeCodeStatus : isCopilotProvider ? copilotStatus : null;
                 
                 // Connection indicator status text & color
                 const testedStatus = connectionStatus[p.id];
@@ -447,13 +451,20 @@ export const LlmSetupTab: React.FC = () => {
                   statusColor = "bg-[var(--color-status-success-solid)] text-[var(--color-status-success-solid-foreground)]";
                 } else if (
                   p.authType !== "none"
-                  && !["openai", "openai-codex", "anthropic", "opencode", "opencode-go", "github-models", "github-copilot"].includes(p.id)
+                  && !(["openai", "openai-codex", "anthropic", "opencode", "opencode-go", "github-models", "github-copilot"].includes(p.id))
                 ) {
                   statusLabel = "Key Required";
                   statusColor = "bg-[var(--color-status-danger-bg)] text-[var(--color-status-danger)]";
                 }
 
                 const isGithubProvider = p.id === "github-models" || isCopilotProvider;
+
+                const managedAccountLabel = isCodexProvider
+                  ? (codexStatus?.email ? ` as ${codexStatus.email}` : "")
+                  : isClaudeCodeProvider
+                    ? (claudeCodeStatus?.email ? ` as ${claudeCodeStatus.email}` : "")
+                    : (copilotStatus?.login ? ` as ${copilotStatus.login}` : "");
+                const managedVendorLabel = isCodexProvider ? "OpenAI" : isClaudeCodeProvider ? "Anthropic" : "GitHub";
 
                 return (
                   <div
@@ -488,9 +499,37 @@ export const LlmSetupTab: React.FC = () => {
                     </div>
 
                     <div className="flex items-center space-x-2 flex-shrink-0">
-                      <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full ${statusColor}`}>
-                        {statusLabel}
-                      </span>
+                      <div className="group/status relative">
+                        <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full cursor-default ${statusColor}`}>
+                          {statusLabel}
+                        </span>
+                        {isManagedProvider && (
+                          <div className="pointer-events-none absolute right-0 top-full z-20 mt-2 w-56 rounded-lg border border-[var(--border-color)] bg-[var(--bg-sidebar)] p-2.5 text-left opacity-0 shadow-xl transition-opacity duration-150 group-hover/status:opacity-100">
+                            <div className="flex items-center gap-1.5 text-[9px] font-bold text-[var(--text-light)] font-mono">
+                              <span
+                                className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${
+                                  providerStatus?.authenticated
+                                    ? "bg-[var(--color-status-success)]"
+                                    : providerStatus?.state === "connecting"
+                                      ? "bg-[var(--color-status-warning)] animate-pulse"
+                                      : providerStatus?.state === "failed"
+                                        ? "bg-[var(--color-status-danger)]"
+                                        : "bg-[var(--text-muted)]"
+                                }`}
+                              />
+                              <span>{statusLabel}</span>
+                            </div>
+                            <p className="mt-1.5 text-[9px] leading-relaxed text-[var(--text-muted)] font-mono">
+                              {providerStatus?.message
+                                || (providerStatus?.authenticated
+                                  ? `Signed in${managedAccountLabel}.`
+                                  : providerStatus?.state === "connecting"
+                                    ? `Waiting for ${managedVendorLabel} authorization to complete.`
+                                    : `Sign in with ${managedVendorLabel} to activate this integration.`)}
+                            </p>
+                          </div>
+                        )}
+                      </div>
                       {isActive && <div className="w-1.5 h-1.5 rounded-full bg-[var(--accent-color)] animate-pulse" />}
                     </div>
                   </div>

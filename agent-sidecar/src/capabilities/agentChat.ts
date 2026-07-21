@@ -14,10 +14,12 @@ import { callLlmWithToolsPiStreaming } from "../services/llmRuntime";
 import { createLspTools } from "../services/lspTools";
 import { createMcpTools, McpServerConfig } from "../services/mcpClient";
 import { createWebSearchTool } from "../services/webSearchTool";
-import { DeferredUserQuestion, hasActiveBackgroundSubagents, runPiAgentChat } from "../services/piAgentChat";
+import { DeferredUserQuestion, SubagentUpdate, hasActiveBackgroundSubagents, runPiAgentChat } from "../services/piAgentChat";
 import { createRunCommandTool } from "./tools/runCommandTool";
 import {
+  AGENT_TAB_HARNESS_POLICY,
   GLOBAL_CHAT_TASK_DEPENDENCY_POLICY,
+  agentDelegationPolicy,
   resolveAgentChatToolNames,
 } from "./agentChatPolicy";
 
@@ -36,10 +38,17 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
   const modifiedFiles = new Set<string>();
   const mcpDisposers: Array<() => void> = [];
   let deferredQuestion: DeferredUserQuestion | undefined;
+  let activityHeartbeat: NodeJS.Timeout | undefined;
+  let lastActivityAt = Date.now();
 
   const sendLog = (logMessage: string) => {
+    lastActivityAt = Date.now();
     console.log(`[Agent:${tabId}] ${logMessage}`);
     safeSend(ws, { type: "log", tabId, message: logMessage });
+  };
+
+  const sendSubagentUpdate = (subagent: SubagentUpdate) => {
+    safeSend(ws, { type: "subagent_update", tabId, subagent });
   };
 
   try {
@@ -220,13 +229,16 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
       }
     };
 
+    const listFilesTool = createListFilesTool(workspaceRoot);
+    const searchCodebaseTool = createSearchCodebaseTool(workspaceRoot);
+    const webSearchTool = createWebSearchTool(sendLog);
     const allTools: AgentTool[] = [
       readVfsTool,
       writeVfsTool,
       writePlanTool,
-      createListFilesTool(workspaceRoot),
-      createSearchCodebaseTool(workspaceRoot),
-      createWebSearchTool(sendLog),
+      listFilesTool,
+      searchCodebaseTool,
+      webSearchTool,
       createRunCommandTool({ ws, sessionId: tabId, workspaceRoot, sendLog }),
       ...lspTools
     ];
@@ -245,6 +257,118 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
     // Observability is always available, including when a restrictive skill is selected.
     tools.push(progressTool);
     tools.push(askUserQuestionTool);
+
+    const providerUsesManagedRuntime = customProvider?.transport === "github-copilot-sdk"
+      || customProvider?.id === "github-copilot"
+      || customProvider?.transport === "openai-codex-app-server"
+      || customProvider?.id === "openai-codex"
+      || customProvider?.transport === "anthropic-claude-agent-sdk"
+      || customProvider?.id === "anthropic-claude-code";
+    const modelReference = model || customProvider?.models?.find((item: any) => item.supported !== false)?.id || "";
+    if (!modelReference) throw new Error("No model is selected. Configure a provider and model in LLM Setup.");
+
+    if (!vfsOnly && providerUsesManagedRuntime) {
+      const delegateTaskTool: AgentTool = {
+        name: "delegate_task",
+        description: "Delegate one bounded, read-only codebase investigation or review to an independent subagent. Call this tool two or three times in the same turn when subtasks are independent. The tool returns the subagent's findings; the parent agent remains responsible for all edits.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            description: { type: "string", description: "A short 3-8 word label for the delegated task." },
+            prompt: { type: "string", description: "A precise read-only investigation with a concrete findings deliverable." },
+          },
+          required: ["description", "prompt"],
+        },
+        execute: async ({ description, prompt }: { description: string; prompt: string }) => {
+          const normalizedDescription = String(description || "Codebase investigation").trim().slice(0, 120);
+          const normalizedPrompt = String(prompt || "").trim();
+          if (!normalizedPrompt) throw new Error("A delegated task requires a concrete prompt.");
+
+          const id = `delegated-${getNextId()}`;
+          const startedAt = Date.now();
+          let toolUses = 0;
+          let sawText = false;
+          const update = (partial: Partial<SubagentUpdate>) => sendSubagentUpdate({
+            id,
+            displayName: "Investigator",
+            description: normalizedDescription,
+            subagentType: "read-only",
+            status: "running",
+            updatedAt: new Date().toISOString(),
+            startedAt: new Date(startedAt).toISOString(),
+            toolUses,
+            ...partial,
+          });
+
+          update({ activity: "Starting delegated investigation.", appendLog: "Subagent dispatched." });
+          sendLog(`Delegated subagent: ${normalizedDescription}.`);
+
+          const wrapTool = (tool: AgentTool): AgentTool => ({
+            ...tool,
+            execute: async (args: any) => {
+              toolUses++;
+              const target = typeof args?.path === "string"
+                ? args.path
+                : typeof args?.pattern === "string"
+                  ? args.pattern
+                  : "workspace";
+              const activity = `${tool.name.replace(/_/g, " ")}: ${String(target).slice(0, 140)}`;
+              update({ activity, appendLog: activity, toolUses });
+              return tool.execute(args);
+            },
+          });
+
+          try {
+            const result = await callLlmWithToolsPiStreaming({
+              modelReference,
+              customProvider,
+              systemPrompt: `You are a read-only Axiom subagent. Investigate only the assigned task using the provided harness tools.
+- Do not create, edit, move, or delete files.
+- Do not run commands and do not delegate further.
+- Return a concise findings memo with relevant file paths, concrete evidence, risks, and a clear recommendation for the parent agent.
+- Stop as soon as the requested evidence is sufficient.`,
+              userMessage: normalizedPrompt,
+              tools: [readVfsTool, listFilesTool, searchCodebaseTool].map(wrapTool),
+              sendLog: (subagentLog) => {
+                const compact = subagentLog.replace(/\s+/g, " ").trim().slice(0, 220);
+                if (!compact) return;
+                update({ activity: compact, appendLog: compact, toolUses });
+              },
+              sendToken: () => {
+                if (sawText) return;
+                sawText = true;
+                update({ activity: "Writing the findings memo.", appendLog: "Subagent began reporting findings." });
+              },
+              maxRounds: 8,
+              cwd: workspaceRoot,
+              shouldAbort: () => ws.readyState !== WebSocket.OPEN,
+            });
+            update({
+              status: "completed",
+              activity: "Findings returned to the parent agent.",
+              appendLog: "Subagent completed.",
+              result,
+              toolUses,
+              durationMs: Date.now() - startedAt,
+            });
+            sendLog(`Subagent completed: ${normalizedDescription}.`);
+            return result;
+          } catch (error: any) {
+            const errorMessage = error?.message || String(error);
+            update({
+              status: "error",
+              activity: "Delegated investigation failed.",
+              appendLog: `Subagent failed: ${errorMessage.slice(0, 180)}`,
+              error: errorMessage,
+              toolUses,
+              durationMs: Date.now() - startedAt,
+            });
+            throw error;
+          }
+        },
+      };
+      tools.push(delegateTaskTool);
+    }
 
     // Connect to MCP servers and register their tools
     const mcpToolLines: string[] = [];
@@ -270,7 +394,7 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
       list_files: "- 'list_files': List all files in the workspace (no input needed).",
       search_codebase: "- 'search_codebase': Search for text patterns across the codebase (input: {\"pattern\": \"search text\"}).",
       web_search: "- 'web_search': Search the public web for current information and cited sources (input: {\"query\": \"search query\"}).",
-      run_command: "- 'run_command': Run an approved non-interactive command in the physical workspace (input: {\"program\": \"npm\", \"args\": [\"test\"], \"cwd\": \".\"}).",
+      run_command: "- 'run_command': Last-resort execution for an essential build, test, typecheck, lint, generator, or explicitly requested executable. Never use it for file inspection, search, or modification (input: {\"program\": \"npm\", \"args\": [\"test\"], \"cwd\": \".\"}).",
       ask_user_question: "- 'ask_user_question': Pause for a focused user decision, optionally with selectable suggestions.",
       lsp_get_definition: "- 'lsp_get_definition': Find definition of a symbol (input: {\"path\": \"file/path\", \"line\": lineNum, \"character\": colNum}).",
       lsp_get_references: "- 'lsp_get_references': Find all references of a symbol (input: {\"path\": \"file/path\", \"line\": lineNum, \"character\": colNum}).",
@@ -279,7 +403,10 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
     const toolListText = [
       ...enabledToolNames.map((name: string) => toolDescriptions[name] || `- '${name}'`),
       "- 'report_progress': Publish a concise reasoning summary and the next intended action.",
-      toolDescriptions.ask_user_question
+      toolDescriptions.ask_user_question,
+      ...(!vfsOnly && providerUsesManagedRuntime
+        ? ["- 'delegate_task': Delegate a bounded read-only investigation or review to an independent subagent; multiple calls in one turn run concurrently."]
+        : []),
     ].join("\n");
 
     const defaultSystemPrompt = `You are an AI coding agent operating inside the Axiom spatial development canvas.
@@ -323,7 +450,11 @@ TaskNode VFS policy (this overrides any conflicting skill instruction):
 - Physical command execution is unavailable. Do not attempt shell commands or ask another agent to bypass this boundary.
 ` : "";
 
-    const systemPrompt = `${skill?.systemPrompt || defaultSystemPrompt}${planningPolicy}${taskNodePolicy}
+    const agentTabHarnessPolicy = !planOnly && !vfsOnly
+      ? AGENT_TAB_HARNESS_POLICY
+      : "";
+
+    const systemPrompt = `${skill?.systemPrompt || defaultSystemPrompt}${planningPolicy}${taskNodePolicy}${agentTabHarnessPolicy}
 
 User-visible reasoning updates:
 - Before the first substantive action, call 'report_progress' with a concise summary of your approach and the next action.
@@ -333,29 +464,26 @@ User-visible reasoning updates:
 Delegation:
 ${vfsOnly
   ? "- TaskNodes work directly and cannot delegate to other agents."
-  : `- When two or more investigations, reviews, or implementation steps are independent, delegate them concurrently by issuing multiple 'Agent' tool calls in the same turn.
-- Use background subagents for independent long-running work, and continue with work that does not depend on their results.
-- Keep dependent work sequential and wait for subagent results only when later work depends on them.
-- Never ask the user a refining question or present a final recommendation while delegated subagents are active. First retrieve every delegated result with get_subagent_result (use wait: true when necessary), then aggregate the findings.
-- Every delegated task must be narrowly scoped with a concrete deliverable. Ask for a concise findings memo, not an open-ended investigation.
-- Always set max_turns when delegating: use 3 for codebase mapping and 4 for web research or implementation analysis. Stop once the requested evidence is sufficient.
-- For codebase discovery, use the Explore agent with only the smallest relevant set of files. For product research, use at most three web searches and summarize the sources; do not keep browsing for marginal detail.
-- Do not delegate verification, retries, or follow-up exploration unless the user explicitly requests deeper research.`}
+  : agentDelegationPolicy(providerUsesManagedRuntime ? "delegate_task" : "Agent")}
 
 Questions:
 - When a material product, UX, or architecture decision cannot be inferred safely, call 'ask_user_question' instead of guessing. Keep questions focused and offer concrete options with their trade-offs.`;
 
     sendLog("Initializing agent...");
+    activityHeartbeat = setInterval(() => {
+      if (Date.now() - lastActivityAt < 12_000) return;
+      sendLog("Model is still working; awaiting its next visible action.");
+    }, 4_000);
+    activityHeartbeat.unref?.();
 
     const sendToken = (token: string) => {
+      lastActivityAt = Date.now();
       safeSend(ws, { type: "token", tabId, content: token });
     };
 
-    const piModel = model || customProvider?.models?.find((item: any) => item.supported !== false)?.id || "";
-    if (!piModel) throw new Error("No model is selected. Configure a provider and model in LLM Setup.");
     const piResponse = await runPiAgentChat({
       tabId,
-      model: piModel,
+      model: modelReference,
       workspaceRoot,
       systemPrompt,
       conversationHistory: chatHistory || [],
@@ -364,7 +492,7 @@ Questions:
       customProvider,
       sendLog,
       sendToken,
-      sendSubagentUpdate: (subagent) => safeSend(ws, { type: "subagent_update", tabId, subagent }),
+      sendSubagentUpdate,
       enableSubagents: !vfsOnly,
       consumeDeferredQuestion: () => {
         const question = deferredQuestion;
@@ -375,7 +503,7 @@ Questions:
     });
 
     const responseText = piResponse ?? await callLlmWithToolsPiStreaming({
-      modelReference: piModel,
+      modelReference,
       customProvider,
       systemPrompt,
       userMessage: message,
@@ -411,6 +539,7 @@ Questions:
       error: err.message
     });
   } finally {
+    if (activityHeartbeat) clearInterval(activityHeartbeat);
     // Clean up MCP server connections
     for (const dispose of mcpDisposers) {
       try {

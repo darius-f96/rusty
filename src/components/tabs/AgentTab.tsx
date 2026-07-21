@@ -71,6 +71,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
   const savedChatPathRef = useRef<string | null>(null);
   const chatSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const consoleFlushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const streamingResponseFlushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isStreamingRef = useRef(false);
   const lastUserMessageIdRef = useRef<string | null>(null);
   const lastConsoleMessageIdRef = useRef<string | null>(null);
@@ -107,6 +108,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
   useEffect(() => {
     return () => {
       if (consoleFlushTimeoutRef.current) clearTimeout(consoleFlushTimeoutRef.current);
+      if (streamingResponseFlushTimeoutRef.current) clearTimeout(streamingResponseFlushTimeoutRef.current);
       const socket = agentSocketRef.current;
       if (socket) {
         if (socket.readyState === WebSocket.OPEN) {
@@ -221,6 +223,20 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
     }, 150);
   };
 
+  const flushStreamingResponseBuffer = () => {
+    if (streamingResponseMessageIdRef.current) {
+      updateAgentMessage(tab.id, streamingResponseMessageIdRef.current, streamingResponseBufferRef.current);
+    }
+  };
+
+  const scheduleStreamingResponseFlush = () => {
+    if (streamingResponseFlushTimeoutRef.current) return;
+    streamingResponseFlushTimeoutRef.current = setTimeout(() => {
+      streamingResponseFlushTimeoutRef.current = null;
+      flushStreamingResponseBuffer();
+    }, 100);
+  };
+
   const handleStopExecution = () => {
     if (agentSocketRef.current) {
       if (agentSocketRef.current.readyState === WebSocket.OPEN) {
@@ -232,13 +248,21 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
     // Clean up the unfinished/stopped messages from store
     const currentChats = useWorkspaceStore.getState().agentChats[tab.id] || [];
     const filteredChats = currentChats.filter(
-      (m) => m.id !== lastUserMessageIdRef.current && m.id !== lastConsoleMessageIdRef.current
+      (m) => m.id !== lastUserMessageIdRef.current
+        && m.id !== lastConsoleMessageIdRef.current
+        && m.id !== streamingResponseMessageIdRef.current
     );
     setAgentMessages(tab.id, filteredChats);
 
     // Clear message tracking refs
     lastUserMessageIdRef.current = null;
     lastConsoleMessageIdRef.current = null;
+    streamingResponseMessageIdRef.current = null;
+    streamingResponseBufferRef.current = "";
+    if (streamingResponseFlushTimeoutRef.current) {
+      clearTimeout(streamingResponseFlushTimeoutRef.current);
+      streamingResponseFlushTimeoutRef.current = null;
+    }
 
     setSubagents((current) => current.map((subagent) =>
       subagent.status === "queued" || subagent.status === "running" || subagent.status === "background"
@@ -403,6 +427,18 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
             msg.content,
             500_000,
           );
+          if (!streamingResponseMessageIdRef.current) {
+            const responseMessageId = `msg_${Date.now()}_streaming`;
+            streamingResponseMessageIdRef.current = responseMessageId;
+            addAgentMessage(tab.id, {
+              id: responseMessageId,
+              role: "assistant" as const,
+              content: streamingResponseBufferRef.current,
+              timestamp: new Date().toISOString(),
+            });
+          } else {
+            scheduleStreamingResponseFlush();
+          }
           return;
         }
 
@@ -501,6 +537,10 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
             consoleFlushTimeoutRef.current = null;
           }
           flushConsoleBuffer();
+          if (streamingResponseFlushTimeoutRef.current) {
+            clearTimeout(streamingResponseFlushTimeoutRef.current);
+            streamingResponseFlushTimeoutRef.current = null;
+          }
           const files = msg.modifiedFiles || [];
           setModifiedFiles(files);
 
@@ -560,6 +600,10 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
           if (consoleFlushTimeoutRef.current) clearTimeout(consoleFlushTimeoutRef.current);
           consoleFlushTimeoutRef.current = null;
           flushConsoleBuffer();
+          if (streamingResponseFlushTimeoutRef.current) {
+            clearTimeout(streamingResponseFlushTimeoutRef.current);
+            streamingResponseFlushTimeoutRef.current = null;
+          }
           addAgentMessage(tab.id, {
             id: `msg_${Date.now()}`,
             role: "assistant" as const,
@@ -569,6 +613,8 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
           isStreamingRef.current = false;
           lastUserMessageIdRef.current = null;
           lastConsoleMessageIdRef.current = null;
+          streamingResponseMessageIdRef.current = null;
+          streamingResponseBufferRef.current = "";
           setIsStreaming(false);
           setAgentQuestions([]);
           socket.close();
@@ -601,6 +647,8 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
       isStreamingRef.current = false;
       lastUserMessageIdRef.current = null;
       lastConsoleMessageIdRef.current = null;
+      streamingResponseMessageIdRef.current = null;
+      streamingResponseBufferRef.current = "";
       setIsStreaming(false);
       setAgentQuestions([]);
       notify(
@@ -624,6 +672,8 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
         isStreamingRef.current = false;
         lastUserMessageIdRef.current = null;
         lastConsoleMessageIdRef.current = null;
+        streamingResponseMessageIdRef.current = null;
+        streamingResponseBufferRef.current = "";
         setIsStreaming(false);
         setAgentQuestions([]);
         notify(

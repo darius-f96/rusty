@@ -209,7 +209,7 @@ async function runClaudeCode(options: {
   modelId: string; systemPrompt: string; userMessage: string;
   history?: Array<{ role: string; content: string }>; tools?: ClaudeTool[];
   sendLog?: (message: string) => void; sendToken?: (token: string) => void;
-  cwd?: string; reasoning?: string; shouldAbort?: () => boolean; signal?: AbortSignal;
+  cwd?: string; reasoning?: string; maxTurns?: number; shouldAbort?: () => boolean; signal?: AbortSignal;
 }): Promise<string> {
   const sdk = await importEsm<any>("@anthropic-ai/claude-agent-sdk");
   const { z } = await importEsm<any>("zod");
@@ -243,6 +243,7 @@ async function runClaudeCode(options: {
       permissionMode: "dontAsk",
       persistSession: false,
       includePartialMessages: true,
+      maxTurns: options.maxTurns,
       effort: options.reasoning === "minimal" ? "low" : options.reasoning,
       env: { ...process.env, CLAUDE_AGENT_SDK_CLIENT_APP: "axiom/0.1.0" },
     },
