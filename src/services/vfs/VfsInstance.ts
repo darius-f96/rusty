@@ -13,7 +13,7 @@
  *   - File Operations:  read, write, remove individual files
  *   - Node Operations:  manage files grouped by node ownership
  *   - Query Operations: filter and search across tracked files
- *   - Lifecycle:        flush to disk, snapshot/restore for persistence
+ *   - Lifecycle:        apply selected files to disk, snapshot/restore for persistence
  *   - Execution:        pre/post execution setup and cleanup
  */
 
@@ -26,9 +26,16 @@ import * as lifecycleActions from "./actions/lifecycleActions";
 
 export const VFS_CHANGED_EVENT = "axiom-vfs-changed";
 
-function notifyVfsChanged(tabId: string): void {
+export interface VfsChangedDetail {
+  tabId: string;
+  nodeId?: string;
+  paths?: string[];
+  operation?: "write" | "remove" | "set-tracker" | "delete-node" | "restore";
+}
+
+function notifyVfsChanged(detail: VfsChangedDetail): void {
   if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent(VFS_CHANGED_EVENT, { detail: { tabId } }));
+    window.dispatchEvent(new CustomEvent(VFS_CHANGED_EVENT, { detail }));
   }
 }
 
@@ -56,7 +63,7 @@ export class VfsInstance {
    */
   async writeFile(path: string, content: string, nodeId?: string): Promise<void> {
     await fileActions.writeFile(this.tabId, path, content, nodeId);
-    notifyVfsChanged(this.tabId);
+    notifyVfsChanged({ tabId: this.tabId, nodeId, paths: [path], operation: "write" });
   }
 
   /**
@@ -65,7 +72,7 @@ export class VfsInstance {
    */
   async removeFile(path: string): Promise<void> {
     await fileActions.removeFile(this.tabId, path);
-    notifyVfsChanged(this.tabId);
+    notifyVfsChanged({ tabId: this.tabId, paths: [path], operation: "remove" });
   }
 
   // ─── Node Operations ─────────────────────────────────────────────────────────
@@ -89,17 +96,19 @@ export class VfsInstance {
 
   /**
    * Delete all VFS files tracked to a specific node.
-   * Removes the files from the cache AND clears the node's tracker entry.
+   * Clears the node's tracker entry and removes cache content only when no
+   * other TaskNode or reconciliation owner still references that path.
    */
   async deleteNodeFiles(nodeId: string): Promise<void> {
+    const paths = await this.getNodeFiles(nodeId);
     await nodeActions.deleteNodeFiles(this.tabId, nodeId);
-    notifyVfsChanged(this.tabId);
+    notifyVfsChanged({ tabId: this.tabId, nodeId, paths, operation: "delete-node" });
   }
 
   /** Delete one file from this node's tracker and this tab's VFS. */
   async deleteNodeFile(nodeId: string, path: string): Promise<void> {
     await nodeActions.deleteNodeFile(this.tabId, nodeId, path);
-    notifyVfsChanged(this.tabId);
+    notifyVfsChanged({ tabId: this.tabId, nodeId, paths: [path], operation: "remove" });
   }
 
   /**
@@ -118,7 +127,7 @@ export class VfsInstance {
    */
   async setNodeTrackedFiles(nodeId: string, files: string[]): Promise<void> {
     await trackerActions.importTracker(this.tabId, { [nodeId]: files });
-    notifyVfsChanged(this.tabId);
+    notifyVfsChanged({ tabId: this.tabId, nodeId, paths: files, operation: "set-tracker" });
   }
 
   // ─── Query Operations ────────────────────────────────────────────────────────
@@ -179,12 +188,9 @@ export class VfsInstance {
 
   // ─── Lifecycle ────────────────────────────────────────────────────────────────
 
-  /**
-   * Flush all in-memory VFS files for this tab to the physical disk.
-   * After flushing, the VFS cache is cleared.
-   */
-  async flushToDisk(): Promise<void> {
-    return lifecycleActions.flushToDisk(this.tabId);
+  /** Apply selected VFS paths to disk without clearing contents or ownership. */
+  async applyToDisk(paths: string[]): Promise<void> {
+    return lifecycleActions.applyToDisk(this.tabId, paths);
   }
 
   /**
@@ -213,6 +219,11 @@ export class VfsInstance {
     if (hasTracker) {
       await trackerActions.importTracker(this.tabId, snap.tracker);
     }
+    notifyVfsChanged({
+      tabId: this.tabId,
+      paths: Object.keys(snap.contents || {}),
+      operation: "restore",
+    });
   }
 
   // ─── Execution Helpers ────────────────────────────────────────────────────────
@@ -244,19 +255,12 @@ export class VfsInstance {
   async finalizeExecution(
     nodeId: string,
     modifiedFiles: string[],
-    initialFiles: string[]
+    _initialFiles: string[]
   ): Promise<void> {
     // Overwrite the tracker with the final file list
     await this.setNodeTrackedFiles(nodeId, modifiedFiles);
-
-    // Remove stale files (were in initial set but not in new set)
-    const staleFiles = initialFiles.filter((f) => !modifiedFiles.includes(f));
-    for (const staleFile of staleFiles) {
-      try {
-        await this.removeFile(staleFile);
-      } catch (err) {
-        console.error(`[VfsInstance] Failed to remove stale VFS file ${staleFile}:`, err);
-      }
-    }
+    // prepareForExecution already removed this node's previous ownership using
+    // reference-aware node deletion. Never remove stale paths directly here:
+    // another TaskNode may still own their shared VFS content.
   }
 }

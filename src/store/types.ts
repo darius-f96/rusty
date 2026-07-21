@@ -176,6 +176,28 @@ export interface GlobalChatMessage {
   attachments?: { path: string; name: string; isDir?: boolean }[];
 }
 
+export interface ReconciliationLedgerEntry {
+  path: string;
+  status: "reconciled" | "error";
+  sourceSignature: string;
+  taskIds: string[];
+  updatedAt: string;
+  modified?: boolean;
+  method?: "model" | "manual";
+  response?: string;
+  error?: string;
+}
+
+export interface ReconciliationSnapshot {
+  /** Collision files currently owned by the reconciliation VFS node. */
+  files: string[];
+  originalFileContents: Record<string, string>;
+  generatedFileContents: Record<string, string>;
+  ledger?: Record<string, ReconciliationLedgerEntry>;
+  updatedAt: string;
+  response?: string;
+}
+
 export interface CanvasContext {
   nodes: Node[];
   edges: Edge[];
@@ -183,6 +205,7 @@ export interface CanvasContext {
   nodeStatus: Record<string, "idle" | "running" | "success" | "error">;
   globalChatHistory: Record<string, GlobalChatMessage[]>;
   edgeReconciliationStatus: Record<string, "idle" | "unreconciled" | "reconciled">;
+  reconciliationSnapshot?: ReconciliationSnapshot;
   isPipelineApplied?: boolean;
   lastStickyColor?: string;
   hasBeenSaved?: boolean;

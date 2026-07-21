@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { DiffEditor } from "@monaco-editor/react";
-import { ChevronDown, ChevronRight, ChevronLeft, Save, RotateCcw, Loader2, FileCode } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronLeft, Save, RotateCcw, Loader2, FileCode, PencilLine } from "lucide-react";
 import { VfsRegistry } from "../../../services/vfs";
 import { invoke } from "@tauri-apps/api/core";
 import { DiffViewToggle } from "../../ui/DiffViewToggle";
@@ -13,8 +13,10 @@ interface PRDiffViewProps {
   modifiedFiles: string[];
   ownerNodeId?: string;
   persistenceTabId?: string;
+  originalFileContents?: Record<string, string>;
   refreshKey?: number;
-  onFileSaved?: (filePath: string) => void;
+  onFileSaved?: (filePath: string) => void | Promise<void>;
+  onOpenManual?: (filePath: string) => void;
 }
 
 interface FileDiffState {
@@ -37,6 +39,7 @@ interface FileDiffCardProps {
   onSaveFile: (filePath: string) => Promise<void>;
   onResetFile: (filePath: string, editor: any) => void;
   toggleCollapse: (filePath: string) => void;
+  onOpenManual?: (filePath: string) => void;
 }
 
 const FileDiffCard: React.FC<FileDiffCardProps> = ({
@@ -47,6 +50,7 @@ const FileDiffCard: React.FC<FileDiffCardProps> = ({
   onSaveFile,
   onResetFile,
   toggleCollapse,
+  onOpenManual,
 }) => {
   const [hasRendered, setHasRendered] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -99,6 +103,16 @@ const FileDiffCard: React.FC<FileDiffCardProps> = ({
             <span className="text-[9px] font-mono text-[var(--color-status-warning)] bg-[var(--color-status-warning-bg)] border border-[var(--color-status-warning-border)] px-1.5 py-0.5 rounded uppercase">
               Unsaved
             </span>
+          )}
+          {onOpenManual && (
+            <button
+              onClick={() => onOpenManual(file)}
+              className="flex items-center gap-1 rounded border border-[var(--color-status-warning-border)] bg-[var(--color-status-warning-bg)] px-2 py-1 text-[9px] font-mono font-bold text-[var(--color-status-warning)] hover:border-[var(--color-status-warning)]"
+              title="Open this file in the manual reconciliation editor"
+            >
+              <PencilLine size={11} />
+              <span>Manual</span>
+            </button>
           )}
           {/* Save/Reset controls */}
           {state.isDirty && (
@@ -176,8 +190,10 @@ export const PRDiffView: React.FC<PRDiffViewProps> = ({
   modifiedFiles,
   ownerNodeId,
   persistenceTabId,
+  originalFileContents,
   refreshKey = 0,
   onFileSaved,
+  onOpenManual,
 }) => {
   const [filesState, setFilesState] = useState<Record<string, FileDiffState>>({});
   const [loading, setLoading] = useState(false);
@@ -196,11 +212,13 @@ export const PRDiffView: React.FC<PRDiffViewProps> = ({
     for (const file of modifiedFiles) {
       try {
         const modified: string = await VfsRegistry.getOrCreate(tabId).readFile(file);
-        let original = "";
-        try {
-          original = await invoke("read_file_disk", { path: file });
-        } catch {
-          original = "";
+        let original = originalFileContents?.[file];
+        if (original === undefined) {
+          try {
+            original = await invoke("read_file_disk", { path: file });
+          } catch {
+            original = "";
+          }
         }
         const parts = file.split("/");
         const name = parts[parts.length - 1];
@@ -210,7 +228,7 @@ export const PRDiffView: React.FC<PRDiffViewProps> = ({
           path: file,
           name,
           dir,
-          original,
+          original: original ?? "",
           modified,
           edited: modified,
           isDirty: false,
@@ -230,7 +248,7 @@ export const PRDiffView: React.FC<PRDiffViewProps> = ({
 
   useEffect(() => {
     loadAllDiffs();
-  }, [tabId, modifiedFiles.join(","), refreshKey]);
+  }, [tabId, modifiedFiles.join(","), originalFileContents, refreshKey]);
 
   const toggleCollapse = (filePath: string) => {
     setFilesState((prev) => {
@@ -272,7 +290,7 @@ export const PRDiffView: React.FC<PRDiffViewProps> = ({
 
     try {
       await VfsRegistry.getOrCreate(tabId).writeFile(filePath, file.edited, ownerNodeId);
-      onFileSaved?.(filePath);
+      await onFileSaved?.(filePath);
       setFilesState((prev) => {
         const current = prev[filePath];
         return {
@@ -412,6 +430,7 @@ export const PRDiffView: React.FC<PRDiffViewProps> = ({
             onSaveFile={handleSaveFile}
             onResetFile={handleResetFile}
             toggleCollapse={toggleCollapse}
+            onOpenManual={onOpenManual}
           />
         )}
       </div>

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { Folder, Trash2, RefreshCw, X, ChevronRight, ChevronDown } from "lucide-react";
 import { VfsRegistry, VFS_CHANGED_EVENT, NodeFilesEntry } from "../../../services/vfs";
 import { useWorkspaceStore } from "../../../store";
+import { RECONCILIATION_NODE_PREFIX } from "../../../services/reconciliationService";
+import { focusCanvasNode } from "../../../services/canvasNodeNavigation";
 
 interface VfsExplorerProps {
   onClose?: () => void;
@@ -11,6 +13,7 @@ interface VfsExplorerProps {
 export const VfsExplorer: React.FC<VfsExplorerProps> = ({ onClose, tabId }) => {
   const [nodeFiles, setNodeFiles] = useState<NodeFilesEntry[]>([]);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const loadNodeFiles = async () => {
@@ -72,6 +75,7 @@ export const VfsExplorer: React.FC<VfsExplorerProps> = ({ onClose, tabId }) => {
   };
 
   const getNodeName = (nodeId: string): string => {
+    if (nodeId.startsWith(RECONCILIATION_NODE_PREFIX)) return "Reconciliation Ledger";
     const state = useWorkspaceStore.getState();
     if (tabId) {
       const canvasCtx = state.canvasContexts[tabId];
@@ -138,13 +142,32 @@ export const VfsExplorer: React.FC<VfsExplorerProps> = ({ onClose, tabId }) => {
             {nodeFiles.map((nf) => {
               const isExpanded = expandedNodes.has(nf.node_id);
               const nodeName = getNodeName(nf.node_id);
-              const isNodePresent = (tabId ? useWorkspaceStore.getState().canvasContexts[tabId]?.nodes.some((n: any) => n.id === nf.node_id) : false)
+              const canvasNode = tabId
+                ? useWorkspaceStore.getState().canvasContexts[tabId]?.nodes.find((node: any) => node.id === nf.node_id)
+                : undefined;
+              const isNavigableTask = canvasNode?.type === "taskNode";
+              const isNodePresent = nf.node_id.startsWith(RECONCILIATION_NODE_PREFIX)
+                || (tabId ? useWorkspaceStore.getState().canvasContexts[tabId]?.nodes.some((n: any) => n.id === nf.node_id) : false)
                 || useWorkspaceStore.getState().nodes.some((n: any) => n.id === nf.node_id);
               return (
                 <div key={nf.node_id} className="border border-[var(--border-color)] rounded-lg overflow-hidden">
                   {/* Node header */}
-                  <div className={`flex items-center justify-between px-2 py-1.5 ${!isNodePresent ? "bg-[var(--color-status-danger-bg)]" : "bg-[var(--bg-app)]"}`}>
-                    <div className="flex items-center space-x-1.5 flex-1 min-w-0">
+                  <div className={`flex items-center justify-between px-2 py-1.5 transition-colors ${
+                    !isNodePresent
+                      ? "bg-[var(--color-status-danger-bg)]"
+                      : selectedNodeId === nf.node_id
+                      ? "bg-[var(--accent-bg)] border-l-2 border-[var(--accent-color)]"
+                      : "bg-[var(--bg-app)]"
+                  }`}>
+                    <div
+                      className={`flex items-center space-x-1.5 flex-1 min-w-0 ${isNavigableTask ? "cursor-pointer" : ""}`}
+                      onClick={() => isNavigableTask && setSelectedNodeId(nf.node_id)}
+                      onDoubleClick={(event) => {
+                        event.stopPropagation();
+                        if (tabId && isNavigableTask) focusCanvasNode(tabId, nf.node_id);
+                      }}
+                      title={isNavigableTask ? "Click to select; double-click to jump to this Task Node" : undefined}
+                    >
                       <button
                         onClick={() => toggleNode(nf.node_id)}
                         className="p-0.5 text-[var(--text-muted)] hover:text-[var(--text-light)] flex-shrink-0"
@@ -155,6 +178,9 @@ export const VfsExplorer: React.FC<VfsExplorerProps> = ({ onClose, tabId }) => {
                       <span className="text-[10px] font-medium text-[var(--text-light)] truncate" title={nf.node_id}>
                         {nodeName}
                       </span>
+                      {isNavigableTask && selectedNodeId === nf.node_id && (
+                        <span className="text-[8px] text-[var(--accent-color)] flex-shrink-0">double-click to jump</span>
+                      )}
                       {!isNodePresent && (
                         <span className="text-[8px] px-1 py-0.5 bg-[var(--color-status-danger-bg)] text-[var(--color-status-danger)] rounded flex-shrink-0">deleted</span>
                       )}

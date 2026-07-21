@@ -28,11 +28,18 @@ import { McpNode } from "../../nodes/McpNode";
 import { StickyNode } from "../../nodes/sticky";
 import { BoundaryNode } from "../../nodes/boundary";
 import { invoke } from "@tauri-apps/api/core";
-import { VfsRegistry } from "../../../services/vfs";
+import { VfsRegistry, VFS_CHANGED_EVENT, type VfsChangedDetail } from "../../../services/vfs";
 import { CanvasTabContext } from "./CanvasTabContext";
 import { canvasFileService } from "./services/canvasFileService";
 import { getNodeConfig } from "../../nodes/AxiomNodeConfig";
-import { reconciliationOverlayService } from "../../../services/reconciliationOverlayService";
+import { reconciliationService, withoutReconciliationFiles } from "../../../services/reconciliationService";
+import { buildReconciliationTaskFileRecords, normalizeReconciliationPath } from "../../../services/reconciliationPaths";
+import { queryDuplicateTrackedFiles } from "../../../services/vfs/orchestrators/queryOrchestrator";
+import {
+  CANVAS_NODE_FOCUS_EVENT,
+  focusCanvasNode,
+  type CanvasNodeFocusDetail,
+} from "../../../services/canvasNodeNavigation";
 
 const nodeTypes = {
   contextNode: ContextNode,
@@ -130,6 +137,72 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
   const [rfInstance, setRfInstance] = useState<any>(null);
   const connectionStartRef = useRef<any>(null);
   const initRef = useRef(false);
+
+  // A TaskNode write makes only the affected collision results stale. Remove
+  // those files from the reconciliation owner/ledger immediately, even while
+  // the reconciliation pane is hidden or has not been reopened yet.
+  useEffect(() => {
+    const handleTaskVfsChange = (event: Event) => {
+      const detail = (event as CustomEvent<VfsChangedDetail>).detail;
+      if (detail?.tabId !== tab.id || !detail.nodeId || detail.nodeId.startsWith("__reconciliation_node__:")) return;
+      const currentContext = useWorkspaceStore.getState().canvasContexts[tab.id];
+      if (!currentContext?.nodes.some((node) => node.type === "taskNode" && node.id === detail.nodeId)) return;
+      const ledger = currentContext.reconciliationSnapshot?.ledger || {};
+      const affected = (detail.paths || []).map((filePath) => {
+        try {
+          return normalizeReconciliationPath(rootPath, filePath);
+        } catch {
+          return filePath;
+        }
+      }).filter((filePath) => !!ledger[filePath] || currentContext.reconciliationSnapshot?.files.includes(filePath));
+      if (affected.length === 0) return;
+
+      void (async () => {
+        await reconciliationService.removeFiles(tab.id, affected);
+        const latestContext = useWorkspaceStore.getState().canvasContexts[tab.id];
+        useWorkspaceStore.getState().updateCanvasContext(tab.id, {
+          reconciliationSnapshot: withoutReconciliationFiles(latestContext?.reconciliationSnapshot, affected),
+          isPipelineApplied: false,
+        });
+        await canvasFileService.autoSaveCanvas(tab.id);
+      })().catch((err) => console.error("[AxiomTab] Failed to invalidate reconciled files:", err));
+    };
+    window.addEventListener(VFS_CHANGED_EVENT, handleTaskVfsChange);
+    return () => window.removeEventListener(VFS_CHANGED_EVENT, handleTaskVfsChange);
+  }, [rootPath, tab.id]);
+
+  // Re-audit persisted ledger entries on canvas mount and TaskNode state
+  // changes. This covers task executions that happened while this canvas view
+  // was not mounted and therefore could not receive the live VFS event.
+  useEffect(() => {
+    const snapshot = context.reconciliationSnapshot;
+    if (!snapshot || snapshot.files.length === 0) return;
+    const taskFileRecords = buildReconciliationTaskFileRecords(
+      rootPath,
+      nodes.filter((node) => node.type === "taskNode").map((node) => ({
+        id: node.id,
+        modifiedFiles: Array.isArray(node.data?.modifiedFiles) ? node.data.modifiedFiles as string[] : [],
+        generatedFileContents: (node.data?.generatedFileContents as Record<string, string>) || {},
+      })),
+      snapshot.files,
+    );
+    const ledger = snapshot.ledger || {};
+    const invalidFiles = snapshot.files.filter((filePath) => (
+      !ledger[filePath] ||
+      !taskFileRecords[filePath] ||
+      ledger[filePath].sourceSignature !== taskFileRecords[filePath].sourceSignature
+    ));
+    if (invalidFiles.length === 0) return;
+    void (async () => {
+      await reconciliationService.removeFiles(tab.id, invalidFiles);
+      const latest = useWorkspaceStore.getState().canvasContexts[tab.id]?.reconciliationSnapshot;
+      useWorkspaceStore.getState().updateCanvasContext(tab.id, {
+        reconciliationSnapshot: withoutReconciliationFiles(latest, invalidFiles),
+        isPipelineApplied: false,
+      });
+      await canvasFileService.autoSaveCanvas(tab.id);
+    })().catch((err) => console.error("[AxiomTab] Failed to audit reconciliation ledger:", err));
+  }, [context.reconciliationSnapshot, nodes, rootPath, tab.id]);
 
   const onConnectStart = useCallback((_: any, { nodeId, handleId, handleType }: any) => {
     connectionStartRef.current = { nodeId, handleId, handleType };
@@ -285,6 +358,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
   }, [possibleConnection, tab.id]);
 
   const [nodeMenuOpen, setNodeMenuOpen] = useState(false);
+  const [boundaryMenuOpen, setBoundaryMenuOpen] = useState(false);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
@@ -305,10 +379,38 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
     return { x: 300, y: 200 };
   }, [rfInstance, tab.id]);
 
+  const boundaryNodes = useMemo(
+    () => nodes.filter((node) => node.type === "boundaryNode"),
+    [nodes],
+  );
+  const globalChatNode = useMemo(
+    () => nodes.find((node) => node.type === "globalChatNode"),
+    [nodes],
+  );
+
+  useEffect(() => {
+    const handleNodeFocus = (event: Event) => {
+      const detail = (event as CustomEvent<CanvasNodeFocusDetail>).detail;
+      if (detail?.tabId !== tab.id || !rfInstance) return;
+      const targetNode = nodes.find((node) => node.id === detail.nodeId);
+      if (!targetNode) return;
+      void rfInstance.fitView({
+        nodes: [targetNode],
+        padding: targetNode.type === "boundaryNode" ? 0.18 : 0.4,
+        minZoom: 0.15,
+        maxZoom: 1.2,
+        duration: 450,
+      });
+    };
+    window.addEventListener(CANVAS_NODE_FOCUS_EVENT, handleNodeFocus);
+    return () => window.removeEventListener(CANVAS_NODE_FOCUS_EVENT, handleNodeFocus);
+  }, [nodes, rfInstance, tab.id]);
+
   useEffect(() => {
     const handleGlobalClick = () => {
       setContextMenu(null);
       setNodeMenuOpen(false);
+      setBoundaryMenuOpen(false);
       setActionMenuOpen(false);
     };
     window.addEventListener("click", handleGlobalClick);
@@ -457,21 +559,96 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
       return;
     }
     try {
-      const hasReconciliation = reconciliationOverlayService.hasSession(tab.id);
-      const reconciledFiles = hasReconciliation
-        ? await reconciliationOverlayService.stageIntoMainVfs(tab.id)
-        : [];
-      await VfsRegistry.getOrCreate(tab.id).flushToDisk();
-      if (hasReconciliation) {
-        await reconciliationOverlayService.discard(tab.id);
+      const reconciledFiles = await reconciliationService.getFiles(tab.id);
+      const reconciliationSnapshot = useWorkspaceStore.getState().canvasContexts[tab.id]?.reconciliationSnapshot;
+      const taskNodes = (useWorkspaceStore.getState().canvasContexts[tab.id]?.nodes || [])
+        .filter((node) => node.type === "taskNode")
+        .map((node) => ({
+          id: node.id,
+          modifiedFiles: Array.isArray(node.data?.modifiedFiles) ? node.data.modifiedFiles as string[] : [],
+          generatedFileContents: (node.data?.generatedFileContents as Record<string, string>) || {},
+        }));
+      for (const taskNode of taskNodes) {
+        for (const filePath of taskNode.modifiedFiles) {
+          normalizeReconciliationPath(rootPath, filePath);
+        }
       }
+      const duplicateFiles = await queryDuplicateTrackedFiles(tab.id, rootPath);
+      const collisionFiles = Object.keys(duplicateFiles);
+      const collisionSet = new Set(collisionFiles);
+      const obsoleteOwnerFiles = reconciledFiles.filter((filePath) => !collisionSet.has(filePath));
+      if (obsoleteOwnerFiles.length > 0) {
+        await reconciliationService.removeFiles(tab.id, obsoleteOwnerFiles);
+        useWorkspaceStore.getState().updateCanvasContext(tab.id, {
+          reconciliationSnapshot: withoutReconciliationFiles(reconciliationSnapshot, obsoleteOwnerFiles),
+          isPipelineApplied: false,
+        });
+      }
+      const activeReconciledFiles = reconciledFiles.filter((filePath) => collisionSet.has(filePath));
+      const taskFileRecords = buildReconciliationTaskFileRecords(rootPath, taskNodes, activeReconciledFiles);
+      const taskOwnedFiles = Object.keys(taskFileRecords);
+      if (taskOwnedFiles.length === 0) {
+        notify("Nothing to Apply", "No TaskNode-owned VFS files are available.", "info");
+        return;
+      }
+      const ledger = reconciliationSnapshot?.ledger || {};
+      const unreconciledFiles = collisionFiles.filter((filePath) => {
+        const entry = ledger[filePath];
+        return !activeReconciledFiles.includes(filePath) ||
+          entry?.status !== "reconciled" ||
+          entry.sourceSignature !== taskFileRecords[filePath]?.sourceSignature;
+      });
+      if (unreconciledFiles.length > 0) {
+        notify(
+          "Reconciliation Required",
+          `${unreconciledFiles.length} overlapping file${unreconciledFiles.length === 1 ? " still requires" : "s still require"} reconciliation before Apply Axiom.`,
+          "info",
+        );
+        handleReconcileCode();
+        return;
+      }
+      const vfs = VfsRegistry.getOrCreate(tab.id);
+      const staleFiles: string[] = [];
+      for (const filePath of collisionFiles) {
+        const currentContent = await vfs.readFile(filePath);
+        if (currentContent !== reconciliationSnapshot?.generatedFileContents[filePath]) {
+          staleFiles.push(filePath);
+        }
+      }
+      if (staleFiles.length > 0) {
+        notify(
+          "Reconciliation Out of Date",
+          `${staleFiles.length} reconciliation-owned file${staleFiles.length === 1 ? " has" : "s have"} changed since the last reconciliation. Reconcile again before applying.`,
+          "info"
+        );
+        handleReconcileCode();
+        return;
+      }
+      const ordinaryChangedFiles = taskOwnedFiles.filter((filePath) => !collisionSet.has(filePath));
+      // Stale absolute VFS keys are copied to their active-workspace target;
+      // ownership remains with the TaskNode and they do not enter the ledger.
+      for (const filePath of ordinaryChangedFiles) {
+        const record = taskFileRecords[filePath];
+        const sourcePath = record?.sourcePath || filePath;
+        const taskContent = record?.taskContent ?? await vfs.readFile(sourcePath);
+        let currentContent: string | undefined;
+        try {
+          currentContent = await vfs.readFile(filePath);
+        } catch {
+          currentContent = undefined;
+        }
+        if (sourcePath !== filePath || currentContent !== taskContent) {
+          await vfs.writeFile(filePath, taskContent);
+        }
+      }
+      const applyFiles = Array.from(new Set([...collisionFiles, ...ordinaryChangedFiles]));
+      await vfs.applyToDisk(applyFiles);
       // Set applied status to true
       useWorkspaceStore.getState().updateCanvasContext(tab.id, { isPipelineApplied: true });
+      void canvasFileService.autoSaveCanvas(tab.id);
       notify(
         "Applied",
-        reconciledFiles.length > 0
-          ? `Applied the reconciled version of ${reconciledFiles.length} file${reconciledFiles.length === 1 ? "" : "s"} to disk.`
-          : "In-memory shadow VFS layout flushed to local storage disk.",
+        `Applied ${collisionFiles.length} reconciled collision file${collisionFiles.length === 1 ? "" : "s"} and ${ordinaryChangedFiles.length} ordinary changed file${ordinaryChangedFiles.length === 1 ? "" : "s"}. The VFS and ledger remain available.`,
         "success"
       );
       if (rootPath) {
@@ -557,6 +734,65 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
         >
           {/* Top Right Dropdowns */}
           <div className="absolute top-4 right-4 z-10 flex items-center space-x-2">
+            {/* Global Chat Node navigation */}
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                if (globalChatNode) focusCanvasNode(tab.id, globalChatNode.id);
+                setBoundaryMenuOpen(false);
+                setNodeMenuOpen(false);
+                setActionMenuOpen(false);
+              }}
+              disabled={!globalChatNode}
+              title={globalChatNode ? `Jump to ${String(globalChatNode.data?.name || "Global Chat")}` : "No Global Chat Node in this Axiom"}
+              className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] hover:bg-[var(--bg-header)] disabled:opacity-40 disabled:cursor-not-allowed text-[var(--text-light)] text-xs font-mono font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition-all shadow-md hover:border-[var(--border-active)] cursor-pointer nodrag"
+            >
+              <Globe size={14} className="text-[var(--color-status-warning)]" />
+              <span>Jump to Global Node</span>
+            </button>
+
+            {/* Boundary navigation */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (boundaryNodes.length === 0) return;
+                  setBoundaryMenuOpen(!boundaryMenuOpen);
+                  setNodeMenuOpen(false);
+                  setActionMenuOpen(false);
+                }}
+                disabled={boundaryNodes.length === 0}
+                title={boundaryNodes.length > 0 ? "Jump to a boundary" : "No boundaries in this Axiom"}
+                className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] hover:bg-[var(--bg-header)] disabled:opacity-40 disabled:cursor-not-allowed text-[var(--text-light)] text-xs font-mono font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition-all shadow-md hover:border-[var(--border-active)] cursor-pointer nodrag"
+              >
+                <Square size={14} className="text-[var(--color-secondary)]" />
+                <span>Boundaries</span>
+                <ChevronDown size={12} className="text-[var(--text-muted)]" />
+              </button>
+              {boundaryMenuOpen && (
+                <div className="absolute right-0 mt-1 w-56 max-h-64 overflow-y-auto bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-lg shadow-xl py-1 z-20 font-mono text-xs">
+                  {boundaryNodes.map((boundary, index) => (
+                    <button
+                      key={boundary.id}
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        focusCanvasNode(tab.id, boundary.id);
+                        setBoundaryMenuOpen(false);
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] transition-colors cursor-pointer flex items-center space-x-2"
+                      title={String(boundary.data?.name || `Boundary ${index + 1}`)}
+                    >
+                      <Square size={13} className="text-[var(--color-secondary)] flex-shrink-0" />
+                      <span className="truncate">{String(boundary.data?.name || `Boundary ${index + 1}`)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Add Node Dropdown */}
             <div className="relative">
               <button
@@ -564,6 +800,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
                 onClick={(e) => {
                   e.stopPropagation();
                   setNodeMenuOpen(!nodeMenuOpen);
+                  setBoundaryMenuOpen(false);
                   setActionMenuOpen(false);
                 }}
                 className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] hover:bg-[var(--bg-header)] text-[var(--text-light)] text-xs font-mono font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition-all shadow-md hover:border-[var(--border-active)] cursor-pointer nodrag"
@@ -658,6 +895,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
                 onClick={(e) => {
                   e.stopPropagation();
                   setActionMenuOpen(!actionMenuOpen);
+                  setBoundaryMenuOpen(false);
                   setNodeMenuOpen(false);
                 }}
                 className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] hover:bg-[var(--bg-header)] text-[var(--text-light)] text-xs font-mono font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition-all shadow-md hover:border-[var(--border-active)] cursor-pointer nodrag"
@@ -691,29 +929,29 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
                   <div className="border-t border-[var(--border-color)] my-1" />
                   <button
                     onClick={() => {
-                      if (!isPipelineApplied && !isReconciliationRunning) {
+                      if (!isReconciliationRunning) {
                         handleApplyChanges();
                         setActionMenuOpen(false);
                       }
                     }}
-                    disabled={isPipelineApplied || isReconciliationRunning}
+                    disabled={isReconciliationRunning}
                     className={`w-full text-left px-3 py-2 flex items-center space-x-2 transition-colors ${
-                      isPipelineApplied
-                        ? "text-[var(--color-status-success)] cursor-not-allowed opacity-90"
-                        : isReconciliationRunning
+                      isReconciliationRunning
                         ? "text-[var(--color-status-warning)] cursor-not-allowed opacity-75"
+                        : isPipelineApplied
+                        ? "hover:bg-[var(--accent-bg)] text-[var(--color-status-success)] cursor-pointer"
                         : "hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] cursor-pointer"
                     }`}
                   >
-                    {isPipelineApplied ? (
-                      <>
-                        <CheckSquare size={13} className="text-[var(--color-status-success)]" />
-                        <span>Axiom Applied</span>
-                      </>
-                    ) : isReconciliationRunning ? (
+                    {isReconciliationRunning ? (
                       <>
                         <GitMerge size={13} className="text-[var(--color-status-warning)] animate-pulse" />
                         <span>Reconciliation Running</span>
+                      </>
+                    ) : isPipelineApplied ? (
+                      <>
+                        <CheckSquare size={13} className="text-[var(--color-status-success)]" />
+                        <span>Apply Axiom Again</span>
                       </>
                     ) : (
                       <>

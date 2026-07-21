@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { GitMerge, Play, Loader2, FileCode, MessageSquare, X, Send, AlertTriangle, Maximize2, Minimize2, Terminal, Octagon, RotateCcw } from "lucide-react";
+import { GitMerge, Play, Loader2, FileCode, MessageSquare, X, Send, AlertTriangle, Maximize2, Minimize2, Terminal, Octagon, RotateCcw, Folder, Trash2, CheckCircle2, CircleDashed, PencilLine } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
-import { VfsRegistry } from "../../services/vfs";
+import { VfsRegistry, VFS_CHANGED_EVENT, type VfsChangedDetail } from "../../services/vfs";
 import { notify } from "../../notificationStore";
 import { PRDiffView } from "./components/PRDiffView";
 import { useResizable } from "./useResizable";
@@ -9,15 +9,17 @@ import { CustomSelect } from "../CustomSelect";
 import { queryDuplicateTrackedFiles } from "../../services/vfs/orchestrators/queryOrchestrator";
 import { processResponse } from "../../services/responseProcessingService";
 import { ConsoleTabContent } from "./components/ConsoleTabContent";
-import { commandPermissionService, handleCommandPermissionMessage } from "../../services/commandPermissionService";
 import { AgentActivityCard } from "../ui/SubagentActivityPanel";
-import type { SubagentActivity } from "../ui/Chat";
 import { useConfirm } from "../useConfirm";
-import {
-  reconciliationOverlayService,
-  RECONCILIATION_OVERLAY_CHANGED_EVENT,
-} from "../../services/reconciliationOverlayService";
+import { reconciliationService, withoutReconciliationFiles } from "../../services/reconciliationService";
+import { buildReconciliationTaskFileRecords, normalizeReconciliationPath } from "../../services/reconciliationPaths";
 import { providerHasModelReference, selectableProviderModels } from "../../store/providerHelpers";
+import { VfsExplorer } from "./components/VfsExplorer";
+import type { ReconciliationLedgerEntry, ReconciliationSnapshot } from "../../store/types";
+import {
+  ManualReconciliationEditor,
+  type ManualReconciliationVariant,
+} from "./components/ManualReconciliationEditor";
 
 interface ReconciliationGraphPaneProps {
   onClose: () => void;
@@ -27,33 +29,6 @@ interface ReconciliationGraphPaneProps {
 
 const getReconciliationStreamId = (tabId: string) => `__reconciliation__:${tabId}`;
 const EMPTY_RECONCILIATION_LOGS: string[] = [];
-
-type IncomingSubagent = SubagentActivity & { previousId?: string; appendLog?: string };
-
-const mergeSubagentUpdate = (current: SubagentActivity[], incoming: IncomingSubagent): SubagentActivity[] => {
-  const index = current.findIndex((subagent) =>
-    subagent.id === incoming.id || (!!incoming.previousId && subagent.id === incoming.previousId)
-  );
-  const incomingLogs = [
-    ...(Array.isArray(incoming.logs) ? incoming.logs : []),
-    ...(incoming.appendLog ? [incoming.appendLog] : []),
-  ];
-  const cleanIncoming = { ...incoming, result: undefined, error: undefined };
-  delete cleanIncoming.previousId;
-  delete cleanIncoming.appendLog;
-
-  if (index < 0) {
-    return [...current, { ...cleanIncoming, logs: incomingLogs }];
-  }
-
-  const next = [...current];
-  const mergedLogs = [...(next[index].logs || [])];
-  for (const log of incomingLogs) {
-    if (log && mergedLogs[mergedLogs.length - 1] !== log) mergedLogs.push(log);
-  }
-  next[index] = { ...next[index], ...cleanIncoming, id: incoming.id, logs: mergedLogs.slice(-200) };
-  return next;
-};
 
 export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = ({ onClose, tabId, isOpen = true }) => {
   const rootPath = useWorkspaceStore((state) => state.rootPath);
@@ -66,23 +41,26 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
 
   // States
   const [selectedModel, setSelectedModel] = useState(activeModel || "");
-  const [activeTab, setActiveTab] = useState<"overview" | "chat" | "console" | "files">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "manual" | "chat" | "console" | "files" | "vfs">("overview");
   const [isReconciling, setIsReconciling] = useState(false);
   const [chatMessages, setChatMessages] = useState<{ role: string; content: string }[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [isMaximized, setIsMaximized] = useState(false);
   const [duplicateFiles, setDuplicateFiles] = useState<Record<string, string[]>>({});
-  const [subagents, setSubagents] = useState<SubagentActivity[]>([]);
-  const [rollbackAvailable, setRollbackAvailable] = useState(false);
-  const [isRollingBack, setIsRollingBack] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   const [reconciledFiles, setReconciledFiles] = useState<string[]>([]);
   const [reconciliationRevision, setReconciliationRevision] = useState(0);
+  const [manualFilePath, setManualFilePath] = useState("");
+  const [chatFilePath, setChatFilePath] = useState("");
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const { confirm, ConfirmModalComponent } = useConfirm();
   const reconciliationStreamId = getReconciliationStreamId(tabId);
-  const reconciliationVfsId = reconciliationOverlayService.getOverlayTabId(tabId);
+  const reconciliationNodeId = reconciliationService.getNodeId(tabId);
+  const reconciliationSnapshot = useWorkspaceStore(
+    (state) => state.canvasContexts[tabId]?.reconciliationSnapshot
+  );
   const reconciliationLogs = useWorkspaceStore(
     (state) => state.canvasContexts[tabId]?.nodeLogs[reconciliationStreamId] ?? EMPTY_RECONCILIATION_LOGS
   );
@@ -109,18 +87,87 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
     }));
   }, [taskNodes, globalChatHistory]);
 
-  const taskModifiedFiles = useMemo(() => {
-    const files = new Set<string>();
-    formattedNodes.forEach((n) => {
-      n.modifiedFiles.forEach((f) => files.add(f));
+  const taskFileRecords = useMemo(() => {
+    return buildReconciliationTaskFileRecords(rootPath, formattedNodes, reconciliationSnapshot?.files || []);
+  }, [formattedNodes, reconciliationSnapshot?.files, rootPath]);
+
+  const taskModifiedFiles = useMemo(
+    () => Object.keys(taskFileRecords),
+    [taskFileRecords],
+  );
+
+  const reconciliationLedger = useMemo<Record<string, ReconciliationLedgerEntry>>(() => {
+    if (reconciliationSnapshot?.ledger) return reconciliationSnapshot.ledger;
+    return Object.fromEntries((reconciliationSnapshot?.files || []).map((filePath) => [filePath, {
+      path: filePath,
+      status: "reconciled" as const,
+      sourceSignature: taskFileRecords[filePath]?.sourceSignature || "legacy",
+      taskIds: taskFileRecords[filePath]?.taskIds || [],
+      updatedAt: reconciliationSnapshot?.updatedAt || new Date(0).toISOString(),
+    }]));
+  }, [reconciliationSnapshot, taskFileRecords]);
+
+  const pendingDuplicateFiles = useMemo(() => Object.fromEntries(
+    Object.entries(duplicateFiles).filter(([filePath]) => {
+      const entry = reconciliationLedger[filePath];
+      return entry?.status !== "reconciled" || entry.sourceSignature !== taskFileRecords[filePath]?.sourceSignature;
+    }),
+  ), [duplicateFiles, reconciliationLedger, taskFileRecords]);
+
+  const manualVariants = useMemo<ManualReconciliationVariant[]>(() => {
+    if (!manualFilePath) return [];
+    return formattedNodes.flatMap((node) => {
+      const sourcePath = node.modifiedFiles.find((candidate) => {
+        try {
+          return normalizeReconciliationPath(rootPath, candidate) === manualFilePath;
+        } catch {
+          return candidate === manualFilePath;
+        }
+      });
+      if (!sourcePath) return [];
+      const contentEntry = Object.entries(node.generatedFileContents).find(([candidate]) => {
+        try {
+          return normalizeReconciliationPath(rootPath, candidate) === manualFilePath;
+        } catch {
+          return candidate === manualFilePath;
+        }
+      });
+      return [{
+        taskId: node.id,
+        taskName: String(node.name || node.id),
+        sourcePath: contentEntry?.[0] || sourcePath,
+        content: contentEntry?.[1],
+        prompt: String(node.prompt || ""),
+      }];
     });
-    return Array.from(files);
-  }, [formattedNodes]);
+  }, [formattedNodes, manualFilePath, rootPath]);
+
+  useEffect(() => {
+    if (activeTab !== "manual") return;
+    const collisionPaths = Object.keys(duplicateFiles);
+    if (!manualFilePath || !duplicateFiles[manualFilePath]) {
+      setManualFilePath(collisionPaths[0] || "");
+    }
+  }, [activeTab, duplicateFiles, manualFilePath]);
+
+  const openManualReconciliation = (filePath: string) => {
+    setManualFilePath(filePath);
+    setChatFilePath(filePath);
+    setActiveTab("manual");
+    setIsMaximized(true);
+  };
+
+  useEffect(() => {
+    const collisionPaths = Object.keys(duplicateFiles);
+    if (!chatFilePath || !duplicateFiles[chatFilePath]) {
+      setChatFilePath(collisionPaths[0] || "");
+    }
+  }, [chatFilePath, duplicateFiles]);
 
   // Load duplicates from VFS
   const loadDuplicates = async () => {
     try {
-      const dups = await queryDuplicateTrackedFiles(tabId);
+      const dups = await queryDuplicateTrackedFiles(tabId, rootPath);
       setDuplicateFiles(dups);
     } catch (err) {
       console.error("[ReconciliationGraphPane] Failed to query duplicates:", err);
@@ -129,12 +176,12 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
 
   useEffect(() => {
     loadDuplicates();
-  }, [tabId, taskModifiedFiles.join(",")]);
+  }, [rootPath, tabId, taskModifiedFiles.join(",")]);
 
   // Sync scroll on chat messages update
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatMessages, subagents]);
+  }, [chatMessages]);
 
   const saveChatHistory = (messages: { role: string; content: string }[]) => {
     const canvasContext = useWorkspaceStore.getState().canvasContexts[tabId];
@@ -166,61 +213,206 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
     });
   };
 
-  const ensureReconciliationOverlay = async (): Promise<boolean> => {
+  const ensureReconciliationSnapshot = async (
+    filePaths: string[],
+    records = taskFileRecords,
+  ): Promise<boolean> => {
+    const existing = useWorkspaceStore.getState().canvasContexts[tabId]?.reconciliationSnapshot;
     try {
-      await reconciliationOverlayService.ensureSession(
-        tabId,
-        !!useWorkspaceStore.getState().canvasContexts[tabId]?.isPipelineApplied
-      );
-      const changedPaths = reconciliationOverlayService.getChangedPaths(tabId);
-      setReconciledFiles(changedPaths);
-      setRollbackAvailable(changedPaths.length > 0);
+      const vfs = VfsRegistry.getOrCreate(tabId);
+      const originalFileContents = { ...(existing?.originalFileContents || {}) };
+      for (const filePath of filePaths) {
+        if (originalFileContents[filePath] !== undefined) continue;
+        originalFileContents[filePath] = await vfs.readFile(records[filePath]?.sourcePath || filePath);
+      }
+
+      useWorkspaceStore.getState().updateCanvasContext(tabId, {
+        reconciliationSnapshot: {
+          files: existing?.files || [],
+          originalFileContents,
+          generatedFileContents: existing?.generatedFileContents || {},
+          ledger: existing?.ledger || reconciliationLedger,
+          updatedAt: new Date().toISOString(),
+          response: existing?.response,
+        },
+      });
       return true;
     } catch (err: any) {
-      console.error("[ReconciliationGraph] Failed to create reconciliation overlay:", err);
-      notify(
-        "Reconciliation Not Started",
-        `Could not create an isolated reconciliation version: ${err.message || String(err)}`,
-        "error"
-      );
+      console.error("[ReconciliationGraph] Failed to snapshot the pre-reconciliation VFS:", err);
+      notify("Reconciliation Not Started", err.message || String(err), "error");
       return false;
     }
   };
 
-  const handleRollbackReconciliation = async () => {
-    const changedPaths = reconciliationOverlayService.getChangedPaths(tabId);
-    if (changedPaths.length === 0 || isReconciling || isRollingBack) return;
+  const removeLedgerFiles = async (filePaths: string[]) => {
+    if (filePaths.length === 0) return;
+    await reconciliationService.removeFiles(tabId, filePaths);
+    const snapshot = useWorkspaceStore.getState().canvasContexts[tabId]?.reconciliationSnapshot;
+    if (!snapshot) return;
+    const removed = new Set(filePaths);
+    const ledger = { ...(snapshot.ledger || reconciliationLedger) };
+    const generatedFileContents = { ...snapshot.generatedFileContents };
+    for (const filePath of removed) {
+      delete ledger[filePath];
+      delete generatedFileContents[filePath];
+    }
+    const nextSnapshot: ReconciliationSnapshot = {
+      ...snapshot,
+      files: snapshot.files.filter((filePath) => !removed.has(filePath)),
+      generatedFileContents,
+      ledger,
+      updatedAt: new Date().toISOString(),
+    };
+    useWorkspaceStore.getState().updateCanvasContext(tabId, {
+      reconciliationSnapshot: nextSnapshot,
+      isPipelineApplied: false,
+    });
+    setReconciledFiles(nextSnapshot.files);
+    setReconciliationRevision((revision) => revision + 1);
+  };
+
+  const synchronizeLedger = async (currentDuplicates: Record<string, string[]>): Promise<Record<string, string[]>> => {
+    const ownerFiles = new Set(await reconciliationService.getFiles(tabId));
+    const invalidFiles = Object.values(reconciliationLedger)
+      .filter((entry) => (
+        !currentDuplicates[entry.path] ||
+        entry.sourceSignature !== taskFileRecords[entry.path]?.sourceSignature ||
+        (entry.status === "reconciled" && !ownerFiles.has(entry.path))
+      ))
+      .map((entry) => entry.path);
+    if (invalidFiles.length > 0) await removeLedgerFiles(invalidFiles);
+
+    const invalid = new Set(invalidFiles);
+    return Object.fromEntries(Object.entries(currentDuplicates).filter(([filePath]) => {
+      const entry = invalid.has(filePath) ? undefined : reconciliationLedger[filePath];
+      return entry?.status !== "reconciled" || entry.sourceSignature !== taskFileRecords[filePath]?.sourceSignature;
+    }));
+  };
+
+  const handleResetReconciliation = async () => {
+    const snapshot = useWorkspaceStore.getState().canvasContexts[tabId]?.reconciliationSnapshot;
+    if (!snapshot || Object.keys(reconciliationLedger).length === 0 || isReconciling || isResetting) return;
 
     const confirmed = await confirm({
-      title: "Rollback reconciliation?",
-      message: `Discard the reconciled version of ${changedPaths.length} file${changedPaths.length === 1 ? "" : "s"}? All task-owned code will remain intact.`,
-      confirmLabel: "Rollback",
+      title: "Reset reconciliation?",
+      message: `Restore ${snapshot.files.length} task-owned file${snapshot.files.length === 1 ? "" : "s"} to their pre-reconciliation VFS versions? TaskNode ownership and snapshots will remain intact.`,
+      confirmLabel: "Reset",
       kind: "warning",
     });
     if (!confirmed) return;
 
-    setIsRollingBack(true);
+    setIsResetting(true);
     try {
-      const wasPipelineApplied = reconciliationOverlayService.wasPipelineApplied(tabId);
-      await reconciliationOverlayService.discard(tabId);
-      useWorkspaceStore.getState().updateCanvasContext(tabId, { isPipelineApplied: wasPipelineApplied });
+      const vfs = VfsRegistry.getOrCreate(tabId);
+      for (const filePath of snapshot.files) {
+        const content = snapshot.originalFileContents[filePath];
+        if (content !== undefined) await vfs.writeFile(filePath, content);
+      }
+      await reconciliationService.setFiles(tabId, []);
+      useWorkspaceStore.getState().updateCanvasContext(tabId, {
+        reconciliationSnapshot: undefined,
+        isPipelineApplied: false,
+      });
       setReconciledFiles([]);
-      setRollbackAvailable(false);
-      addConsoleLog(`Discarded the reconciled version of ${changedPaths.length} file${changedPaths.length === 1 ? "" : "s"}. Task code was not changed.`);
+      setReconciliationRevision((revision) => revision + 1);
       appendChatMessage({
         role: "system",
-        content: `Reconciliation rolled back. Discarded ${changedPaths.length} reconciled file version${changedPaths.length === 1 ? "" : "s"}; task-owned code remains unchanged.`,
+        content: "Reconciliation reset. Restored the pre-reconciliation VFS contents; TaskNode files and ownership were left in place.",
       });
-      await loadDuplicates();
+      notify("Reconciliation Reset", "Pre-reconciliation VFS contents restored. You can run reconciliation again.", "success");
+    } catch (err: any) {
+      console.error("[ReconciliationGraph] Reset failed:", err);
+      notify("Reset Failed", err.message || String(err), "error");
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
+  const handleReconciledFileSaved = async (filePath: string) => {
+    const content = await VfsRegistry.getOrCreate(tabId).readFile(filePath);
+    const snapshot = useWorkspaceStore.getState().canvasContexts[tabId]?.reconciliationSnapshot;
+    if (!snapshot) return;
+    useWorkspaceStore.getState().updateCanvasContext(tabId, {
+      reconciliationSnapshot: {
+        ...snapshot,
+        generatedFileContents: { ...snapshot.generatedFileContents, [filePath]: content },
+        updatedAt: new Date().toISOString(),
+      },
+      isPipelineApplied: false,
+    });
+  };
+
+  const handleManualReconciliationSave = async (filePath: string, content: string) => {
+    try {
+      if (isReconciling || isResetting) {
+        throw new Error("Wait for the active reconciliation or reset operation to finish before saving a manual result.");
+      }
+      const currentDuplicates = await queryDuplicateTrackedFiles(tabId, rootPath);
+      if (!currentDuplicates[filePath]) {
+        throw new Error("This file no longer has overlapping TaskNode changes.");
+      }
+      const ownerFiles = await reconciliationService.getFiles(tabId);
+      const currentRecords = buildReconciliationTaskFileRecords(rootPath, formattedNodes, ownerFiles);
+      const record = currentRecords[filePath];
+      if (!record) throw new Error("The TaskNode versions for this file are no longer available.");
+      if (!(await ensureReconciliationSnapshot([filePath], currentRecords))) {
+        throw new Error("The original VFS version could not be captured.");
+      }
+
+      await VfsRegistry.getOrCreate(tabId).writeFile(filePath, content, reconciliationNodeId);
+      const snapshot = useWorkspaceStore.getState().canvasContexts[tabId]?.reconciliationSnapshot;
+      if (!snapshot) throw new Error("The reconciliation snapshot is missing.");
+      const ledger = { ...(snapshot.ledger || reconciliationLedger) };
+      ledger[filePath] = {
+        path: filePath,
+        status: "reconciled",
+        sourceSignature: record.sourceSignature,
+        taskIds: record.taskIds,
+        updatedAt: new Date().toISOString(),
+        modified: content !== snapshot.originalFileContents[filePath],
+        method: "manual",
+        response: "Reconciled manually by the user.",
+      };
+      const files = Array.from(new Set([...snapshot.files, filePath]));
+      useWorkspaceStore.getState().updateCanvasContext(tabId, {
+        reconciliationSnapshot: {
+          ...snapshot,
+          files,
+          generatedFileContents: { ...snapshot.generatedFileContents, [filePath]: content },
+          ledger,
+          updatedAt: new Date().toISOString(),
+        },
+        isPipelineApplied: false,
+      });
+      setReconciledFiles(files);
+      setReconciliationRevision((revision) => revision + 1);
+      appendChatMessage({ role: "system", content: `${filePath} was reconciled manually and added to the ledger.` });
       const { canvasFileService } = await import("../tabs/canvas/services/canvasFileService");
       await canvasFileService.autoSaveCanvas(tabId);
-      notify("Reconciliation Rolled Back", "The isolated reconciled version was discarded. Task code was preserved.", "success");
+      await loadDuplicates();
+      notify("Manual Reconciliation Saved", "The file was saved to the reconciliation VFS and marked as manually reconciled.", "success");
+    } catch (error: any) {
+      notify("Manual Reconciliation Failed", error?.message || String(error), "error");
+      throw error;
+    }
+  };
+
+  const handleRemoveReconciledFile = async (filePath: string) => {
+    if (isReconciling || isResetting) return;
+    const confirmed = await confirm({
+      title: "Remove reconciliation result?",
+      message: `${filePath.split(/[\\/]/).pop() || filePath} will return to Pending and must be reconciled again before Apply Axiom. Its TaskNode-owned VFS versions remain available.`,
+      confirmLabel: "Remove",
+      kind: "warning",
+    });
+    if (!confirmed) return;
+    try {
+      await removeLedgerFiles([filePath]);
+      notify("Reconciliation Removed", "The file is pending reconciliation again.", "success");
+      void import("../tabs/canvas/services/canvasFileService")
+        .then(({ canvasFileService }) => canvasFileService.autoSaveCanvas(tabId));
     } catch (err: any) {
-      console.error("[ReconciliationGraph] Rollback failed:", err);
-      notify("Rollback Failed", err.message || String(err), "error");
-    } finally {
-      setIsRollingBack(false);
+      notify("Removal Failed", err.message || String(err), "error");
     }
   };
 
@@ -228,20 +420,13 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
     addConsoleLog("Stop requested by user.");
     setConsoleStatus("idle");
     if (socketRef.current) {
-      const socket = socketRef.current;
       if (socketRef.current.readyState === WebSocket.OPEN) {
         socketRef.current.send(JSON.stringify({ type: "agent_chat_stop", tabId: reconciliationStreamId }));
       }
       socketRef.current.close(1000, "User requested stop");
-      commandPermissionService.removeForSocket(socket);
       socketRef.current = null;
     }
     setIsReconciling(false);
-    setSubagents((current) => current.map((subagent) =>
-      subagent.status === "queued" || subagent.status === "running" || subagent.status === "background"
-        ? { ...subagent, status: "stopped", updatedAt: new Date().toISOString() }
-        : subagent
-    ));
     appendChatMessage({ role: "system", content: "Reconciliation stopped by user." });
   };
 
@@ -249,37 +434,77 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
     const globalChat = useWorkspaceStore.getState().canvasContexts[tabId]?.globalChatHistory || {};
     const storedMessages = globalChat["__reconciliation__"] || [];
     setChatMessages(storedMessages.map(m => ({ role: m.role, content: m.content })));
-    setSubagents([]);
-    const changedPaths = reconciliationOverlayService.getChangedPaths(tabId);
-    setReconciledFiles(changedPaths);
-    setRollbackAvailable(changedPaths.length > 0);
+    void reconciliationService.getFiles(tabId).then(setReconciledFiles).catch((err) => {
+      console.error("[ReconciliationGraph] Failed to load reconciliation-owned files:", err);
+    });
 
     return () => {
       if (socketRef.current) {
-        const socket = socketRef.current;
-        socket.close(1000, "Pane unmounted");
-        commandPermissionService.removeForSocket(socket);
+        socketRef.current.close(1000, "Pane unmounted");
       }
     };
   }, [tabId]);
 
   useEffect(() => {
-    const handleOverlayChanged = (event: Event) => {
-      const detail = (event as CustomEvent<{ tabId: string; changedPaths: string[] }>).detail;
+    const handleVfsChanged = (event: Event) => {
+      const detail = (event as CustomEvent<VfsChangedDetail>).detail;
       if (detail?.tabId !== tabId) return;
-      setReconciledFiles(detail.changedPaths || []);
-      setRollbackAvailable((detail.changedPaths || []).length > 0);
-      setReconciliationRevision((revision) => revision + 1);
+      void reconciliationService.getFiles(tabId).then((files) => {
+        setReconciledFiles(files);
+        if (detail.nodeId === reconciliationNodeId || detail.operation === "restore") {
+          setReconciliationRevision((revision) => revision + 1);
+        }
+        if (detail.nodeId === reconciliationNodeId && (detail.operation === "remove" || detail.operation === "delete-node")) {
+          const snapshot = useWorkspaceStore.getState().canvasContexts[tabId]?.reconciliationSnapshot;
+          const missing = (snapshot?.files || []).filter((filePath) => !files.includes(filePath));
+          if (missing.length > 0) {
+            useWorkspaceStore.getState().updateCanvasContext(tabId, {
+              reconciliationSnapshot: withoutReconciliationFiles(snapshot, missing, { preserveOriginal: true }),
+              isPipelineApplied: false,
+            });
+          }
+        }
+      }).catch((err) => console.error("[ReconciliationGraph] Failed to refresh reconciliation-owned files:", err));
     };
-    window.addEventListener(RECONCILIATION_OVERLAY_CHANGED_EVENT, handleOverlayChanged);
-    return () => window.removeEventListener(RECONCILIATION_OVERLAY_CHANGED_EVENT, handleOverlayChanged);
-  }, [tabId]);
+    window.addEventListener(VFS_CHANGED_EVENT, handleVfsChanged);
+    return () => window.removeEventListener(VFS_CHANGED_EVENT, handleVfsChanged);
+  }, [reconciliationNodeId, tabId]);
 
-  const startReconciliation = async (userMsgText?: string) => {
-    if (isReconciling || isRollingBack) return;
-    if (!(await ensureReconciliationOverlay())) return;
+  const startReconciliation = async (userMsgText?: string, onlyFilePath?: string) => {
+    if (isReconciling || isResetting) return;
+    let currentDuplicates: Record<string, string[]>;
+    try {
+      currentDuplicates = await queryDuplicateTrackedFiles(tabId, rootPath);
+      setDuplicateFiles(currentDuplicates);
+    } catch (err: any) {
+      notify("Reconciliation Not Started", err.message || String(err), "error");
+      return;
+    }
+    const synchronizedFiles = await synchronizeLedger(currentDuplicates);
+    const requestedFilePath = onlyFilePath || (userMsgText ? chatFilePath : "");
+    // A follow-up is an explicit request to review an already reconciled file
+    // again. Normal Reconcile runs continue to process pending files only.
+    const filesToReconcile = requestedFilePath
+      ? (currentDuplicates[requestedFilePath] ? { [requestedFilePath]: currentDuplicates[requestedFilePath] } : {})
+      : synchronizedFiles;
+    const pendingPaths = Object.keys(filesToReconcile);
+    if (pendingPaths.length === 0) {
+      notify(
+        "Reconciliation Up to Date",
+        currentDuplicates && Object.keys(currentDuplicates).length > 0
+          ? "All currently overlapping files are already reconciled."
+          : "No files currently require reconciliation.",
+        "success",
+      );
+      return;
+    }
+    const currentOwnerFiles = await reconciliationService.getFiles(tabId);
+    const runTaskFileRecords = buildReconciliationTaskFileRecords(rootPath, formattedNodes, currentOwnerFiles);
+    const runFileSources = Object.fromEntries(
+      Object.values(runTaskFileRecords).map(({ path, sourcePath }) => [path, sourcePath]),
+    );
+    if (!(await ensureReconciliationSnapshot(pendingPaths, runTaskFileRecords))) return;
     setIsReconciling(true);
-    setSubagents([]);
     if (!userMsgText) {
       clearConsoleLog();
     }
@@ -315,7 +540,9 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
       const provider = customProviders.find((candidate) =>
         providerHasModelReference(candidate, selectedModel)
       ) || customProviders.find((candidate) => candidate.id === activeCustomProviderId);
-      addConsoleLog(`Connected to sidecar. Dispatching ${formattedNodes.length} task nodes with ${Object.keys(duplicateFiles).length} overlapping file groups.`);
+      addConsoleLog(userMsgText
+        ? `Connected to sidecar. Asking the model to adjust ${pendingPaths[0]}.`
+        : `Connected to sidecar. Dispatching ${pendingPaths.length} pending collision case${pendingPaths.length === 1 ? "" : "s"}; completed ledger entries are skipped.`);
 
       socket.send(
         JSON.stringify({
@@ -324,7 +551,8 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
           model: selectedModel,
           nodes: formattedNodes,
           workspaceRoot: rootPath,
-          duplicateFiles,
+          duplicateFiles: filesToReconcile,
+          fileSources: runFileSources,
           chatHistory: nextMessages.map(m => ({ role: m.role, content: m.content })),
           userMessage: userMsgText || "",
           customProvider: provider || null,
@@ -332,39 +560,23 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
       );
     };
 
+    let messageQueue = Promise.resolve();
     socket.onmessage = (event) => {
+      // Ledger updates must be committed in wire order. Without this queue,
+      // several async per-file messages can read and overwrite the same
+      // snapshot concurrently.
+      messageQueue = messageQueue.then(async () => {
       try {
         const msg = JSON.parse(event.data);
-
-        if (handleCommandPermissionMessage(msg, socket)) return;
-
-        if (msg.type === "command_output" && msg.sessionId === reconciliationStreamId) {
-          const output = String(msg.content || "").trimEnd();
-          if (output) addConsoleLog(output);
-          return;
-        }
-
-        if (msg.type === "command_complete" && msg.sessionId === reconciliationStreamId) {
-          if (msg.error) addConsoleLog(`Build command error: ${msg.error}`);
-          return;
-        }
 
         if (msg.type === "log") {
           addConsoleLog(msg.message);
           return;
         }
 
-        if (msg.type === "subagent_update" && msg.tabId === reconciliationStreamId && msg.subagent?.id) {
-          setSubagents((current) => mergeSubagentUpdate(current, {
-            ...msg.subagent,
-            updatedAt: msg.subagent.updatedAt || new Date().toISOString(),
-          } as IncomingSubagent));
-          return;
-        }
-
         if (msg.type === "read_file") {
           console.log(`[ReconciliateGraph] Sidecar reading file: ${msg.path}`);
-          VfsRegistry.getOrCreate(reconciliationVfsId).readFile(msg.path)
+          VfsRegistry.getOrCreate(tabId).readFile(msg.path)
             .then((content) => {
               if (socket.readyState === WebSocket.OPEN) {
                 socket.send(JSON.stringify({ type: "read_file_response", requestId: msg.requestId, content }));
@@ -380,13 +592,12 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
 
         if (msg.type === "write_file") {
           console.log(`[ReconciliateGraph] Sidecar writing file: ${msg.path}`);
-          VfsRegistry.getOrCreate(reconciliationVfsId).writeFile(
+          VfsRegistry.getOrCreate(tabId).writeFile(
             msg.path,
             msg.content,
-            reconciliationOverlayService.getReconciliationNodeId(tabId)
+            reconciliationNodeId
           )
             .then(() => {
-              reconciliationOverlayService.markChanged(tabId, msg.path);
               useWorkspaceStore.getState().updateCanvasContext(tabId, { isPipelineApplied: false });
               if (socket.readyState === WebSocket.OPEN) {
                 socket.send(JSON.stringify({ type: "write_file_response", requestId: msg.requestId }));
@@ -400,48 +611,140 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
           return;
         }
 
-        if (msg.type === "reconciliation_graph_complete") {
-          const verificationStatus = msg.verification?.status;
-          if (verificationStatus === "failed") {
-            addConsoleLog(`Reconciliation completed, but build verification failed: ${msg.verification?.reason || "unknown failure"}`);
-            setConsoleStatus("error");
-          } else if (verificationStatus === "skipped") {
-            addConsoleLog(`Reconciliation completed; build verification skipped: ${msg.verification?.reason || "no reason provided"}`);
-            setConsoleStatus("success");
-          } else {
-            addConsoleLog("Reconciliation and build verification completed successfully.");
-            setConsoleStatus("success");
+        if (msg.type === "reconciliation_file_complete") {
+          const filePath = String(msg.filePath || "");
+          if (!filePath) return;
+          const content = await VfsRegistry.getOrCreate(tabId).readFile(filePath);
+          const currentSnapshot = useWorkspaceStore.getState().canvasContexts[tabId]?.reconciliationSnapshot;
+          if (!currentSnapshot) throw new Error("The reconciliation snapshot is missing.");
+          const ledger = { ...(currentSnapshot.ledger || reconciliationLedger) };
+          ledger[filePath] = {
+            path: filePath,
+            status: "reconciled",
+            sourceSignature: taskFileRecords[filePath]?.sourceSignature || "unknown",
+            taskIds: Array.isArray(msg.taskIds) ? msg.taskIds : taskFileRecords[filePath]?.taskIds || [],
+            updatedAt: new Date().toISOString(),
+            modified: !!msg.modified,
+            method: "model",
+            response: msg.response || undefined,
+          };
+          const files = Array.from(new Set([...currentSnapshot.files, filePath]));
+          useWorkspaceStore.getState().updateCanvasContext(tabId, {
+            reconciliationSnapshot: {
+              ...currentSnapshot,
+              files,
+              generatedFileContents: {
+                ...currentSnapshot.generatedFileContents,
+                [filePath]: content,
+              },
+              ledger,
+              updatedAt: new Date().toISOString(),
+            },
+            isPipelineApplied: false,
+          });
+          setReconciledFiles(files);
+          setReconciliationRevision((revision) => revision + 1);
+          addConsoleLog(`Ledger recorded: ${filePath}`);
+          void import("../tabs/canvas/services/canvasFileService")
+            .then(({ canvasFileService }) => canvasFileService.autoSaveCanvas(tabId));
+          return;
+        }
+
+        if (msg.type === "reconciliation_file_error") {
+          const filePath = String(msg.filePath || "");
+          if (!filePath) return;
+          await reconciliationService.removeFiles(tabId, [filePath]);
+          const currentSnapshot = useWorkspaceStore.getState().canvasContexts[tabId]?.reconciliationSnapshot;
+          if (currentSnapshot) {
+            const ledger = { ...(currentSnapshot.ledger || reconciliationLedger) };
+            ledger[filePath] = {
+              path: filePath,
+              status: "error",
+              sourceSignature: taskFileRecords[filePath]?.sourceSignature || "unknown",
+              taskIds: Array.isArray(msg.taskIds) ? msg.taskIds : taskFileRecords[filePath]?.taskIds || [],
+              updatedAt: new Date().toISOString(),
+              error: msg.error || "Unknown reconciliation error",
+            };
+            const generatedFileContents = { ...currentSnapshot.generatedFileContents };
+            delete generatedFileContents[filePath];
+            const files = currentSnapshot.files.filter((candidate) => candidate !== filePath);
+            useWorkspaceStore.getState().updateCanvasContext(tabId, {
+              reconciliationSnapshot: {
+                ...currentSnapshot,
+                files,
+                generatedFileContents,
+                ledger,
+                updatedAt: new Date().toISOString(),
+              },
+              isPipelineApplied: false,
+            });
+            setReconciledFiles(files);
           }
+          addConsoleLog(`Ledger error for ${filePath}: ${msg.error}`);
+          void import("../tabs/canvas/services/canvasFileService")
+            .then(({ canvasFileService }) => canvasFileService.autoSaveCanvas(tabId));
+          return;
+        }
+
+        if (msg.type === "reconciliation_graph_complete") {
+          const completedThisRun = Array.isArray(msg.reconciledFiles) ? msg.reconciledFiles : [];
+          const currentSnapshot = useWorkspaceStore.getState().canvasContexts[tabId]?.reconciliationSnapshot;
+          if (currentSnapshot) {
+            useWorkspaceStore.getState().updateCanvasContext(tabId, {
+              reconciliationSnapshot: {
+                ...currentSnapshot,
+                response: msg.response || "Reconciliation complete.",
+                updatedAt: new Date().toISOString(),
+              },
+              isPipelineApplied: false,
+            });
+          }
+          const allReconciledFiles = await reconciliationService.getFiles(tabId);
+          setReconciledFiles(allReconciledFiles);
+          const finalizedCount = allReconciledFiles.length;
+          const completedCount = completedThisRun.length;
+          const modifiedCount = Array.isArray(msg.modifiedFiles) ? msg.modifiedFiles.length : 0;
+          addConsoleLog(
+            userMsgText
+              ? `Adjustment complete for ${pendingPaths[0]}; ${finalizedCount} total reconciled file${finalizedCount === 1 ? "" : "s"} remain in the ledger.`
+              : `Run complete: ${completedCount} pending collision case${completedCount === 1 ? "" : "s"} recorded; ${finalizedCount} total reconciled file${finalizedCount === 1 ? "" : "s"} in the ledger.`,
+          );
+          setConsoleStatus("success");
           appendChatMessage({ role: "assistant", content: msg.response || "Reconciliation complete." });
           setIsReconciling(false);
-          if (verificationStatus === "failed") {
-            notify("Build Verification Failed", msg.verification?.reason || "The reconciled code did not build.", "error");
-          } else if (verificationStatus === "skipped") {
-            notify("Reconciliation Complete", "Code alignment completed; build verification was skipped.", "info");
-          } else {
-            notify("Reconciliation Complete", "Code alignment and temporary build verification passed.", "success");
-          }
+          notify(
+            userMsgText ? "Reconciliation Adjustment Complete" : "Reconciliation Complete",
+            userMsgText
+              ? `${pendingPaths[0]?.split(/[\\/]/).pop() || "The selected file"} was reviewed again${modifiedCount > 0 ? " and updated" : ""}. You can continue chatting for more changes.`
+              : `${completedCount} pending collision case${completedCount === 1 ? " was" : "s were"} processed${modifiedCount > 0 ? `; ${modifiedCount} required edits` : ""}. Ordinary changed files remain TaskNode-owned.`,
+            "success"
+          );
+          void import("../tabs/canvas/services/canvasFileService")
+            .then(({ canvasFileService }) => canvasFileService.autoSaveCanvas(tabId))
+            .catch((err) => console.error("Failed to auto-save reconciliation VFS:", err));
           loadDuplicates();
           socket.close();
         }
 
         if (msg.type === "reconciliation_graph_error") {
-          addConsoleLog(`Reconciliation failed: ${msg.error}`);
+          addConsoleLog(`Reconciliation stopped${msg.filePath ? ` at ${msg.filePath}` : ""}: ${msg.error}`);
           setConsoleStatus("error");
-          appendChatMessage({ role: "assistant", content: `Error: ${msg.error}` });
+          appendChatMessage({ role: "assistant", content: `Error${msg.filePath ? ` in ${msg.filePath}` : ""}: ${msg.error}` });
           setIsReconciling(false);
-          setSubagents((current) => current.map((subagent) =>
-            subagent.status === "queued" || subagent.status === "running" || subagent.status === "background"
-              ? { ...subagent, status: "error", updatedAt: new Date().toISOString() }
-              : subagent
-          ));
-          notify("Reconciliation Failed", `Error aligning: ${msg.error}`, "error");
+          notify(
+            "Reconciliation Stopped",
+            msg.filePath
+              ? `${msg.filePath.split(/[\\/]/).pop() || msg.filePath} remains in Error. Run reconciliation again to restart from that file.`
+              : `Error aligning: ${msg.error}`,
+            "error",
+          );
           socket.close();
         }
       } catch (err: any) {
         console.error("[ReconciliationGraph] parse error:", err);
         addConsoleLog(`Message parse error: ${err.message || String(err)}`);
       }
+      });
     };
 
     socket.onerror = (error) => {
@@ -453,7 +756,6 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
     };
 
     socket.onclose = () => {
-      commandPermissionService.removeForSocket(socket);
       const currentStatus = useWorkspaceStore.getState().canvasContexts[tabId]?.nodeStatus[reconciliationStreamId];
       if (currentStatus === "running") {
         addConsoleLog("Connection closed before reconciliation completed.");
@@ -464,10 +766,10 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
   };
 
   const handleSendChat = () => {
-    if (!chatInput.trim() || isReconciling) return;
+    if (!chatInput.trim() || isReconciling || !chatFilePath) return;
     const text = chatInput.trim();
     setChatInput("");
-    void startReconciliation(text);
+    void startReconciliation(text, chatFilePath);
   };
 
   // Compile list of available models
@@ -487,7 +789,13 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
   }, [activeModel, availableModels, selectedModel]);
 
   const duplicateFilesEntries = Object.entries(duplicateFiles);
+  const duplicatePathSet = new Set(Object.keys(duplicateFiles));
+  const ordinaryChangedFiles = taskModifiedFiles.filter((filePath) => !duplicatePathSet.has(filePath));
+  const pendingCount = Object.keys(pendingDuplicateFiles).length;
 
+  // AxiomTab keeps this component mounted after its first open. Hiding only
+  // removes the visual pane; the socket, per-file checkpoints, and ledger
+  // updates continue exactly as they do for an open pane.
   if (!isOpen) {
     return null;
   }
@@ -552,7 +860,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
       </div>
 
       {/* Tabs Menu */}
-      <div className="flex border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/20 px-2 flex-shrink-0">
+      <div className="flex overflow-x-auto border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/20 px-2 flex-shrink-0">
         <button
           onClick={() => setActiveTab("overview")}
           className={`flex items-center space-x-1.5 px-3 py-2 text-xs font-mono font-semibold transition-all border-b-2 hover:text-[var(--text-light)] cursor-pointer ${
@@ -561,6 +869,19 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
         >
           <GitMerge size={13} />
           <span>Overview</span>
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab("manual");
+            setManualFilePath((current) => current || Object.keys(duplicateFiles)[0] || "");
+            setIsMaximized(true);
+          }}
+          className={`flex flex-shrink-0 items-center space-x-1.5 px-3 py-2 text-xs font-mono font-semibold transition-all border-b-2 hover:text-[var(--text-light)] cursor-pointer ${
+            activeTab === "manual" ? "border-[var(--color-status-danger-border)] text-[var(--color-status-danger)]" : "border-transparent text-[var(--text-muted)]"
+          }`}
+        >
+          <PencilLine size={13} />
+          <span>Manual</span>
         </button>
         <button
           onClick={() => setActiveTab("chat")}
@@ -590,7 +911,16 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
           }`}
         >
           <FileCode size={13} />
-          <span>Reconciled Files ({reconciledFiles.length})</span>
+          <span>Ledger ({reconciledFiles.length})</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("vfs")}
+          className={`flex items-center space-x-1.5 px-3 py-2 text-xs font-mono font-semibold transition-all border-b-2 hover:text-[var(--text-light)] cursor-pointer ${
+            activeTab === "vfs" ? "border-[var(--color-status-danger-border)] text-[var(--color-status-danger)]" : "border-transparent text-[var(--text-muted)]"
+          }`}
+        >
+          <Folder size={13} />
+          <span>VFS</span>
         </button>
       </div>
 
@@ -598,25 +928,44 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
       <div className="flex-1 overflow-hidden relative flex flex-col bg-[var(--bg-app)]">
         {activeTab === "overview" && (
           <div className="flex-1 flex flex-col overflow-hidden p-4">
-
-
             {/* Overlapping modifications list */}
             <div className="flex-1 flex flex-col overflow-hidden">
+              <div className="grid grid-cols-3 gap-2 mb-3 text-center font-mono">
+                <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-sidebar)] px-2 py-2">
+                  <div className="text-sm font-bold text-[var(--color-status-danger)]">{duplicateFilesEntries.length}</div>
+                  <div className="text-[8px] uppercase text-[var(--text-muted)]">Collisions</div>
+                </div>
+                <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-sidebar)] px-2 py-2">
+                  <div className="text-sm font-bold text-[var(--color-status-warning)]">{pendingCount}</div>
+                  <div className="text-[8px] uppercase text-[var(--text-muted)]">Pending</div>
+                </div>
+                <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-sidebar)] px-2 py-2">
+                  <div className="text-sm font-bold text-[var(--color-status-success)]">{ordinaryChangedFiles.length}</div>
+                  <div className="text-[8px] uppercase text-[var(--text-muted)]">Ordinary Changes</div>
+                </div>
+              </div>
               <div className="font-mono text-[10px] text-[var(--text-muted)] uppercase mb-2 font-bold flex items-center space-x-1">
                 <AlertTriangle size={12} className="text-[var(--color-status-warning)]" />
-                <span>Overlapping File Modifications ({duplicateFilesEntries.length})</span>
+                <span>Reconciliation Ledger ({duplicateFilesEntries.length})</span>
               </div>
               <div className="flex-1 overflow-y-auto space-y-3 select-none pr-1">
                 {duplicateFilesEntries.length === 0 ? (
                   <div className="text-[var(--text-muted)] h-full flex flex-col items-center justify-center text-center px-4">
                     <GitMerge size={24} className="text-[var(--color-status-danger)] mb-2" />
-                    <span>No duplicate file modifications detected. Ensure multiple tasks write to the same files in VFS.</span>
+                    <span>No overlapping modifications detected. Ordinary TaskNode-owned changes can be applied without model reconciliation.</span>
                   </div>
                 ) : (
                   duplicateFilesEntries.map(([filePath, taskIds]) => {
                     const parts = filePath.split("/");
                     const name = parts[parts.length - 1];
                     const dir = parts.slice(0, -1).join("/");
+                    const entry = reconciliationLedger[filePath];
+                    const isCurrent = entry?.sourceSignature === taskFileRecords[filePath]?.sourceSignature;
+                    const status = entry?.status === "reconciled" && isCurrent
+                      ? "reconciled"
+                      : entry?.status === "error" && isCurrent
+                      ? "error"
+                      : "pending";
                     return (
                       <div
                         key={filePath}
@@ -629,9 +978,42 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
                             </span>
                             {dir && <span className="text-[9px] text-[var(--text-muted)] truncate max-w-[280px]">{dir}</span>}
                           </div>
-                          <span className="bg-[var(--color-status-danger-bg)] text-[var(--color-status-danger)] border border-[var(--color-status-danger-border)] text-[9px] font-mono font-bold px-2 py-0.5 rounded-full uppercase">
-                            Collision
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span className={`border text-[9px] font-mono font-bold px-2 py-0.5 rounded-full uppercase flex items-center gap-1 ${
+                              status === "reconciled"
+                                ? "bg-[var(--color-status-success-bg)] text-[var(--color-status-success)] border-[var(--color-status-success-border)]"
+                                : status === "error"
+                                ? "bg-[var(--color-status-danger-bg)] text-[var(--color-status-danger)] border-[var(--color-status-danger-border)]"
+                                : "bg-[var(--color-status-warning-bg)] text-[var(--color-status-warning)] border-[var(--color-status-warning-border)]"
+                            }`}>
+                              {status === "reconciled" ? <CheckCircle2 size={9} /> : status === "pending" ? <CircleDashed size={9} /> : <AlertTriangle size={9} />}
+                              <span>{status}</span>
+                            </span>
+                            {status === "reconciled" && entry?.method === "manual" && (
+                              <span className="rounded-full border border-[var(--color-status-warning-border)] bg-[var(--color-status-warning-bg)] px-2 py-0.5 text-[8px] font-mono font-bold uppercase text-[var(--color-status-warning)]">
+                                Manual
+                              </span>
+                            )}
+                            <button
+                              onClick={() => openManualReconciliation(filePath)}
+                              disabled={isReconciling || isResetting}
+                              className="flex items-center gap-1 rounded border border-[var(--border-color)] px-1.5 py-1 text-[8px] font-mono font-bold text-[var(--text-muted)] hover:border-[var(--color-status-warning-border)] hover:text-[var(--color-status-warning)] disabled:opacity-40"
+                              title="Open this file in the manual reconciliation editor"
+                            >
+                              <PencilLine size={10} />
+                              <span>Manual</span>
+                            </button>
+                            {status === "reconciled" && (
+                              <button
+                                onClick={() => void handleRemoveReconciledFile(filePath)}
+                                disabled={isReconciling || isResetting}
+                                className="p-1 text-[var(--text-muted)] hover:text-[var(--color-status-danger)] disabled:opacity-40"
+                                title="Remove this result from the reconciliation ledger"
+                              >
+                                <Trash2 size={11} />
+                              </button>
+                            )}
+                          </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5">
                           <span className="text-[9px] text-[var(--text-muted)] font-mono">Modified by:</span>
@@ -647,23 +1029,120 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
                             );
                           })}
                         </div>
+                        {status === "reconciled" && entry?.method === "manual" && entry.response && (
+                          <div className="text-[9px] font-mono text-[var(--color-status-warning)]">
+                            {entry.response}
+                          </div>
+                        )}
+                        {status === "error" && entry?.error && (
+                          <div className="border-t border-[var(--color-status-danger-border)] pt-2 flex items-start justify-between gap-2">
+                            <div className="text-[9px] text-[var(--color-status-danger)] font-mono break-words min-w-0">
+                              {entry.error}
+                            </div>
+                            <button
+                              onClick={() => void startReconciliation(undefined, filePath)}
+                              disabled={isReconciling || isResetting}
+                              className="flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded border border-[var(--color-status-danger-border)] text-[9px] font-mono font-bold text-[var(--color-status-danger)] disabled:opacity-40"
+                              title="Retry only this failed file"
+                            >
+                              <RotateCcw size={9} />
+                              <span>Retry</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
                     );
                   })
                 )}
               </div>
+              {ordinaryChangedFiles.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-[var(--border-color)] flex-shrink-0">
+                  <div className="font-mono text-[10px] text-[var(--text-muted)] uppercase mb-2 font-bold flex items-center gap-1">
+                    <FileCode size={11} className="text-[var(--color-status-success)]" />
+                    <span>Changed — no reconciliation needed ({ordinaryChangedFiles.length})</span>
+                  </div>
+                  <div className="max-h-24 overflow-y-auto space-y-1 pr-1">
+                    {ordinaryChangedFiles.map((filePath) => (
+                      <div key={filePath} className="px-2 py-1.5 rounded border border-[var(--border-color)] bg-[var(--bg-sidebar)] text-[9px] font-mono text-[var(--text-normal)] truncate" title={filePath}>
+                        {filePath}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
+          </div>
+        )}
+
+        {activeTab === "manual" && (
+          <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
+            <div className="flex flex-shrink-0 items-center gap-3 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/30 px-3 py-2 font-mono">
+              <span className="text-[9px] font-bold uppercase text-[var(--text-muted)]">Collision file</span>
+              <CustomSelect
+                value={manualFilePath}
+                onChange={setManualFilePath}
+                options={duplicateFilesEntries.map(([filePath]) => ({
+                  id: filePath,
+                  name: filePath.replace(/\\/g, "/").split("/").pop() || filePath,
+                }))}
+                placeholder="Select an overlapping file"
+                className="w-72 text-xs font-mono"
+                direction="down"
+              />
+              <span className="min-w-0 truncate text-[9px] text-[var(--text-muted)]" title={manualFilePath}>{manualFilePath}</span>
+            </div>
+            {manualFilePath && duplicateFiles[manualFilePath] ? (
+              <ManualReconciliationEditor
+                key={manualFilePath}
+                tabId={tabId}
+                filePath={manualFilePath}
+                sourcePath={taskFileRecords[manualFilePath]?.sourcePath || manualFilePath}
+                variants={manualVariants}
+                onSave={(content) => handleManualReconciliationSave(manualFilePath, content)}
+                onAskModel={async (prompt) => {
+                  setChatFilePath(manualFilePath);
+                  await startReconciliation(prompt, manualFilePath);
+                }}
+                modelBusy={isReconciling || isResetting}
+                refreshKey={reconciliationRevision}
+              />
+            ) : (
+              <div className="flex flex-1 flex-col items-center justify-center gap-2 px-8 text-center text-xs font-mono text-[var(--text-muted)]">
+                <PencilLine size={28} className="text-[var(--color-status-warning)]" />
+                <span>No overlapping file is available for manual reconciliation.</span>
+              </div>
+            )}
           </div>
         )}
 
         {activeTab === "chat" && (
           <div className="flex-1 flex flex-col overflow-hidden relative">
+            <div className="flex flex-shrink-0 items-center gap-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]/30 px-3 py-2 font-mono">
+              <FileCode size={12} className="text-[var(--color-status-warning)]" />
+              <span className="flex-shrink-0 text-[9px] font-bold uppercase text-[var(--text-muted)]">Adjust file</span>
+              <CustomSelect
+                value={chatFilePath}
+                onChange={setChatFilePath}
+                options={duplicateFilesEntries.map(([filePath]) => ({
+                  id: filePath,
+                  name: filePath.replace(/\\/g, "/").split("/").pop() || filePath,
+                }))}
+                placeholder="Select a collision file"
+                className="w-64 text-xs"
+                direction="down"
+              />
+              {chatFilePath && reconciliationLedger[chatFilePath]?.status === "reconciled" && (
+                <span className="rounded-full border border-[var(--color-status-success-border)] bg-[var(--color-status-success-bg)] px-2 py-0.5 text-[8px] font-bold uppercase text-[var(--color-status-success)]">
+                  Reconciled · editable
+                </span>
+              )}
+            </div>
             {/* Chat Messages */}
             <div className="flex-1 p-4 space-y-3 overflow-y-auto text-xs">
               {chatMessages.length === 0 ? (
                 <div className="text-[var(--text-muted)] h-full flex flex-col items-center justify-center text-center px-4">
-                  <MessageSquare size={24} className="text-[var(--color-status-danger)] mb-2" />
-                  <span>Interactive chat with the reconciler. Run Reconciliate first to generate proposals.</span>
+                    <MessageSquare size={24} className="text-[var(--color-status-danger)] mb-2" />
+                    <span>Select a collision file and ask the model for a focused adjustment. Completed ledger files can be revised at any time.</span>
                 </div>
               ) : (
                 chatMessages.map((msg, idx) => (
@@ -694,11 +1173,10 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
                   </div>
                 ))
               )}
-              {(isReconciling || reconciliationLogs.length > 0 || subagents.length > 0) && (
+              {(isReconciling || reconciliationLogs.length > 0) && (
                 <AgentActivityCard
                   content={reconciliationLogs.join("\n")}
                   isStreaming={isReconciling}
-                  subagents={subagents}
                 />
               )}
               {isReconciling && (
@@ -721,15 +1199,15 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
               >
                 <input
                   type="text"
-                  placeholder="Ask changes or tweaks to current reconciliations..."
+                  placeholder={chatFilePath ? "Ask the model to change this reconciled file..." : "Select a collision file first..."}
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
-                  disabled={isReconciling || duplicateFilesEntries.length === 0}
+                  disabled={isReconciling || !chatFilePath}
                   className="flex-1 bg-transparent border-none outline-none text-xs px-2 py-1 focus:ring-0 text-[var(--text-normal)]"
                 />
                 <button
                   type="submit"
-                  disabled={isReconciling || !chatInput.trim() || duplicateFilesEntries.length === 0}
+                  disabled={isReconciling || !chatInput.trim() || !chatFilePath}
                   className="bg-[var(--color-status-danger-solid)] hover:bg-[var(--color-status-danger-solid)] disabled:bg-[var(--bg-sidebar)] disabled:text-[var(--text-muted)] text-[var(--color-status-danger-solid-foreground)] text-xs font-mono font-bold px-3 py-1.5 rounded-md flex items-center space-x-1.5 transition-all cursor-pointer"
                 >
                   {isReconciling ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
@@ -746,26 +1224,32 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
 
         {activeTab === "files" && (
           <PRDiffView
-            tabId={reconciliationVfsId}
+            tabId={tabId}
             modifiedFiles={reconciledFiles}
-            ownerNodeId={reconciliationOverlayService.getReconciliationNodeId(tabId)}
+            ownerNodeId={reconciliationNodeId}
             persistenceTabId={tabId}
+            originalFileContents={reconciliationSnapshot?.originalFileContents}
             refreshKey={reconciliationRevision}
-            onFileSaved={(filePath) => reconciliationOverlayService.markChanged(tabId, filePath)}
+            onFileSaved={handleReconciledFileSaved}
+            onOpenManual={openManualReconciliation}
           />
+        )}
+
+        {activeTab === "vfs" && (
+          <VfsExplorer tabId={tabId} />
         )}
       </div>
 
       {/* Footer Actions */}
       <div className="p-3 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/20 flex items-center justify-between gap-3 flex-shrink-0">
         <button
-          onClick={() => void handleRollbackReconciliation()}
-          disabled={!rollbackAvailable || isReconciling || isRollingBack}
-          title={rollbackAvailable ? "Discard the isolated reconciled version" : "No reconciliation changes to roll back"}
+          onClick={() => void handleResetReconciliation()}
+          disabled={Object.keys(reconciliationLedger).length === 0 || isReconciling || isResetting}
+          title={Object.keys(reconciliationLedger).length > 0 ? "Clear the reconciliation ledger and restore completed collision files" : "No reconciliation to reset"}
           className="border border-[var(--color-status-warning-border)] bg-[var(--color-status-warning-bg)] hover:bg-[var(--color-status-warning-bg)] disabled:opacity-40 disabled:cursor-not-allowed text-[var(--color-status-warning)] text-xs font-mono font-bold px-3 py-2 rounded-lg flex items-center space-x-1.5 transition-all cursor-pointer"
         >
-          {isRollingBack ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
-          <span>{isRollingBack ? "Rolling Back" : "Rollback"}</span>
+          {isResetting ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
+          <span>{isResetting ? "Resetting" : "Reset"}</span>
         </button>
         {isReconciling ? (
           <button
@@ -778,11 +1262,11 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
         ) : (
           <button
             onClick={() => void startReconciliation()}
-            disabled={duplicateFilesEntries.length === 0 || isRollingBack}
+            disabled={taskModifiedFiles.length === 0 || isResetting}
             className="bg-[var(--color-status-danger-solid)] hover:bg-[var(--color-status-danger-solid)] disabled:opacity-50 disabled:cursor-not-allowed text-[var(--color-status-danger-solid-foreground)] text-xs font-mono font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-all shadow-md cursor-pointer"
           >
             <Play size={13} />
-            <span>Run Reconciliate</span>
+            <span>{pendingCount > 0 ? `Reconcile ${pendingCount} Pending` : "Check Reconciliation"}</span>
           </button>
         )}
       </div>

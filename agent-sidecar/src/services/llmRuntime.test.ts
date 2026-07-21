@@ -73,3 +73,53 @@ test("provider-neutral tool loop executes calls and continues to final text", as
     registration.unregister();
   }
 });
+
+test("provider-neutral tool loop can finish after a terminal write without resending its large arguments", async () => {
+  const pi = await importEsm<any>("@earendil-works/pi-ai/compat");
+  const registration = pi.registerFauxProvider({ api: "axiom-faux-terminal-test", provider: "faux-terminal-provider" });
+  registration.setResponses([
+    pi.fauxAssistantMessage([
+      pi.fauxToolCall("write_file", { path: "/workspace/large.ts", content: "complete file content" }),
+    ], { stopReason: "toolUse" }),
+  ]);
+  let written = false;
+
+  try {
+    const response = await callLlmWithToolsPiStreaming({
+      modelReference: "faux-terminal-provider/faux-model",
+      customProvider: {
+        id: "faux-terminal-provider",
+        name: "Faux Terminal Provider",
+        baseUrl: "https://faux.invalid",
+        apiType: registration.api,
+        authType: "none",
+        models: [{
+          id: "faux-terminal-provider/faux-model",
+          remoteId: "faux-model",
+          name: "Faux Model",
+          apiType: registration.api,
+        }],
+      },
+      systemPrompt: "Write the file.",
+      userMessage: "Write it now.",
+      tools: [{
+        name: "write_file",
+        description: "Write a complete file.",
+        inputSchema: { type: "object", properties: {}, required: [] },
+        execute: async () => {
+          written = true;
+          return "written";
+        },
+      }],
+      returnAfterToolNames: ["write_file"],
+      sendLog: () => {},
+      sendToken: () => {},
+    });
+
+    assert.equal(written, true);
+    assert.equal(registration.state.callCount, 1);
+    assert.match(response, /Completed write_file/);
+  } finally {
+    registration.unregister();
+  }
+});

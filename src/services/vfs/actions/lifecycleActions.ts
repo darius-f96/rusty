@@ -1,21 +1,23 @@
 /**
  * Lifecycle Actions — thin stateless wrappers around Tauri VFS lifecycle commands.
  *
- * These handle flushing VFS contents to the physical disk and managing
+ * These handle applying VFS contents to the physical disk and managing
  * the global "currently executing node" state.
  */
 
 import { invoke } from "@tauri-apps/api/core";
 
 /**
- * Flush all in-memory VFS files for a tab to the physical disk.
- * Each cached file is written to its path on disk, creating parent
- * directories as needed. After flushing, the VFS cache for that tab is cleared.
+ * Apply selected reconciliation-owned VFS files to the physical disk.
+ * Each selected file is written to its path on disk, creating parent
+ * directories as needed. VFS contents and ownership remain intact so the user
+ * can inspect, edit, Git-rollback the disk, and apply again.
  *
- * @param tabId - The canvas tab whose VFS should be flushed
+ * @param tabId - The canvas tab whose VFS should be applied
+ * @param paths - Exact reconciliation-owned paths to apply
  */
-export async function flushToDisk(tabId: string): Promise<void> {
-  await invoke("apply_vfs_to_disk", { tabId });
+export async function applyToDisk(tabId: string, paths: string[]): Promise<void> {
+  await invoke("apply_vfs_to_disk", { tabId, paths });
 }
 
 /**

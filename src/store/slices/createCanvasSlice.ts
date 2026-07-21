@@ -199,6 +199,7 @@ export const createCanvasSlice: WorkspaceSliceCreator = (set, get) => ({
           nodeStatus: data.nodeStatus || {},
           globalChatHistory: data.globalChatHistory || {},
           edgeReconciliationStatus: data.edgeReconciliationStatus || {},
+          reconciliationSnapshot: data.reconciliationSnapshot,
           isPipelineApplied: data.isPipelineApplied || false,
           ...(!tabExists ? { hasBeenSaved: true } : {}),
         },

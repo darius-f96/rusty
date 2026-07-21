@@ -253,6 +253,8 @@ export async function callLlmWithToolsPiStreaming(options: {
   sendToken: (token: string) => void;
   history?: Array<{ role: string; content: string }>;
   maxRounds?: number;
+  /** Generic Pi providers may finish immediately after one of these tools succeeds. */
+  returnAfterToolNames?: string[];
   reasoning?: ReasoningEffort;
   cwd?: string;
   shouldAbort?: () => boolean;
@@ -358,6 +360,14 @@ export async function callLlmWithToolsPiStreaming(options: {
         return { toolCall, text: `Error: ${error?.message || String(error)}`, isError: true };
       }
     }));
+    const terminalToolNames = new Set(options.returnAfterToolNames || []);
+    const successfulTerminalTools = toolResults.filter(
+      (item) => !item.isError && terminalToolNames.has(item.toolCall.name),
+    );
+    if (successfulTerminalTools.length > 0) {
+      const responseText = textFromPiMessage(result).trim();
+      return responseText || `Completed ${successfulTerminalTools.map((item) => item.toolCall.name).join(", ")}.`;
+    }
     for (const item of toolResults) {
       messages.push({
         role: "toolResult",

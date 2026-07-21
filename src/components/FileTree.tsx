@@ -430,7 +430,11 @@ const FileTreeNode: React.FC<{
       try {
         const { canvasFileService } = await import("./tabs/canvas/services/canvasFileService");
         const parsedData = await canvasFileService.loadCanvasFromFile(node.path);
-        const tabId = useWorkspaceStore.getState().loadCanvasTab(parsedData);
+        // Hydrate the saved VFS before mounting the canvas. Mounting first can
+        // make reconciliation briefly observe an empty owner tracker and mark
+        // every persisted ledger entry as pending again.
+        const tabId = parsedData.id || `canvas_${Date.now()}`;
+        parsedData.id = tabId;
 
         // Restore VFS contents and tracker if available so the VFS tab shows
         // the correct node -> file mapping when the canvas is reopened.
@@ -443,6 +447,7 @@ const FileTreeNode: React.FC<{
             tabId
           );
         }
+        useWorkspaceStore.getState().loadCanvasTab(parsedData);
       } catch (err: any) {
         notify("Canvas error", `Failed to load canvas: ${err.message || err}`, "error");
       }

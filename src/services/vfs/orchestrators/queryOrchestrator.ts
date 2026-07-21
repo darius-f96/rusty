@@ -10,6 +10,8 @@
 
 import type { NodeFilesEntry, VfsFileQuery } from "../types";
 import { VfsRegistry } from "../VfsRegistry";
+import { RECONCILIATION_NODE_PREFIX } from "../../reconciliationService";
+import { normalizeReconciliationPath } from "../../reconciliationPaths";
 
 /**
  * Get all file paths tracked to a specific node.
@@ -78,19 +80,32 @@ export async function queryFiles(
  * @returns Record of duplicate file paths mapped to array of task node IDs that modified them
  */
 export async function queryDuplicateTrackedFiles(
-  tabId: string
+  tabId: string,
+  workspaceRoot?: string,
 ): Promise<Record<string, string[]>> {
   const vfs = VfsRegistry.getOrCreate(tabId);
   const nodeFiles = await vfs.getAllNodeFiles();
 
   const fileToNodesMap: Record<string, string[]> = {};
   for (const entry of nodeFiles) {
+    // The finalized reconciliation result is a synthetic VFS owner, not a new
+    // source-task collision.
+    if (entry.node_id.startsWith(RECONCILIATION_NODE_PREFIX)) continue;
     for (const filePath of entry.files) {
-      if (!fileToNodesMap[filePath]) {
-        fileToNodesMap[filePath] = [];
+      let workspacePath = filePath;
+      if (workspaceRoot) {
+        try {
+          workspacePath = normalizeReconciliationPath(workspaceRoot, filePath);
+        } catch {
+          // Keep invalid paths visible so reconciliation can report them rather
+          // than silently hiding a task-owned VFS entry.
+        }
       }
-      if (!fileToNodesMap[filePath].includes(entry.node_id)) {
-        fileToNodesMap[filePath].push(entry.node_id);
+      if (!fileToNodesMap[workspacePath]) {
+        fileToNodesMap[workspacePath] = [];
+      }
+      if (!fileToNodesMap[workspacePath].includes(entry.node_id)) {
+        fileToNodesMap[workspacePath].push(entry.node_id);
       }
     }
   }
@@ -104,4 +119,3 @@ export async function queryDuplicateTrackedFiles(
 
   return duplicates;
 }
-

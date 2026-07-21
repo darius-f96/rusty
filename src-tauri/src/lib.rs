@@ -148,22 +148,37 @@ async fn write_file_vfs(
 #[tauri::command]
 async fn apply_vfs_to_disk(
     state: tauri::State<'_, VfsState>,
+    paths: Vec<String>,
     tab_id: Option<String>,
 ) -> Result<(), String> {
     let tid = get_tab_id(tab_id);
-    println!("Rust [apply_vfs_to_disk] flushing in-memory VFS changes for tab: {} to local disk...", tid);
-    let mut vfs = state.0.lock().map_err(|e| e.to_string())?;
-    if let Some(mut tab_map) = vfs.remove(&tid) {
-        for (path_str, content) in tab_map.drain() {
-            println!("Rust [apply_vfs_to_disk] applying file: {}", path_str);
-            let path = PathBuf::from(&path_str);
-            if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-            }
-            std::fs::write(&path, content).map_err(|e| e.to_string())?;
-        }
+    if paths.is_empty() {
+        return Err("No reconciled VFS files were provided to Apply Axiom.".to_string());
     }
-    println!("Rust [apply_vfs_to_disk] flush complete!");
+    println!("Rust [apply_vfs_to_disk] applying {} reconciled VFS files for tab: {} without clearing them...", paths.len(), tid);
+    let files = {
+        let vfs = state.0.lock().map_err(|e| e.to_string())?;
+        let tab_map = vfs
+            .get(&tid)
+            .ok_or_else(|| "The canvas VFS has no pending contents.".to_string())?;
+        let mut files = Vec::with_capacity(paths.len());
+        for path in paths {
+            let content = tab_map
+                .get(&path)
+                .ok_or_else(|| format!("Reconciled VFS file is missing: {}", path))?;
+            files.push((path, content.clone()));
+        }
+        files
+    };
+    for (path_str, content) in files {
+        println!("Rust [apply_vfs_to_disk] applying file: {}", path_str);
+        let path = PathBuf::from(&path_str);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        std::fs::write(&path, content).map_err(|e| e.to_string())?;
+    }
+    println!("Rust [apply_vfs_to_disk] apply complete; VFS contents remain available.");
     Ok(())
 }
 
@@ -246,21 +261,31 @@ async fn delete_node_vfs_files(
     let tid = get_tab_id(tab_id);
     println!("Rust [delete_node_vfs_files] deleting all VFS files for node: {} under tab: {}", node_id, tid);
     let mut tracker = tracker_state.0.lock().map_err(|e| e.to_string())?;
-    if let Some(tab_tracker) = tracker.get_mut(&tid) {
+    let unreferenced_files = if let Some(tab_tracker) = tracker.get_mut(&tid) {
         if let Some(files) = tab_tracker.remove(&node_id) {
             println!("Rust [delete_node_vfs_files] found {} files to delete: {:?}", files.len(), files);
-            let mut vfs = vfs_state.0.lock().map_err(|e| e.to_string())?;
-            if let Some(tab_map) = vfs.get_mut(&tid) {
-                for file_path in files {
-                    tab_map.remove(&file_path);
-                    println!("Rust [delete_node_vfs_files] removed from VFS: {}", file_path);
-                }
-            }
+            files
+                .into_iter()
+                .filter(|file_path| !tab_tracker.values().any(|tracked| tracked.contains(file_path)))
+                .collect()
         } else {
             println!("Rust [delete_node_vfs_files] no files tracked for node: {} under tab: {}", node_id, tid);
+            Vec::new()
         }
     } else {
         println!("Rust [delete_node_vfs_files] no files tracked for tab: {}", tid);
+        Vec::new()
+    };
+    drop(tracker);
+
+    if !unreferenced_files.is_empty() {
+        let mut vfs = vfs_state.0.lock().map_err(|e| e.to_string())?;
+        if let Some(tab_map) = vfs.get_mut(&tid) {
+            for file_path in unreferenced_files {
+                tab_map.remove(&file_path);
+                println!("Rust [delete_node_vfs_files] removed final VFS reference: {}", file_path);
+            }
+        }
     }
     Ok(())
 }

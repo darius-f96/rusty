@@ -3,8 +3,8 @@
 `run_command` lets a Pi agent run a non-interactive process in the physical
 workspace. It is available to interactive Agent Tab and Global Chat executions
 when their selected skill enables it. Task Nodes never receive command tools;
-they only generate VFS code changes. Graph reconciliation also keeps the model
-VFS-only, then invokes a sidecar-controlled build verifier after reconciliation.
+they only generate VFS code changes. Graph reconciliation uses its own bounded,
+VFS-only model/tool loop and never invokes a build or physical command.
 
 ## Architecture
 
@@ -12,9 +12,6 @@ VFS-only, then invokes a sidecar-controlled build verifier after reconciliation.
 - `../services/commandPermissions.ts` owns authorization and memory-only grants.
 - `../services/commandExecution.ts` validates paths, spawns processes, captures
   output, applies timeouts, and stops all processes associated with a session.
-- `../services/reconciliationBuildVerification.ts` temporarily overlays
-  reconciled VFS files, invokes the approved detected build through the same
-  process runner, and restores physical files in a `finally` block.
 - The frontend `commandPermissionService.ts` queues requests from every Sidecar
   WebSocket. `CommandPermissionPresenter.tsx` connects that service to the
   app-level `CommandPermissionDialog.tsx` view.
@@ -68,6 +65,7 @@ change what process is executed.
 must never be described as VFS writes.
 
 Task Nodes structurally filter `run_command` from skill-provided tool lists.
-Graph reconciliation never gives `run_command` to the model: its deterministic
-Stage 2 verifier requests permission for a detected build command before any
-temporary physical file overlay is created.
+Graph reconciliation never gives `run_command` to the model; it can only read
+and reconcile overlapping paths in the current canvas VFS. Completed collision
+files are tracked in a persistent per-file ledger under a synthetic
+reconciliation owner. Non-overlapping changes remain TaskNode-owned.

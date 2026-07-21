@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useWorkspaceStore } from "../../../../store";
 import { persistenceOrchestrator } from "../../../../services/vfs";
+import { reconciliationService } from "../../../../services/reconciliationService";
 
 const AUTOSAVE_DEBOUNCE_MS = 1_500;
 const AUTOSAVE_MIN_INTERVAL_MS = 5_000;
@@ -81,6 +82,7 @@ const saveCanvasNow = async (
   };
 
   const nodeIds = new Set(context.nodes.map((node: any) => node.id));
+  nodeIds.add(reconciliationService.getNodeId(tabId));
   let vfsSnapshot = { contents: {}, tracker: {} };
   try {
     vfsSnapshot = await persistenceOrchestrator.captureVfsForSave(tabId, nodeIds);
@@ -97,6 +99,7 @@ const saveCanvasNow = async (
     nodeStatus: context.nodeStatus,
     globalChatHistory: context.globalChatHistory,
     edgeReconciliationStatus: context.edgeReconciliationStatus,
+    reconciliationSnapshot: context.reconciliationSnapshot,
     isPipelineApplied: context.isPipelineApplied || false,
     vfsContents: vfsSnapshot.contents,
     vfsTracker: vfsSnapshot.tracker
