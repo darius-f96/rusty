@@ -406,6 +406,14 @@ function handleCodexNotification(method: string, params: any): void {
   if (!run) return;
   if (method === "item/started" && params.item?.type === "agentMessage") {
     run.messagePhases.set(params.item.id, params.item.phase || null);
+    const phase = params.item.phase;
+    if (phase === "commentary") run.sendLog("Sub-agent reasoning...");
+    else if (phase === "final_answer") run.sendLog("Sub-agent formulating response...");
+    else run.sendLog("Sub-agent processing...");
+    return;
+  }
+  if (method === "item/started" && params.item?.type && params.item.type !== "agentMessage") {
+    run.sendLog(`Sub-agent action: ${params.item.type}`);
     return;
   }
   if (method === "item/agentMessage/delta" && typeof params.delta === "string") {
