@@ -49,7 +49,7 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, onStopExec
     return undefined;
   }, [taskNodeId]);
 
-  const [taskSubTab, setTaskSubTab] = useState<"diff" | "chat" | "console">("diff");
+  const [taskSubTab, setTaskSubTab] = useState<"diff" | "chat" | "console">("chat");
   const [chatMessage, setChatMessage] = useState("");
   const [originalCode, setOriginalCode] = useState("// Loading original content...");
   const [modifiedCode, setModifiedCode] = useState("// Loading modified content...");

@@ -229,10 +229,11 @@ export const Workspace: React.FC = () => {
     // These are previously-executed tasks whose generated code this task should build
     // upon. We read the actual file contents they produced from the VFS so the agent
     // sees the prior work directly instead of re-implementing from scratch.
+    const upstreamNodeStatus = tabCtx?.nodeStatus || {};
     const upstreamTaskNodes = connectedEdges
       .filter((edge) => edge.sourceHandle === "task-out" && edge.targetHandle === "task-in")
       .map((edge) => currentNodes.find((n) => n.id === edge.source))
-      .filter((n): n is Exclude<typeof n, undefined> => n !== undefined && n.type === "taskNode");
+      .filter((n): n is Exclude<typeof n, undefined> => n !== undefined && n.type === "taskNode" && upstreamNodeStatus[n.id] === "success");
 
     const upstreamTaskContext: {
       taskId: string;

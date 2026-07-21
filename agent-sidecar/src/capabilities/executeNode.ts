@@ -235,7 +235,7 @@ Workspace directory root: ${workspaceRoot || "unknown"}
 ${filesList}
 ${globalContext ? `\n--- GLOBAL ARCHITECTURAL GUIDELINES ---\n${globalContext}\n` : ""}
 ${contextDescriptions && contextDescriptions.length > 0 ? `\n--- CONNECTED CONTEXT DESCRIPTIONS ---\n${contextDescriptions.join("\n")}\n` : ""}
-${upstreamSection ? `\n--- UPSTREAM TASK OUTPUT (inherit and build upon this code) ---\nThe following tasks ran before this one and are directly connected to it. Their generated code is the starting point for your work. Read, respect, and extend it instead of re-implementing from scratch.\n${upstreamSection}\n` : ""}
+${upstreamSection ? `\n--- UPSTREAM TASK CHANGES (already applied — do not redo) ---\nThe following tasks have already run and modified these files. Treat their output as the current state of the codebase.\nYOUR ONLY JOB: Make the additional changes required by YOUR instructions. Do NOT rewrite, re-implement, or reapply anything the upstream task already did. Do NOT write a file unless your task specifically requires changing it.\n${upstreamSection}\n` : ""}
 ${mcpToolDescriptions.length > 0 ? `\n--- MCP TOOL INTEGRATIONS ---\nThe following tools connect to external MCP servers. Use them to fetch the information requested in the connected MCP context descriptions.\n${mcpToolDescriptions.join("\n")}\n` : ""}
 Remember:
 ${toolListText}
