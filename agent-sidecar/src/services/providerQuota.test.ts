@@ -17,6 +17,16 @@ test("Claude Code quota mapper uses local login and normalizes usage windows", (
       usage: {
         five_hour: { utilization: 21, resets_at: "2026-07-21T15:00:00Z" },
         seven_day: { utilization: 64.5, resets_at: "2026-07-27T00:00:00Z" },
+        seven_day_oauth_apps: { utilization: 10, resets_at: "2026-07-27T00:00:00Z" },
+        model_scoped: [
+          { display_name: "Opus", utilization: 40, resets_at: "2026-07-27T00:00:00Z" },
+        ],
+        extra_usage: {
+          is_enabled: true,
+          monthly_limit: 100,
+          used_credits: 25,
+          utilization: 25,
+        },
       },
     },
   );
@@ -27,6 +37,12 @@ test("Claude Code quota mapper uses local login and normalizes usage windows", (
   assert.equal(quota.windows[0].remainingPercent, 79);
   assert.equal(quota.windows[1].label, "Weekly limit");
   assert.equal(quota.windows[1].remainingPercent, 35.5);
+  assert.equal(quota.windows[2].label, "Weekly OAuth apps limit");
+  assert.equal(quota.windows[2].remainingPercent, 90);
+  assert.equal(quota.windows[3].label, "Weekly Opus limit");
+  assert.equal(quota.windows[3].remainingPercent, 60);
+  assert.equal(quota.windows[4].label, "Monthly extra usage");
+  assert.equal(quota.windows[4].remaining, 75);
 });
 
 test("Claude Code quota mapper reports sign-in only when Claude itself is logged out", () => {

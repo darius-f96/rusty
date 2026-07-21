@@ -254,6 +254,7 @@ export function mapCodexQuota(
 const CLAUDE_WINDOW_DETAILS: Record<string, { label: string; minutes: number }> = {
   five_hour: { label: "5-hour limit", minutes: 300 },
   seven_day: { label: "Weekly limit", minutes: 10_080 },
+  seven_day_oauth_apps: { label: "Weekly OAuth apps limit", minutes: 10_080 },
   seven_day_opus: { label: "Weekly Opus limit", minutes: 10_080 },
   seven_day_sonnet: { label: "Weekly Sonnet limit", minutes: 10_080 },
 };
@@ -287,6 +288,38 @@ export function mapClaudeCodeQuota(
       windowMinutes: details.minutes,
     }];
   });
+  if (Array.isArray(usage.model_scoped)) {
+    usage.model_scoped.forEach((value: any, index: number) => {
+      if (!value || typeof value !== "object") return;
+      const usedPercent = percentage(value.utilization ?? value.used_percent ?? value.usedPercent);
+      windows.push({
+        id: `model_scoped_${index}`,
+        label: typeof value.display_name === "string" && value.display_name.trim()
+          ? `Weekly ${value.display_name.trim()} limit`
+          : "Weekly model limit",
+        usedPercent,
+        remainingPercent: usedPercent === undefined ? undefined : 100 - usedPercent,
+        resetAt: isoDate(value.resets_at ?? value.resetsAt),
+        windowMinutes: 10_080,
+      });
+    });
+  }
+  const extraUsage = usage.extra_usage;
+  if (extraUsage?.is_enabled) {
+    const usedPercent = percentage(extraUsage.utilization);
+    const used = finiteNumber(extraUsage.used_credits);
+    const limit = finiteNumber(extraUsage.monthly_limit);
+    windows.push({
+      id: "extra_usage",
+      label: "Monthly extra usage",
+      usedPercent,
+      remainingPercent: usedPercent === undefined ? undefined : 100 - usedPercent,
+      used,
+      limit,
+      remaining: used === undefined || limit === undefined ? undefined : Math.max(0, limit - used),
+      unit: "credits",
+    });
+  }
   return {
     ...base,
     state: windows.length ? "available" : "unavailable",

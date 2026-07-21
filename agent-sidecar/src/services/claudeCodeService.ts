@@ -57,6 +57,44 @@ async function readClaudeCodeOauthToken(): Promise<string | undefined> {
   return undefined;
 }
 
+async function* keepClaudeSdkSessionOpen(signal: AbortSignal): AsyncGenerator<never> {
+  await new Promise<void>((resolve) => {
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+    signal.addEventListener("abort", () => resolve(), { once: true });
+  });
+}
+
+async function readClaudeCodeSdkUsage(): Promise<any> {
+  const sdk = await importEsm<any>("@anthropic-ai/claude-agent-sdk");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20_000);
+  const session = sdk.query({
+    // A streaming prompt initializes the CLI without submitting a model turn.
+    prompt: keepClaudeSdkSessionOpen(controller.signal),
+    options: {
+      abortController: controller,
+      tools: [],
+      persistSession: false,
+      permissionMode: "dontAsk",
+    },
+  });
+  try {
+    await session.initializationResult();
+    const readUsage = session.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET;
+    if (typeof readUsage !== "function") {
+      throw new Error("The installed Claude Agent SDK does not expose subscription usage.");
+    }
+    return await readUsage.call(session);
+  } finally {
+    clearTimeout(timeout);
+    controller.abort();
+    session.close();
+  }
+}
+
 function claudeExecutable(): string {
   const explicit = process.env.AXIOM_CLAUDE_CODE_PATH || process.env.CLAUDE_CODE_PATH;
   if (explicit && fs.existsSync(explicit)) return explicit;
@@ -139,11 +177,30 @@ export async function readClaudeCodeQuota(): Promise<{
 }> {
   const status = await getClaudeCodeConnectionStatus(true);
   if (!status.authenticated) return { status };
+  let sdkError: unknown;
+  try {
+    const result = await readClaudeCodeSdkUsage();
+    const resolvedStatus = typeof result?.subscription_type === "string" && result.subscription_type
+      ? { ...status, planType: result.subscription_type }
+      : status;
+    if (!result?.rate_limits_available || !result?.rate_limits) {
+      return {
+        status: resolvedStatus,
+        message: "Claude Code is connected, but subscription rate limits are unavailable for this authentication method.",
+      };
+    }
+    return { status: resolvedStatus, usage: result.rate_limits };
+  } catch (error) {
+    // Older Claude runtimes do not expose the SDK usage control request.
+    sdkError = error;
+  }
+
   const token = await readClaudeCodeOauthToken();
   if (!token) {
     return {
       status,
-      message: "Claude Code is connected, but its OAuth credentials could not be read to retrieve usage.",
+      message: (sdkError as any)?.message
+        || "Claude Code is connected, but its subscription usage could not be retrieved.",
     };
   }
   try {
