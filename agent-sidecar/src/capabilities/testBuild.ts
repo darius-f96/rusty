@@ -25,7 +25,9 @@ import type { NormalizedCommand } from "../services/commandPermissions";
 
 const MAX_ATTEMPTS = 5;
 const BUILD_TIMEOUT_MS = 5 * 60_000;
+const CMD_TIMEOUT_MS = 60_000;
 const MAX_BUILD_OUTPUT_CHARS = 12_000;
+const MAX_CMD_OUTPUT_CHARS = 8_000;
 
 export function getTestBuildStreamId(tabId: string): string {
   return `__test_build__:${tabId}`;
@@ -115,7 +117,9 @@ Rules:
 - Write COMPLETE file contents — never partial edits or diffs.
 - Do not add comments, documentation, or unrelated changes.
 - Fix exactly what the build output indicates is broken, nothing more.
-- If you are not sure about a fix, make the minimal safe change.`;
+- If you are not sure about a fix, make the minimal safe change.
+- You may run read-only diagnostic commands (e.g. tsc --noEmit, ls, cat) to gather more information before fixing.
+- Do NOT run destructive commands (rm, git reset, etc.) or install/uninstall packages.`;
 
       const userMessage = `The build failed with the following output:
 
@@ -137,6 +141,40 @@ Read the affected files and fix the errors so the build passes.`;
           const resolved = path.isAbsolute(filePath) ? filePath : path.join(workspaceRoot, filePath);
           sendLog(`Model reading: ${resolved}`);
           return await fsp.readFile(resolved, "utf-8");
+        },
+      };
+
+      const runCommandTool = {
+        name: "run_command",
+        description: "Run a shell command in the workspace for diagnostic purposes (e.g. tsc --noEmit, ls, cat). Do not use for destructive operations or package installation.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            command: { type: "string", description: "The shell command to run (passed to sh -c)" },
+          },
+          required: ["command"],
+        },
+        execute: async ({ command: cmd }: { command: string }) => {
+          sendLog(`Model running: ${cmd}`);
+          const cmdParts = ["sh", "-c", cmd];
+          const cmdSpec: NormalizedCommand = {
+            program: cmdParts[0],
+            args: cmdParts.slice(1),
+            cwd: workspaceRoot,
+            timeoutMs: CMD_TIMEOUT_MS,
+          };
+          let output = "";
+          const cmdResult = await executeCommand(streamId, cmdSpec, (_stream, content) => {
+            output += content;
+            if (output.length > MAX_CMD_OUTPUT_CHARS * 2) {
+              output = output.slice(-MAX_CMD_OUTPUT_CHARS);
+            }
+          });
+          const truncated = output.length > MAX_CMD_OUTPUT_CHARS
+            ? `...(truncated)...\n${output.slice(-MAX_CMD_OUTPUT_CHARS)}`
+            : output;
+          const exitInfo = cmdResult.timedOut ? " (timed out)" : ` (exit ${cmdResult.exitCode ?? "null"})`;
+          return truncated + exitInfo;
         },
       };
 
@@ -168,7 +206,7 @@ Read the affected files and fix the errors so the build passes.`;
         customProvider,
         systemPrompt,
         userMessage,
-        tools: [readFileTool, writeFileTool],
+        tools: [readFileTool, writeFileTool, runCommandTool],
         sendLog,
         sendToken: (token) => safeSend(ws, { type: "test_build_token", nodeId: streamId, content: token }),
         maxRounds: 30,

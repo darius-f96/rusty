@@ -759,7 +759,9 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
       return;
     }
 
+    let diskRestored = false;
     const restoreDisk = async (finalFiles?: Record<string, string>) => {
+      diskRestored = true;
       // Update VFS and snapshot with model-fixed content (if any)
       if (finalFiles && Object.keys(finalFiles).length > 0) {
         const snapshot = useWorkspaceStore.getState().canvasContexts[tabId]?.reconciliationSnapshot;
@@ -874,7 +876,16 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
     };
 
     socket.onclose = () => {
-      if (isTesting) setIsTesting(false);
+      if (!diskRestored) {
+        addConsoleLog("Test build stopped. Restoring disk...");
+        void restoreDisk().then(() => {
+          addConsoleLog("Disk restored.");
+          setIsTesting(false);
+          notify("Test Build Stopped", "Disk has been restored to its pre-test state.", "info");
+        });
+      } else {
+        setIsTesting(false);
+      }
     };
   };
 
