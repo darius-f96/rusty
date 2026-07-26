@@ -36,6 +36,11 @@
       "icons/icon.ico"
     ],
     "externalBin": ["bin/node"],
-    "resources": ["resources/sidecar"]
+    "resources": ["resources/sidecar"],
+    "macOS": {
+      "signingIdentity": "Developer ID Application: Suciu Victor Traian (XH3PAKPS6T)",
+      "hardenedRuntime": true,
+      "entitlements": "entitlements.plist"
+    }
   }
 }
