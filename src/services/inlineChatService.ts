@@ -1,5 +1,6 @@
 import { CustomProvider } from "../store";
 import { agentHarnessClient, RunEvent } from "./agentHarnessClient";
+import { SIDECAR_PORT } from "../config/sidecar";
 
 export interface InlineChatMessage {
   role: "user" | "assistant";
@@ -75,7 +76,7 @@ export const inlineChatService = {
       cancelRun = handle.cancel;
       if (settled) void handle.cancel();
     }).catch((error: unknown) => {
-      fail(error instanceof Error ? error.message : "Could not connect to the agent sidecar on port 4000.");
+      fail(error instanceof Error ? error.message : `Could not connect to the agent sidecar on port ${SIDECAR_PORT}.`);
     });
 
     return {

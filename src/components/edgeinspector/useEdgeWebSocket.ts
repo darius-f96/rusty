@@ -12,6 +12,7 @@ import { VfsRegistry } from "../../services/vfs";
 import { notify } from "../../notificationStore";
 import { providerHasModelReference } from "../../store/providerHelpers";
 import { createAgentHarnessSocket } from "../../services/agentHarnessClient";
+import { SIDECAR_PORT } from "../../config/sidecar";
 
 export const useEdgeWebSocket = (
   edgeId: string | null,
@@ -68,7 +69,7 @@ export const useEdgeWebSocket = (
       setIsResolving(false);
       notify(
         "Sidecar Connection Error",
-        `Failed to create WebSocket connection to sidecar: ${err.message || String(err)}. Ensure the agent sidecar is running on port 4000.`,
+        `Failed to create WebSocket connection to sidecar: ${err.message || String(err)}. Ensure the agent sidecar is running on port ${SIDECAR_PORT}.`,
         "error"
       );
       return;
@@ -196,7 +197,7 @@ export const useEdgeWebSocket = (
       setIsResolving(false);
       notify(
         "Sidecar Connection Failed",
-        "Connection to agent sidecar closed unexpectedly. Ensure agent sidecar is running on port 4000.",
+        `Connection to agent sidecar closed unexpectedly. Ensure agent sidecar is running on port ${SIDECAR_PORT}.`,
         "error"
       );
     };

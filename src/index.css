@@ -12,6 +12,15 @@
     margin: 0;
     overflow: hidden;
   }
+
+  /* Without this, unstyled text selection falls back to the OS's native
+     text-highlight-color (macOS lets users set this to red, among other
+     options) instead of the app's theme — independent of which in-app theme
+     is active, which is why it looked the same regardless of theme choice. */
+  ::selection {
+    background-color: var(--color-interaction-selected);
+    color: inherit;
+  }
 }
 
 /* Theme-driven highlight.js rules. Keeping these local avoids a dark-only

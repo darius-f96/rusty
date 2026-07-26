@@ -8,6 +8,8 @@
  * callbacks for install operations.
  */
 
+import { SIDECAR_WS_URL } from "../config/sidecar";
+
 export interface DetectResult {
   language: string;
   detected: boolean;
@@ -28,7 +30,7 @@ export interface InstallProgress {
   message: string;
 }
 
-const ADMIN_URL = "ws://localhost:4000/lsp-admin";
+const ADMIN_URL = `${SIDECAR_WS_URL}/lsp-admin`;
 
 /** Detect whether the server for a single language is already available. */
 export function detectLspServer(

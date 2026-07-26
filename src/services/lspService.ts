@@ -4,6 +4,7 @@ import {
   getLspKeyFromMonacoId,
   LSP_SETTINGS_KEYS,
 } from "./lspLanguage";
+import { SIDECAR_WS_URL } from "../config/sidecar";
 
 /**
  * LSP transport + JSON-RPC client.
@@ -148,7 +149,7 @@ class LspConnection {
       this.readyReject = reject;
 
       const argsStr = JSON.stringify(this.args);
-      const wsUrl = `ws://localhost:4000/lsp?language=${this.lspKey}&workspacePath=${encodeURIComponent(
+      const wsUrl = `${SIDECAR_WS_URL}/lsp?language=${this.lspKey}&workspacePath=${encodeURIComponent(
         this.workspacePath
       )}&serverPath=${encodeURIComponent(this.serverPath)}&args=${encodeURIComponent(argsStr)}`;
 
@@ -210,7 +211,7 @@ class LspConnection {
       socket.onerror = () => {
         console.error(`[LSP Client] Socket error for ${this.lspKey}`);
         if (!isOpened) {
-          const msg = `Cannot connect to sidecar at ws://localhost:4000 — is the agent sidecar running?`;
+          const msg = `Cannot connect to sidecar at ${SIDECAR_WS_URL} — is the agent sidecar running?`;
           this.setStatus({ state: "error", message: msg });
           this.readyReject?.(new Error(msg));
         }
