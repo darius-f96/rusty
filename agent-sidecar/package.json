@@ -11,7 +11,7 @@
     "test:architecture": "../src-tauri/bin/node-aarch64-apple-darwin --test -r ./node_modules/ts-node/register src/services/websocket.test.ts src/services/agentProtocol.test.ts src/services/eventPersistence.test.ts src/services/delegationManager.test.ts src/capabilities/reconciliateGraph.test.ts",
     "start": "../src-tauri/bin/node-aarch64-apple-darwin dist/server.js",
     "node:version": "../src-tauri/bin/node-aarch64-apple-darwin --version",
-    "postinstall": "rm -rf node_modules/@earendil-works/pi-coding-agent/node_modules/undici"
+    "postinstall": "rm -rf node_modules/@earendil-works/pi-coding-agent/node_modules/undici && patch-package"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.216",
@@ -36,6 +36,7 @@
     "@types/express": "^4.17.21",
     "@types/node": "^20.14.9",
     "@types/ws": "^8.5.10",
+    "patch-package": "^8.0.1",
     "ts-node": "^10.9.2",
     "tsup": "^8.1.0",
     "typescript": "^5.5.2"

@@ -310,10 +310,15 @@ async function runClaudeCode(options: {
   try {
     options.sendLog?.(`Calling Claude Code model ${options.modelId}.`);
     for await (const message of session) {
-      if (message.type === "stream_event" && message.event?.type === "content_block_delta" && message.event.delta?.type === "text_delta") {
-        options.sendToken?.(message.event.delta.text);
+      if (message.type === "stream_event") {
+        const event = message.event;
+        if (event?.type === "content_block_delta" && event.delta?.type === "text_delta") {
+          options.sendToken?.(event.delta.text);
+        } else if (event?.type === "content_block_start" && event.content_block?.type === "tool_use") {
+          options.sendLog?.(`Sub-agent calling: ${event.content_block.name}`);
+        }
       }
-      if (message.type === "result") {
+if (message.type === "result") {
         if (message.subtype !== "success") throw new Error(message.errors?.join("; ") || "Claude Code request failed.");
         text = message.result || text;
       }

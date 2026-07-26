@@ -350,13 +350,23 @@ export function createAgentHarnessSocket(): WebSocket {
       const parsed = JSON.parse(data) as StartRunInput;
       const correlatedRun = typeof parsed.requestId === "string" ? requestRuns.get(parsed.requestId) : undefined;
       const routingId = String(parsed.tabId || parsed.nodeId || parsed.sessionId || parsed.requestId || "");
-      const startTypes = new Set(["agent_chat", "inline_chat", "execute_node", "global_explore", "reconciliate_edge", "reconciliate_graph", "generate_task_nodes", "generate_skill"]);
+      const startTypes = new Set(["agent_chat", "inline_chat", "execute_node", "global_explore", "reconciliate_edge", "reconciliate_graph", "generate_task_nodes", "generate_skill", "test_build"]);
       const isStop = String(parsed.type).endsWith("_stop") || parsed.type === "command_session_close";
       const generatedRun = startTypes.has(parsed.type) ? crypto.randomUUID() : undefined;
       const runId = String(parsed.runId || correlatedRun || (isStop ? activeRuns.get(routingId) : undefined) || generatedRun || routingId || crypto.randomUUID());
       if (startTypes.has(parsed.type) && routingId) activeRuns.set(routingId, runId);
       runIds.add(runId);
       if (routingId) runIds.add(routingId);
+      // The reconciliation sidecar uses a prefixed stream ID for all its
+      // reverse-RPC callbacks (read_file, write_file, log). Register it so
+      // the subscription filter does not silently drop those messages.
+      if (parsed.type === "reconciliate_graph" && routingId) {
+        runIds.add(`__reconciliation__:${routingId}`);
+      }
+      // The test build sidecar uses a prefixed stream ID for all its messages.
+      if (parsed.type === "test_build" && routingId) {
+        runIds.add(`__test_build__:${routingId}`);
+      }
       void agentHarnessClient.send({ ...parsed, runId }).catch((error) => {
         onerror?.call(facade as unknown as WebSocket, new ErrorEvent("error", { error }));
       });

@@ -331,18 +331,27 @@ export async function reconciliateGraph(ws: WebSocket, data: any): Promise<void>
       return [readVfsTool, writeVfsTool];
     };
 
-    const systemPrompt = `You are a code reconciliation model inside a spatial development canvas.
-You receive exactly one file that was modified by multiple tasks. Reconcile only that file and fix genuine integration issues in the Virtual File System (VFS).
+    const systemPrompt = `You are a code reconciliation model inside a spatial development canvas called Axiom.
 
-Your instructions:
-1. Review the single supplied file. Compare its current VFS content with the available task-generated versions, instructions, and short recent chat excerpts.
-2. Preserve compatible behavior from all colliding tasks. Do not choose one task's version wholesale when the implementations need to be merged.
-3. If the current VFS version already satisfies all colliding task requirements and has no integration issue, do not write it.
-4. If a file needs changes, call 'write_file' with the exact supplied path and the complete reconciled file. Never write a snippet, placeholder, duplicate file, or unrelated file.
-5. You may call 'read_file' to re-read the current VFS version. Both tools are restricted to this one supplied path. Do not inspect any other file or the rest of the codebase.
-6. Do not run builds, tests, shell commands, or modify the physical workspace. All writes must use 'write_file' and remain in the VFS.
-7. Axiom tracks this collision file under a dedicated reconciliation owner. Ordinary changed files that do not collide remain TaskNode-owned and are applied separately.
-8. Finish with a concise report for this file only.
+WHAT HAPPENED:
+The user broke a larger plan into small, bounded task nodes. Each node executed independently with its own specific instructions and produced its own version of certain files. The file you are about to receive was touched by multiple task nodes — meaning each of them had a legitimate requirement for that file and produced their own implementation of it.
+
+YOUR JOB — SYNTHESIS, NOT ARBITRATION:
+You are not picking a winner. You are not fixing a merge conflict. You are producing a single version of the file that simultaneously satisfies the requirements of every task node that touched it. Think of it as: "what would this file look like if one developer had read all the task instructions and implemented all of them together?"
+
+HOW TO APPROACH IT:
+1. Read each task's instructions carefully. Understand what that task needed this file to do.
+2. Read each task's generated version. Understand how it chose to implement its requirement.
+3. The current VFS content is the last task's version — it may satisfy some requirements but not others.
+4. Produce a final version that implements everything all tasks required. Do not omit any task's contribution unless it directly contradicts another (in which case, apply the one that best fits the overall intent).
+5. If the current VFS version already satisfies all task requirements with no gaps, do not rewrite it — just confirm it.
+
+RULES:
+- You may only read and write the single file supplied to you. No other files.
+- Write the complete file — never a partial edit, snippet, or diff.
+- Write to the exact supplied path only.
+- Do not run builds, tests, or shell commands. All writes go to the VFS via 'write_file'.
+- Finish with a concise summary: what each task required, what changed, and why.
 
 Workspace root: ${workspaceRoot || "unknown"}
 `;
@@ -376,9 +385,12 @@ Workspace root: ${workspaceRoot || "unknown"}
           readVfsFile: requestVfsFile,
         });
         reviewedFiles.push(fileContext.path);
-        const promptText = `${userMessage?.trim() || "Review this overlapping VFS file and reconcile it only if integration changes are required."}
+        const taskCount = fileContext.tasks.length;
+        const taskNames = fileContext.tasks.map((t) => t.name).join(", ");
+        const defaultMessage = `This file was modified by ${taskCount} task node${taskCount === 1 ? "" : "s"} (${taskNames}). Each task had its own bounded instructions and produced its own version. Produce a single version of this file that satisfies all ${taskCount === 1 ? "its" : "their"} requirements simultaneously.`;
+        const promptText = `${userMessage?.trim() || defaultMessage}
 
-${recentReconciliationChat.length > 0 ? `Recent reconciliation conversation (bounded):\n${recentReconciliationChat.join("\n\n")}\n\n` : ""}Single-file reconciliation case:
+${recentReconciliationChat.length > 0 ? `Recent reconciliation conversation (bounded):\n${recentReconciliationChat.join("\n\n")}\n\n` : ""}File modified by multiple task nodes — full context below:
 ${JSON.stringify(compactFileContext(fileContext), null, 2)}`;
 
         try {

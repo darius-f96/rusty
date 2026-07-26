@@ -795,8 +795,25 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
     }
   });
 
+  // Some models (especially lower-tier ones) end a turn in a state the harness
+  // can't cleanly resume from — pi-agent-core's Agent.continue() throws
+  // "Cannot continue from message role: assistant" when nothing was queued to
+  // follow up with. A single fresh prompt() (not continue()) reliably unsticks
+  // it, so retry once instead of failing the whole node.
+  const promptWithContinuationRetry = async (text: string): Promise<void> => {
+    try {
+      await session.prompt(text);
+    } catch (error: any) {
+      if (!/Cannot continue from message role/i.test(error?.message || "")) {
+        throw error;
+      }
+      options.sendLog("Model left the conversation in an unrecoverable state; retrying once.");
+      await session.prompt("Please continue.");
+    }
+  };
+
   try {
-    await session.prompt(options.message);
+    await promptWithContinuationRetry(options.message);
     if (backgroundAgents.size > 0) {
       options.sendLog(`Waiting for ${backgroundAgents.size} delegated subagent${backgroundAgents.size === 1 ? "" : "s"} before aggregation.`);
       while (backgroundAgents.size > 0 && !disposed) {
@@ -817,7 +834,7 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
       }
       if (!disposed) {
         const agentIds = [...dispatchedBackgroundAgentIds].join(", ");
-        await session.prompt(
+        await promptWithContinuationRetry(
           `All delegated subagents have finished. Retrieve the results for these agent IDs using get_subagent_result, then synthesize them into one response: ${agentIds}. Do not ask the user any refining question until that synthesis is complete.`
         );
       }
@@ -826,7 +843,7 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
     if (deferredQuestion && !disposed && options.requestUserQuestion) {
       options.sendLog("Delegated work is complete; presenting the deferred question to the user.");
       const answer = await options.requestUserQuestion(deferredQuestion);
-      await session.prompt(
+      await promptWithContinuationRetry(
         `The user answered the deferred question "${deferredQuestion.question}" with: "${answer}". Incorporate this answer into the final recommendation, then respond concisely.`
       );
     }
