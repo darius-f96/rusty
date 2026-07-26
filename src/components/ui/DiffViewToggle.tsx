@@ -1,6 +1,7 @@
 import React from "react";
 import { Columns2, ArrowUpDown } from "lucide-react";
 import { DiffViewMode } from "../../hooks/useDiffViewMode";
+import styles from "./DiffViewToggle.module.css";
 
 interface DiffViewToggleProps {
   viewMode: DiffViewMode;
@@ -16,36 +17,27 @@ export const DiffViewToggle: React.FC<DiffViewToggleProps> = ({
   onEnableAuto,
 }) => {
   return (
-    <div className="flex items-center space-x-1 border border-[var(--border-color)] rounded-md p-0.5 bg-[var(--bg-app)]">
+    <div className={styles.root}>
       <button
+        type="button"
         onClick={onEnableAuto}
-        className={`px-1.5 py-0.5 text-[9px] font-mono rounded transition-colors ${
-          isAutoMode
-            ? "bg-[var(--accent-color)] text-[var(--color-primary-foreground)]"
-            : "text-[var(--text-muted)] hover:text-[var(--text-light)]"
-        }`}
+        className={`${styles.button} ${isAutoMode ? styles.active : ""}`}
         title="Auto: automatically switch based on screen width"
       >
         Auto
       </button>
       <button
+        type="button"
         onClick={onToggle}
-        className={`p-1 rounded transition-colors ${
-          !isAutoMode && viewMode === "side-by-side"
-            ? "bg-[var(--accent-color)] text-[var(--color-primary-foreground)]"
-            : "text-[var(--text-muted)] hover:text-[var(--text-light)]"
-        }`}
+        className={`${styles.button} ${!isAutoMode && viewMode === "side-by-side" ? styles.active : ""}`}
         title="Side by side"
       >
         <Columns2 size={12} />
       </button>
       <button
+        type="button"
         onClick={onToggle}
-        className={`p-1 rounded transition-colors ${
-          !isAutoMode && viewMode === "inline"
-            ? "bg-[var(--accent-color)] text-[var(--color-primary-foreground)]"
-            : "text-[var(--text-muted)] hover:text-[var(--text-light)]"
-        }`}
+        className={`${styles.button} ${!isAutoMode && viewMode === "inline" ? styles.active : ""}`}
         title="Inline (one above the other)"
       >
         <ArrowUpDown size={12} />

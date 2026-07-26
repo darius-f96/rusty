@@ -7,6 +7,7 @@ import type {
   SidebarIconItem,
   SidebarStoreState,
 } from "./sidebar/SidebarPresenter";
+import styles from "./Sidebar.module.css";
 
 interface SidebarViewProps {
   sidebarWidth: number;
@@ -46,12 +47,12 @@ export const SidebarView: React.FC<SidebarViewProps> = ({
   return (
     <div
       ref={containerRef}
-      className="flex h-full z-10 relative bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-[20px] shadow-lg flex-shrink-0 side-pane"
+      className={`${styles.root} side-pane`}
       style={{ width: `${isExplorerOpen ? sidebarWidth : 56}px` }}
     >
       {/* 1. Left Icon Dock (Activity Bar) */}
-      <div className={`w-14 bg-[var(--color-surface-sunken)] flex flex-col items-center py-4 justify-between h-full border-r border-[var(--border-color)] flex-shrink-0 rounded-l-[19px] relative z-20 ${!isExplorerOpen ? "rounded-r-[19px]" : ""}`}>
-        <div className="flex flex-col items-center space-y-4 w-full">
+      <div className={`${styles.dock} ${!isExplorerOpen ? styles.dockCollapsed : ""}`}>
+        <div className={styles.dockGroup}>
           {topIcons.map((item) => {
             const Icon = item.icon;
             const active = isItemActive(item.id);
@@ -59,20 +60,19 @@ export const SidebarView: React.FC<SidebarViewProps> = ({
             return (
               <button
                 key={item.id}
+                id={`sidebar-${item.id}`}
+                type="button"
                 onClick={() => item.onClick(store, helpers)}
-                className={`p-2.5 rounded-lg transition-all cursor-pointer relative group ${
-                  active
-                    ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
-                    : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
-                }`}
+                className={`${styles.dockButton} ${active ? styles.dockButtonActive : ""}`}
+                aria-label={item.label}
               >
                 <Icon size={20} />
                 {badge > 0 && (
-                  <span className="absolute top-1 right-1 bg-[var(--color-status-info-solid)] text-[var(--color-status-info-solid-foreground)] font-mono text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center border border-[var(--bg-sidebar)] shadow-md select-none">
+                  <span className={styles.badge}>
                     {badge}
                   </span>
                 )}
-                <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-[var(--color-surface-sunken)] text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-[var(--color-border-subtle)] whitespace-nowrap">
+                <span className={styles.tooltip}>
                   {item.label}
                 </span>
               </button>
@@ -81,22 +81,21 @@ export const SidebarView: React.FC<SidebarViewProps> = ({
         </div>
 
         {/* Bottom General Settings Icon */}
-        <div className="flex flex-col items-center gap-2">
+        <div className={`${styles.dockGroup} ${styles.dockBottom}`}>
           {[helpIcon, settingsIcon].filter((item): item is SidebarIconItem => !!item).map((item) => {
             const Icon = item.icon;
             const active = isItemActive(item.id);
             return (
               <button
                 key={item.id}
+                id={`sidebar-${item.id}`}
+                type="button"
                 onClick={() => item.onClick(store, helpers)}
-                className={`p-2.5 rounded-lg transition-all cursor-pointer relative group ${
-                  active
-                    ? "text-[var(--accent-color)] bg-[var(--accent-bg)]"
-                    : "text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/50"
-                }`}
+                className={`${styles.dockButton} ${active ? styles.dockButtonActive : ""}`}
+                aria-label={item.label}
               >
                 <Icon size={20} />
-                <span className="absolute left-16 top-1/2 -translate-y-1/2 bg-[var(--color-surface-sunken)] text-[var(--text-light)] text-[10px] font-mono px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-[var(--color-border-subtle)] whitespace-nowrap">
+                <span className={styles.tooltip}>
                   {item.label}
                 </span>
               </button>
@@ -107,31 +106,37 @@ export const SidebarView: React.FC<SidebarViewProps> = ({
 
       {/* 2. Sidebar View Panel Container */}
       {isExplorerOpen && (
-        <div className="flex-1 flex flex-col h-full min-w-0 rounded-r-[19px] overflow-hidden">
+        <div className={styles.panel}>
           {sidebarView === "explorer" ? (
             <>
               {/* Dynamic Explorer Sidebar Tree */}
-              <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 min-w-0">
-                <div className="sticky top-0 z-10 flex items-center justify-between mb-3 text-[var(--color-fg-default)] border-b border-[var(--border-color)]/30 pb-2 bg-[var(--bg-sidebar)]">
-                  <span className="text-[10px] uppercase tracking-wider font-mono font-bold">Project Explorer</span>
-                  <div className="flex items-center space-x-2">
+              <div className={styles.explorer}>
+                <div className={styles.explorerHeader}>
+                  <span className={styles.title}>Project Explorer</span>
+                  <div className={styles.tools}>
                     <button
+                      id="explorer-refresh"
+                      type="button"
                       onClick={handleRefreshExplorer}
-                      className="p-1 rounded hover:bg-[var(--accent-bg)]/25 text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer"
+                      className={styles.toolButton}
                       title="Refresh Explorer"
                     >
                       <RefreshCw size={12} />
                     </button>
                     <button
+                      id="explorer-collapse-all"
+                      type="button"
                       onClick={handleCollapseAllFolders}
-                      className="p-1 rounded hover:bg-[var(--accent-bg)]/25 text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer"
+                      className={styles.toolButton}
                       title="Collapse All Folders"
                     >
                       <FoldHorizontal size={12} />
                     </button>
                     <button
+                      id="explorer-collapse-sidebar"
+                      type="button"
                       onClick={handleCollapseSidebar}
-                      className="p-1 rounded hover:bg-[var(--accent-bg)]/25 text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer"
+                      className={styles.toolButton}
                       title="Collapse Sidebar"
                     >
                       <ChevronLeft size={12} />
@@ -139,7 +144,7 @@ export const SidebarView: React.FC<SidebarViewProps> = ({
                   </div>
                 </div>
                 {fileTree.length === 0 ? (
-                  <div className="text-center py-8 text-[10px] text-[var(--text-muted)] font-mono leading-relaxed">
+                  <div className={styles.empty}>
                     No workspace loaded.
                   </div>
                 ) : (
@@ -157,7 +162,7 @@ export const SidebarView: React.FC<SidebarViewProps> = ({
       {isExplorerOpen && (
         <div
           onMouseDown={onSidebarMouseDown}
-          className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-[var(--accent-color)]/50 active:bg-[var(--accent-color)] hover:w-1.5 transition-all z-20"
+          className={styles.resizer}
         />
       )}
     </div>

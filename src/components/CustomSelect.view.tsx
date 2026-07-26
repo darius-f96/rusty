@@ -1,6 +1,7 @@
 import React, { RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Option, OptionGroup } from "./CustomSelect";
+import styles from "./CustomSelect.module.css";
 
 interface CustomSelectViewProps {
   value: string;
@@ -54,11 +55,7 @@ export const CustomSelectView: React.FC<CustomSelectViewProps> = ({
           onChange(opt.id);
           setIsOpen(false);
         }}
-        className={`px-2.5 py-1.5 rounded-md cursor-pointer transition-colors text-[11px] text-left truncate ${
-          isSelected
-            ? "bg-[var(--accent-bg)]/35 text-[var(--text-light)] font-semibold"
-            : "text-[var(--text-normal)] hover:bg-[var(--bg-app)] hover:text-[var(--text-light)]"
-        }`}
+        className={`${styles.option} ${isSelected ? styles.selected : ""}`}
         title={opt.name}
       >
         {opt.name}
@@ -67,17 +64,17 @@ export const CustomSelectView: React.FC<CustomSelectViewProps> = ({
   };
 
   return (
-    <div ref={containerRef} className={`relative select-none font-sans text-xs ${className}`}>
+    <div ref={containerRef} className={`${styles.root} ${className}`}>
       {/* Dropdown Button */}
       <button
         ref={buttonRef}
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={buttonClassName || "w-full flex items-center justify-between bg-[var(--bg-app)] text-[var(--text-normal)] border border-[var(--border-color)] focus:border-[var(--border-active)] rounded-lg px-2.5 py-1.5 outline-none cursor-pointer text-left transition-all hover:border-[var(--border-active)]/50"}
+        className={buttonClassName || styles.button}
       >
-        <span className="truncate">{selectedOption ? selectedOption.name : placeholder}</span>
+        <span className={styles.label}>{selectedOption ? selectedOption.name : placeholder}</span>
         <svg
-          className={`w-3.5 h-3.5 ml-2 text-[var(--text-muted)] transition-transform duration-200 flex-shrink-0 ${isOpen ? "rotate-180" : ""}`}
+          className={`${styles.chevron} ${isOpen ? styles.chevronOpen : ""}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -98,28 +95,28 @@ export const CustomSelectView: React.FC<CustomSelectViewProps> = ({
             left: pos.left,
             minWidth: pos.minWidth,
           }}
-          className={`bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-lg shadow-2xl z-[9999] animate-fadeIn p-1 flex flex-col max-h-56 ${dropdownClassName}`}
+          className={`${styles.dropdown} ${dropdownClassName}`}
         >
           {showSearch && (
-            <div className="p-1 border-b border-[var(--border-color)]/30 mb-1">
+            <div className={styles.searchWrap}>
               <input
                 type="text"
                 placeholder="Search..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-[var(--bg-app)] border border-[var(--border-color)] text-[var(--text-normal)] rounded px-2 py-1 text-[11px] focus:border-[var(--accent-color)] focus:outline-none placeholder:text-[var(--text-muted)]/70 font-mono"
+                className={styles.search}
               />
             </div>
           )}
-          <div className="overflow-y-auto max-h-40 custom-scrollbar flex-1">
+          <div className={styles.options}>
             {hasResults ? (
               filteredGroups ? (
                 filteredGroups.map((g) => (
-                  <div key={g.label} className="mb-1 last:mb-0">
-                    <div className="px-2.5 pt-1 pb-0.5 text-[9px] font-mono font-bold uppercase tracking-wider text-[var(--text-muted)] select-none">
+                  <div key={g.label} className={styles.group}>
+                    <div className={styles.groupLabel}>
                       {g.label}
                     </div>
-                    <div className="space-y-0.5">
+                    <div className={styles.groupOptions}>
                       {g.options.map(renderOption)}
                     </div>
                   </div>
@@ -128,7 +125,7 @@ export const CustomSelectView: React.FC<CustomSelectViewProps> = ({
                 filteredOptions.map(renderOption)
               )
             ) : (
-              <div className="px-2.5 py-1.5 text-[var(--text-muted)] text-center italic text-[11px]">
+              <div className={styles.empty}>
                 No options found
               </div>
             )}

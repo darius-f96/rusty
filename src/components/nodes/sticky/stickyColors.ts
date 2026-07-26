@@ -1,10 +1,10 @@
 export const STICKY_COLORS = [
-  { bg: "bg-amber-200", headerBg: "bg-amber-300", name: "yellow" },
-  { bg: "bg-rose-200", headerBg: "bg-rose-300", name: "pink" },
-  { bg: "bg-emerald-200", headerBg: "bg-emerald-300", name: "green" },
-  { bg: "bg-violet-200", headerBg: "bg-violet-300", name: "purple" },
-  { bg: "bg-cyan-200", headerBg: "bg-cyan-300", name: "blue" },
-  { bg: "bg-orange-200", headerBg: "bg-orange-300", name: "orange" },
+  { name: "yellow" },
+  { name: "pink" },
+  { name: "green" },
+  { name: "purple" },
+  { name: "blue" },
+  { name: "orange" },
 ] as const;
 
 export type StickyColor = typeof STICKY_COLORS[number];

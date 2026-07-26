@@ -14,6 +14,55 @@ const forbidden = [
   { pattern: /\bprose-invert\b/, message: "Markdown appearance must follow the active theme" },
   { pattern: /highlight\.js\/styles\/[^\"']*dark/i, message: "use the tokenized highlight.js rules" },
 ];
+const semanticCssModules = [
+  /^App\.module\.css$/,
+  /^components\/(?:Header|Sidebar|TabBar|TerminalPanel|LocalTerminal|SearchPalette|CustomSelect)\.module\.css$/,
+  /^components\/settings\/.*\.module\.css$/,
+  /^components\/tabs\/SettingsTab\.module\.css$/,
+  /^components\/ui\/(?:Button|FormControls|NumberStepper|Modal|IconButton|Callout)\//,
+  /^components\/ui\/(?:Chat|ChatInput|MarkdownRenderer|SubagentActivityPanel)\.module\.css$/,
+  /^components\/ui\/DiffViewToggle\.module\.css$/,
+  /^components\/nodes\/TaskNode\.module\.css$/,
+  /^components\/nodes\/McpNode\.module\.css$/,
+  /^components\/nodes\/boundary\/BoundaryNode\.module\.css$/,
+  /^components\/(?:CreateDialog|MoveDialog|BranchDialog)\.module\.css$/,
+  /^components\/permissions\/CommandPermissionDialog\.module\.css$/,
+];
+const semanticModuleForbidden = [
+  {
+    pattern: /var\(--(?:bg|text|accent|border)(?:-|_)/,
+    message: "migrated CSS Modules must use the canonical --color-* contract",
+  },
+  {
+    pattern: /(?:^|[^\w-])(?:#(?:[\da-f]{3,8})|rgba?\(|hsla?\()/i,
+    message: "migrated CSS Modules must not contain raw colors",
+  },
+  {
+    pattern: /font-size:\s*\d+(?:\.\d+)?px\b/,
+    message: "migrated CSS Modules must use a typography role",
+  },
+];
+const migratedJsxFiles = new Set([
+  "App.tsx",
+  "components/Header.view.tsx",
+  "components/Sidebar.view.tsx",
+  "components/TabBar.view.tsx",
+  "components/TerminalPanel.tsx",
+  "components/LocalTerminal.tsx",
+  "components/SearchPalette.view.tsx",
+  "components/CustomSelect.view.tsx",
+  "components/ui/DiffViewToggle.tsx",
+  "components/nodes/TaskNode.tsx",
+  "components/nodes/McpNode.tsx",
+  "components/nodes/boundary/BoundaryNode.tsx",
+  "components/nodes/sticky/StickyNode.tsx",
+  "components/ConfirmModal.tsx",
+  "components/CreateDialog.tsx",
+  "components/MoveDialog.tsx",
+  "components/BranchDialog.tsx",
+  "components/permissions/CommandPermissionDialog.tsx",
+  "components/mcp/McpIntegrationModal.tsx",
+]);
 
 function walk(directory) {
   return readdirSync(directory).flatMap((entry) => {
@@ -32,6 +81,33 @@ for (const path of walk(sourceRoot)) {
     forbidden.forEach(({ pattern, message }) => {
       if (pattern.test(line)) violations.push(`${displayPath}:${index + 1}: ${message}`);
     });
+    if (semanticCssModules.some((pattern) => pattern.test(displayPath))) {
+      semanticModuleForbidden.forEach(({ pattern, message }) => {
+        if (pattern.test(line)) violations.push(`${displayPath}:${index + 1}: ${message}`);
+      });
+    }
+    if (migratedJsxFiles.has(displayPath) && /className\s*=\s*["']/.test(line)) {
+      violations.push(`${displayPath}:${index + 1}: migrated components must keep presentation in their CSS Module`);
+    }
+  });
+}
+
+const protectedMonacoTypographyConsumers = [
+  "components/tabs/FileTab.tsx",
+  "components/tabs/GitDiffTab.tsx",
+  "components/tabs/TaskTab.tsx",
+  "components/edgeinspector/components/EdgeDiffTabContent.tsx",
+  "components/sidepane/components/DiffTabContent.tsx",
+  "components/sidepane/components/ManualReconciliationEditor.tsx",
+  "components/sidepane/components/PRDiffView.tsx",
+];
+
+for (const displayPath of protectedMonacoTypographyConsumers) {
+  const path = join(sourceRoot, displayPath);
+  readFileSync(path, "utf8").split("\n").forEach((line, index) => {
+    if (/fontSize:\s*\d/.test(line)) {
+      violations.push(`${displayPath}:${index + 1}: Monaco typography must use src/editor/monacoOptions.ts`);
+    }
   });
 }
 

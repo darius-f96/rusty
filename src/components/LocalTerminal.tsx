@@ -6,6 +6,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useWorkspaceStore } from "../store";
 import { resolveTheme } from "../theme";
+import styles from "./LocalTerminal.module.css";
 
 interface LocalTerminalProps {
   sessionId: string;
@@ -227,8 +228,8 @@ export const LocalTerminal: React.FC<LocalTerminalProps> = ({ sessionId, cwd, is
   }, [isActive, sessionId]);
 
   return (
-    <div className="w-full h-full bg-[var(--color-terminal-background)] overflow-hidden p-2">
-      <div ref={containerRef} className="w-full h-full" />
+    <div className={styles.shell}>
+      <div ref={containerRef} className={styles.terminal} />
     </div>
   );
 };

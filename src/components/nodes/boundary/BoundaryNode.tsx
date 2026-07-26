@@ -3,6 +3,7 @@ import { Trash2, GripHorizontal, Minus, Plus } from "lucide-react";
 import { useViewport } from "@xyflow/react";
 import { useWorkspaceStore } from "../../../store";
 import { CanvasTabContext } from "../../tabs/canvas/CanvasTabContext";
+import styles from "./BoundaryNode.module.css";
 
 export const BoundaryNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) => {
   const { tabId } = useContext(CanvasTabContext);
@@ -158,7 +159,7 @@ export const BoundaryNode: React.FC<{ id: string; data: any }> = memo(({ id, dat
 
   return (
     <div
-      className="relative select-none nodrag nopan"
+      className={`nodrag nopan ${styles.root}`}
       style={{
         width,
         height,
@@ -167,8 +168,7 @@ export const BoundaryNode: React.FC<{ id: string; data: any }> = memo(({ id, dat
     >
       {/* Name label above the boundary (outside the box) */}
       <div
-        className="absolute left-0 flex items-center gap-1 group/label"
-        style={{ zIndex: 10, pointerEvents: "auto", bottom: `calc(100% + 4px)` }}
+        className={styles.labelRow}
       >
         {isEditingName ? (
           <input
@@ -186,7 +186,7 @@ export const BoundaryNode: React.FC<{ id: string; data: any }> = memo(({ id, dat
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
-            className="nodrag nopan bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded px-1.5 py-0.5 font-sans text-[var(--text-light)] focus:outline-none focus:border-[var(--border-active)] min-w-32 w-auto"
+            className={`nodrag nopan ${styles.nameInput}`}
             style={{ fontSize }}
             autoFocus
           />
@@ -195,19 +195,19 @@ export const BoundaryNode: React.FC<{ id: string; data: any }> = memo(({ id, dat
             onDoubleClick={handleNameDoubleClick}
             onPointerDown={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
-            className="nodrag nopan font-sans font-semibold text-[var(--text-muted)] bg-[var(--bg-sidebar)]/80 px-1.5 py-0.5 rounded border border-transparent hover:border-[var(--border-color)] cursor-pointer whitespace-nowrap max-w-[min(320px,80vw)] overflow-hidden text-ellipsis"
+            className={`nodrag nopan ${styles.name}`}
             style={{ fontSize, lineHeight: 1.25 }}
             title="Double-click to rename"
           >
             {name}
           </span>
         )}
-        <div className="flex items-center opacity-0 group-hover/label:opacity-100 focus-within:opacity-100 transition-opacity">
+        <div className={styles.sizeActions}>
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); changeFontSize(-2); }}
             onPointerDown={(e) => e.stopPropagation()}
-            className="nodrag nopan p-0.5 text-[var(--text-muted)] hover:text-[var(--text-light)]"
+            className={`nodrag nopan ${styles.iconButton}`}
             title="Decrease title size"
           >
             <Minus size={12} />
@@ -216,7 +216,7 @@ export const BoundaryNode: React.FC<{ id: string; data: any }> = memo(({ id, dat
             type="button"
             onClick={(e) => { e.stopPropagation(); changeFontSize(2); }}
             onPointerDown={(e) => e.stopPropagation()}
-            className="nodrag nopan p-0.5 text-[var(--text-muted)] hover:text-[var(--text-light)]"
+            className={`nodrag nopan ${styles.iconButton}`}
             title="Increase title size"
           >
             <Plus size={12} />
@@ -226,56 +226,50 @@ export const BoundaryNode: React.FC<{ id: string; data: any }> = memo(({ id, dat
 
       {/* Boundary rectangle - click-through, visual only */}
       <div
-        className="w-full h-full border-2 border-dashed border-[var(--color-secondary-border)] bg-[var(--color-secondary-bg)]/[0.08] rounded-lg"
-        style={{ pointerEvents: "none" }}
+        className={styles.boundary}
       />
 
       {/* Drag bar at top edge - the only part that moves the boundary */}
       <div
-        className="nodrag nopan absolute top-0 left-0 right-0 h-5 flex items-center justify-center cursor-move rounded-t-lg hover:bg-[var(--color-secondary-bg)] transition-colors group"
-        style={{ pointerEvents: "auto" }}
+        className={`nodrag nopan ${styles.dragBar}`}
         onMouseDown={handleDragMouseDown}
         onPointerDown={(e) => e.stopPropagation()}
         title="Drag to move boundary"
       >
         <GripHorizontal
           size={14}
-          className="text-[var(--color-secondary)] group-hover:text-[var(--color-secondary)] transition-colors pointer-events-none"
+          className={styles.dragIcon}
         />
       </div>
 
       {/* Corner resize handles */}
       <div
-        className="nodrag nopan resize-handle absolute -top-1.5 -left-1.5 w-4 h-4 cursor-nw-resize flex items-center justify-center"
+        className={`nodrag nopan resize-handle ${styles.resize} ${styles.nw}`}
         onMouseDown={handleResizeMouseDown("nw")}
         onPointerDown={(e) => e.stopPropagation()}
-        style={{ pointerEvents: "auto" }}
       >
-        <div className="w-2.5 h-2.5 bg-[var(--color-secondary-bg)] rounded-sm border border-[var(--color-secondary-border)] shadow-sm hover:bg-[var(--color-secondary-bg)] transition-colors" />
+        <div className={styles.resizeKnob} />
       </div>
       <div
-        className="nodrag nopan resize-handle absolute -top-1.5 -right-1.5 w-4 h-4 cursor-ne-resize flex items-center justify-center"
+        className={`nodrag nopan resize-handle ${styles.resize} ${styles.ne}`}
         onMouseDown={handleResizeMouseDown("ne")}
         onPointerDown={(e) => e.stopPropagation()}
-        style={{ pointerEvents: "auto" }}
       >
-        <div className="w-2.5 h-2.5 bg-[var(--color-secondary-bg)] rounded-sm border border-[var(--color-secondary-border)] shadow-sm hover:bg-[var(--color-secondary-bg)] transition-colors" />
+        <div className={styles.resizeKnob} />
       </div>
       <div
-        className="nodrag nopan resize-handle absolute -bottom-1.5 -left-1.5 w-4 h-4 cursor-sw-resize flex items-center justify-center"
+        className={`nodrag nopan resize-handle ${styles.resize} ${styles.sw}`}
         onMouseDown={handleResizeMouseDown("sw")}
         onPointerDown={(e) => e.stopPropagation()}
-        style={{ pointerEvents: "auto" }}
       >
-        <div className="w-2.5 h-2.5 bg-[var(--color-secondary-bg)] rounded-sm border border-[var(--color-secondary-border)] shadow-sm hover:bg-[var(--color-secondary-bg)] transition-colors" />
+        <div className={styles.resizeKnob} />
       </div>
       <div
-        className="nodrag nopan resize-handle absolute -bottom-1.5 -right-1.5 w-4 h-4 cursor-se-resize flex items-center justify-center"
+        className={`nodrag nopan resize-handle ${styles.resize} ${styles.se}`}
         onMouseDown={handleResizeMouseDown("se")}
         onPointerDown={(e) => e.stopPropagation()}
-        style={{ pointerEvents: "auto" }}
       >
-        <div className="w-2.5 h-2.5 bg-[var(--color-secondary-bg)] rounded-sm border border-[var(--color-secondary-border)] shadow-sm hover:bg-[var(--color-secondary-bg)] transition-colors" />
+        <div className={styles.resizeKnob} />
       </div>
 
       {/* Delete button */}
@@ -283,8 +277,7 @@ export const BoundaryNode: React.FC<{ id: string; data: any }> = memo(({ id, dat
         onClick={handleDelete}
         onPointerDown={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
-        className="nodrag nopan absolute -top-2.5 -right-2.5 w-5 h-5 bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-full flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--color-status-danger)] hover:border-[var(--color-status-danger-border)] transition-colors shadow-md z-30 cursor-pointer"
-        style={{ pointerEvents: "auto" }}
+        className={`nodrag nopan ${styles.delete}`}
         title="Delete boundary"
       >
         <Trash2 size={10} />

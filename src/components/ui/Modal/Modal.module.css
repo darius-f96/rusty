@@ -1,0 +1,124 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--color-surface-overlay);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: 85vh;
+  margin: 0 var(--space-4);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-elevated);
+  box-shadow: var(--shadow-elevated);
+}
+
+.panel:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.sm {
+  max-width: 24rem;
+}
+
+.md {
+  max-width: 28rem;
+}
+
+.lg {
+  max-width: 40rem;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--color-border-default);
+}
+
+.headerTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.headerIcon {
+  color: var(--color-fg-muted);
+}
+
+.title {
+  font-size: var(--font-size-ui-md);
+  font-weight: 700;
+  color: var(--color-fg-strong);
+}
+
+.closeButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-1);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-fg-muted);
+  cursor: pointer;
+  transition: color var(--motion-fast);
+}
+
+.closeButton:hover {
+  color: var(--color-fg-strong);
+}
+
+.closeButton:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.description {
+  margin: 0;
+  padding: var(--space-3) var(--space-5) 0;
+  font-size: var(--font-size-ui-sm);
+  color: var(--color-fg-muted);
+}
+
+.body {
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.bodyScrollable {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--color-border-default);
+}

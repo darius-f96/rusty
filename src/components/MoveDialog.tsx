@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Folder, FolderOpen, ChevronDown, ChevronRight, Move, Check } from "lucide-react";
-import { Modal } from "./Modal";
+import { Modal } from "./ui/Modal/Modal";
+import { Button } from "./ui/Button/Button";
+import { Field } from "./ui/FormControls/Field";
+import { Input } from "./ui/FormControls/Input";
+import styles from "./MoveDialog.module.css";
 
 interface MoveDialogProps {
   node: { name: string; path: string; is_dir: boolean };
@@ -19,6 +23,11 @@ function getParentsForPath(path: string): string[] {
   }
   return parents;
 }
+
+const truncatePathStart = (path: string, maxLen = 60) => {
+  if (path.length <= maxLen) return path;
+  return "…" + path.substring(path.length - maxLen + 1);
+};
 
 export const MoveDialog: React.FC<MoveDialogProps> = ({ node, fileTree, onMove, onCancel }) => {
   const parentDir = node.path.substring(0, node.path.lastIndexOf("/"));
@@ -107,23 +116,19 @@ export const MoveDialog: React.FC<MoveDialogProps> = ({ node, fileTree, onMove, 
             <div
               data-selected={isSelected}
               onClick={() => setDestPath(entry.path)}
-              className={`flex items-center px-2 py-1 rounded-md cursor-pointer transition-colors text-xs ${
-                isSelected
-                  ? "bg-[var(--accent-bg)] text-[var(--accent-color)]"
-                  : "hover:bg-[var(--bg-app)] text-[var(--text-normal)]"
-              }`}
+              className={`${styles.folderRow} ${isSelected ? styles.folderRowSelected : ""}`}
               style={{ paddingLeft: `${depth * 12 + 8}px` }}
             >
               <span
                 onClick={(e) => { e.stopPropagation(); toggleFolder(entry.path); }}
-                className="mr-1 text-[var(--text-muted)] flex-shrink-0 cursor-pointer w-3 flex justify-center"
+                className={styles.folderToggle}
               >
                 {childDirs.length > 0 ? (isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />) : null}
               </span>
-              <span className="mr-1 text-[var(--accent-color)] flex-shrink-0">
+              <span className={styles.folderIcon}>
                 {isExpanded ? <FolderOpen size={12} /> : <Folder size={12} />}
               </span>
-              <span className="truncate">{entry.name}</span>
+              <span className={styles.folderName}>{entry.name}</span>
             </div>
             {isExpanded && childDirs.length > 0 && (
               <div>{renderFolderTree(entry.children, depth + 1)}</div>
@@ -133,94 +138,80 @@ export const MoveDialog: React.FC<MoveDialogProps> = ({ node, fileTree, onMove, 
       });
   };
 
-  const truncatePathStart = (path: string, maxLen: number = 60) => {
-    if (path.length <= maxLen) return path;
-    return "…" + path.substring(path.length - maxLen + 1);
-  };
+  const willMoveTo = destPath.trim().endsWith(node.name) ? destPath.trim() : `${destPath.trim()}/${node.name}`;
 
   return (
     <Modal
+      id="move-dialog"
       title={`Move ${node.is_dir ? "Folder" : "File"}`}
       icon={Move}
       onClose={onCancel}
-      width="w-[520px]"
-      scrollable
+      size="lg"
+      scrollableBody
       footer={
-        <div className="flex items-center justify-end space-x-2 px-5 py-3 border-t border-[var(--border-color)]">
-          <button
-            onClick={onCancel}
-            className="px-4 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:text-[var(--text-light)] rounded-lg transition-colors"
-          >
+        <>
+          <Button id="move-dialog-cancel" type="button" variant="secondary" onClick={onCancel}>
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
+            id="move-dialog-confirm"
+            type="button"
+            variant="primary"
+            icon={<Check size={13} />}
             onClick={handleMove}
             disabled={!destPath.trim()}
-            className="flex items-center space-x-1.5 px-4 py-1.5 bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/80 disabled:opacity-40 text-[var(--color-primary-foreground)] text-xs font-bold rounded-lg transition-colors"
           >
-            <Check size={13} />
-            <span>Move</span>
-          </button>
-        </div>
+            Move
+          </Button>
+        </>
       }
     >
-          {/* Current path info */}
-          <div className="text-[10px] font-mono text-[var(--text-muted)] truncate" title={node.path}>
-            <span className="opacity-60">Current: </span>
-            <span className="text-[var(--text-normal)]">{truncatePathStart(node.path)}</span>
-          </div>
+      <p className={styles.pathInfo} title={node.path}>
+        Current: <span className={styles.pathValue}>{truncatePathStart(node.path)}</span>
+      </p>
 
-          {/* Destination input with suggestions */}
-          <div className="relative">
-            <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider font-mono block mb-1.5">
-              Destination folder
-            </label>
-            <div className="relative">
-              <input
-                ref={inputRef}
-                type="text"
-                value={destPath}
-                onChange={(e) => { setDestPath(e.target.value); setShowSuggestions(true); }}
-                onFocus={() => setShowSuggestions(true)}
-                onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleMove();
-                }}
-                placeholder="Type a path or select from tree below..."
-                className="w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-xs font-mono text-[var(--text-light)] focus:border-[var(--accent-color)] focus:outline-none"
-              />
-              {showSuggestions && suggestions.length > 0 && (
-                <div className="absolute left-0 right-0 mt-1 bg-[var(--bg-app)] border border-[var(--border-color)] rounded-lg shadow-2xl z-[100] max-h-40 overflow-y-auto">
-                  {suggestions.map((s) => (
-                    <div
-                      key={s.path}
-                      onMouseDown={(e) => { e.preventDefault(); setDestPath(s.path); setShowSuggestions(false); }}
-                      className="px-3 py-1.5 hover:bg-[var(--accent-bg)] cursor-pointer text-xs font-mono text-[var(--text-normal)] truncate"
-                      title={s.path}
-                    >
-                      {truncatePathStart(s.path)}
-                    </div>
-                  ))}
+      <Field id="move-dialog-destination" label="Destination folder">
+        <div className={styles.destinationWrapper}>
+          <Input
+            ref={inputRef}
+            id="move-dialog-destination"
+            type="text"
+            value={destPath}
+            onChange={(e) => { setDestPath(e.target.value); setShowSuggestions(true); }}
+            onFocus={() => setShowSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleMove();
+            }}
+            placeholder="Type a path or select from tree below..."
+          />
+          {showSuggestions && suggestions.length > 0 && (
+            <div className={styles.suggestions}>
+              {suggestions.map((s) => (
+                <div
+                  key={s.path}
+                  onMouseDown={(e) => { e.preventDefault(); setDestPath(s.path); setShowSuggestions(false); }}
+                  className={styles.suggestionItem}
+                  title={s.path}
+                >
+                  {truncatePathStart(s.path)}
                 </div>
-              )}
-            </div>
-          </div>
-
-          {/* Folder tree */}
-          <div className="overflow-y-auto bg-[var(--bg-app)]/50 border border-[var(--border-color)] rounded-lg p-2 min-h-[120px] max-h-[240px]" ref={treeScrollRef}>
-            <div className="text-[10px] text-[var(--text-muted)] uppercase font-bold mb-2 px-1">Browse folders</div>
-            {renderFolderTree(fileTree)}
-          </div>
-
-          {/* Preview */}
-          {destPath && (
-            <div className="text-[10px] font-mono text-[var(--text-muted)] bg-[var(--bg-app)]/50 rounded-lg px-3 py-2 border border-[var(--border-color)]/50">
-              <span className="opacity-60">Will move to: </span>
-              <span className="text-[var(--accent-color)]" title={destPath.trim().endsWith(node.name) ? destPath.trim() : `${destPath.trim()}/${node.name}`}>
-                {truncatePathStart(destPath.trim().endsWith(node.name) ? destPath.trim() : `${destPath.trim()}/${node.name}`)}
-              </span>
+              ))}
             </div>
           )}
+        </div>
+      </Field>
+
+      <div className={styles.treeContainer} ref={treeScrollRef}>
+        <div className={styles.treeHeading}>Browse folders</div>
+        {renderFolderTree(fileTree)}
+      </div>
+
+      {destPath && (
+        <div className={styles.preview}>
+          Will move to: <span className={styles.previewValue} title={willMoveTo}>{truncatePathStart(willMoveTo)}</span>
+        </div>
+      )}
     </Modal>
   );
 };

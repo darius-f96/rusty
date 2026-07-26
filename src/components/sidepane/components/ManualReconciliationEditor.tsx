@@ -7,6 +7,8 @@ import { CustomSelect } from "../../CustomSelect";
 import { InlineChat } from "../../inline-chat/InlineChat";
 import type { InlineChatEditorContext } from "../../../services/inlineChatService";
 import { notify } from "../../../notificationStore";
+import { useWorkspaceStore } from "../../../store";
+import { createMonacoDiffOptions, createMonacoEditorOptions } from "../../../editor/monacoOptions";
 
 export interface ManualReconciliationVariant {
   taskId: string;
@@ -27,11 +29,10 @@ interface ManualReconciliationEditorProps {
   refreshKey?: number;
 }
 
-const editorOptions = {
+const editorBehaviorOptions = {
   automaticLayout: true,
   minimap: { enabled: false },
   scrollBeyondLastLine: false,
-  fontSize: 11,
   wordWrap: "off" as const,
 };
 
@@ -70,6 +71,7 @@ export const ManualReconciliationEditor: React.FC<ManualReconciliationEditorProp
   modelBusy = false,
   refreshKey = 0,
 }) => {
+  const editorFontSize = useWorkspaceStore((state) => state.typographyPreferences.editorFontSize);
   const [baseline, setBaseline] = useState("");
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(true);
@@ -345,7 +347,7 @@ export const ManualReconciliationEditor: React.FC<ManualReconciliationEditorProp
               value={draft}
               onChange={(value) => setDraft(value ?? "")}
               onMount={handleResultEditorMount}
-              options={editorOptions}
+              options={createMonacoEditorOptions(editorFontSize, editorBehaviorOptions)}
             />
           </div>
         </section>
@@ -457,13 +459,13 @@ export const ManualReconciliationEditor: React.FC<ManualReconciliationEditorProp
                 original={draft}
                 modified={activeVariant.content}
                 onMount={handleVariantEditorMount}
-                options={{
-                  ...editorOptions,
+                options={createMonacoDiffOptions(editorFontSize, {
+                  ...editorBehaviorOptions,
                   readOnly: true,
                   originalEditable: false,
                   renderSideBySide: false,
                   renderOverviewRuler: false,
-                }}
+                })}
               />
             ) : (
               <div className="flex h-full items-center justify-center px-6 text-center text-[10px] font-mono text-[var(--text-muted)]">

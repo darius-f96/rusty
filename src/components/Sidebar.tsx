@@ -4,6 +4,7 @@ import { useShallow } from "zustand/react/shallow";
 import { invoke } from "@tauri-apps/api/core";
 import { SIDEBAR_ICONS, SidebarHelpers } from "./sidebar/SidebarPresenter";
 import { SidebarView } from "./Sidebar.view";
+import { formatShortcut } from "../preferences/shortcuts";
 
 interface SidebarProps {
   sidebarWidth: number;
@@ -38,6 +39,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const activeTabId = activeGroup ? activeGroup.activeTabId : null;
   const activeTab = activeGroup && activeGroup.openTabs.find((t) => t.id === activeTabId);
   const isActiveTabCanvas = activeTab?.type === "canvas" || activeTab?.type === "axiom";
+  const toggleExplorerShortcut = useWorkspaceStore((state) => state.keyboardShortcuts.toggleExplorer);
 
   const helpers: SidebarHelpers = {
     isExplorerOpen,
@@ -105,7 +107,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     createAgentTab: state.createAgentTab,
     gitStatus: state.gitStatus,
   })));
-  const topIcons = SIDEBAR_ICONS.filter((item) => item.id !== "settings" && item.id !== "onboarding");
+  const topIcons = SIDEBAR_ICONS
+    .filter((item) => item.id !== "settings" && item.id !== "onboarding")
+    .map((item) => item.id === "explorer"
+      ? { ...item, label: `Files (${formatShortcut(toggleExplorerShortcut)})` }
+      : item);
   const helpIcon = SIDEBAR_ICONS.find((item) => item.id === "onboarding");
   const settingsIcon = SIDEBAR_ICONS.find((item) => item.id === "settings");
 

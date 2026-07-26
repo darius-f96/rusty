@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { useWorkspaceStore } from "../../store";
-import { CustomSelect } from "../CustomSelect";
-import { themeOptions } from "../../theme";
+import { AppearanceSettings } from "../settings/AppearanceSettings";
+import { TypographySettings } from "../settings/TypographySettings";
+import { KeyboardShortcutsSettings } from "../settings/KeyboardShortcutsSettings";
+import styles from "./SettingsTab.module.css";
 import {
   detectAllLspServers,
   installLspServer,
@@ -17,9 +19,6 @@ type InstallState = {
 const SHOW_LSP_SETTINGS = false;
 
 export const SettingsTab: React.FC = () => {
-  const activeThemeId = useWorkspaceStore((state) => state.activeThemeId);
-  const setActiveThemeId = useWorkspaceStore((state) => state.setActiveThemeId);
-
   const lspSettings = useWorkspaceStore((state) => state.lspSettings);
   const updateLspSettings = useWorkspaceStore((state) => state.updateLspSettings);
 
@@ -136,25 +135,17 @@ export const SettingsTab: React.FC = () => {
   ];
 
   return (
-    <div className="w-full h-full overflow-y-auto">
-      <div className="p-8 max-w-2xl mx-auto space-y-6 font-sans text-[var(--text-normal)]">
+    <div className={styles.page}>
+      <div className={styles.content}>
         {/* Title */}
-        <div className="space-y-1">
-          <h2 className="text-xl font-bold text-[var(--text-light)]">General Settings</h2>
-          <p className="text-xs text-[var(--text-muted)] font-mono">Configure system preferences and path properties</p>
+        <div>
+          <h2 className={styles.pageTitle}>General Settings</h2>
+          <p className={styles.pageDescription}>Personalize Axiom’s appearance, text, and keyboard controls.</p>
         </div>
 
-        {/* System Preferences Card */}
-        <div className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-xl p-5 space-y-4">
-          <div className="space-y-1.5">
-            <label className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider font-mono">Appearance Theme</label>
-            <CustomSelect
-              value={activeThemeId}
-              onChange={setActiveThemeId}
-              options={themeOptions}
-            />
-          </div>
-        </div>
+        <div className={styles.panel}><AppearanceSettings /></div>
+        <div className={styles.panel}><TypographySettings /></div>
+        <div className={styles.panel}><KeyboardShortcutsSettings /></div>
 
         {SHOW_LSP_SETTINGS && (
           <>

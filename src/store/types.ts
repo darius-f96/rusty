@@ -6,6 +6,8 @@ import type {
   OnNodesChange,
 } from "@xyflow/react";
 import type { McpServerConfig } from "../components/mcp/types";
+import type { TypographyPreferences } from "../preferences/typography";
+import type { KeyboardShortcutPreferences, ShortcutAction } from "../preferences/shortcuts";
 
 export type ReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";
 
@@ -293,6 +295,12 @@ export interface WorkspaceState {
 
   activeThemeId: string;
   setActiveThemeId: (themeId: string) => void;
+  typographyPreferences: TypographyPreferences;
+  setTypographyPreference: (key: keyof TypographyPreferences, value: number) => void;
+  resetTypographyPreferences: () => void;
+  keyboardShortcuts: KeyboardShortcutPreferences;
+  setKeyboardShortcut: (action: ShortcutAction, shortcut: string) => void;
+  resetKeyboardShortcuts: () => void;
 
   setRootPath: (path: string) => void;
   setGitStatus: (status: GitStatusResult | null) => void;

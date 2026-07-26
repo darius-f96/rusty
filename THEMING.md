@@ -25,7 +25,30 @@ Prefer the semantic variables:
 - `--color-log-*`, `--color-terminal-background`, and `--syntax-*` for code-like UI.
 
 The older `--bg-*`, `--text-*`, and `--accent-*` variables are compatibility
-aliases and should not be used by new code.
+aliases and should not be used by new code. They remain temporarily for
+unmigrated components and are isolated in the compatibility section of
+`src/theme.ts`.
+
+## Component styling
+
+Component appearance belongs in a colocated CSS Module. Tailwind remains
+available for straightforward layout while migration is in progress, but new
+palette-specific colors and large arbitrary presentation strings are not
+allowed. Runtime-calculated geometry—such as editor height, canvas position, or
+resizing width—may remain inline.
+
+## Typography
+
+Typography preferences are independent of themes and are persisted under
+`axiom_typography_preferences`. The root runtime exposes these roles:
+
+- `--font-size-ide` and `--font-size-ui-*` for application chrome.
+- `--font-size-chat` and `--font-size-chat-*` for chat and Markdown.
+- A numeric editor size passed through `src/editor/monacoOptions.ts` for Monaco.
+
+Use `.ide-typography-scope` at the application shell and
+`.chat-typography-scope` around chat surfaces. Xterm buffer text and
+user-authored React Flow node text intentionally remain independent.
 
 Run `npm run theme:check` and `npm run build` after changing UI colors. Fixed
 brand artwork and user-selectable sticky-note colors are intentional exceptions.

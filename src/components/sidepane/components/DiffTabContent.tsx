@@ -7,6 +7,7 @@ import { useDiffViewMode } from "../../../hooks/useDiffViewMode";
 import { DiffViewToggle } from "../../ui/DiffViewToggle";
 import { useWorkspaceStore } from "../../../store";
 import { getMonacoLanguageId } from "../../../services/lspLanguage";
+import { createMonacoDiffOptions } from "../../../editor/monacoOptions";
 
 interface DiffTabContentProps {
   selectedNode: any;
@@ -30,6 +31,7 @@ export const DiffTabContent: React.FC<DiffTabContentProps> = ({
   tabId
 }) => {
   const updateTaskNode = useWorkspaceStore((state) => state.updateTaskNode);
+  const editorFontSize = useWorkspaceStore((state) => state.typographyPreferences.editorFontSize);
   const [editedCode, setEditedCode] = useState<string>("");
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -274,14 +276,13 @@ export const DiffTabContent: React.FC<DiffTabContentProps> = ({
               original={originalCode}
               modified={displayCode}
               onMount={handleEditorMount}
-              options={{
+              options={createMonacoDiffOptions(editorFontSize, {
                 readOnly: false,
                 minimap: { enabled: false },
                 scrollBeyondLastLine: false,
                 lineNumbers: "on",
                 renderSideBySide,
-                fontSize: 11
-              }}
+              })}
             />
           </div>
         ) : (

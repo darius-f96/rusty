@@ -1,0 +1,104 @@
+.section {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.heading,
+.row,
+.actions {
+  display: flex;
+  align-items: center;
+}
+
+.heading,
+.row {
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.title {
+  margin: 0;
+  color: var(--color-fg-strong);
+  font-size: var(--font-size-ui-lg);
+}
+
+.description {
+  margin: var(--space-1) 0 0;
+  color: var(--color-fg-muted);
+  font-size: var(--font-size-ui-sm);
+}
+
+.list {
+  overflow: hidden;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.row {
+  min-height: 4rem;
+  border-bottom: 1px solid var(--color-border-subtle);
+  padding: var(--space-3);
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.label {
+  color: var(--color-fg-strong);
+  font-size: var(--font-size-ui-sm);
+  font-weight: 650;
+}
+
+.actions {
+  flex-shrink: 0;
+  gap: var(--space-2);
+}
+
+.recorder {
+  min-width: 8rem;
+  min-height: var(--control-height-md);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-input);
+  color: var(--color-fg-strong);
+  padding: 0 var(--space-3);
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: var(--font-size-ui-sm);
+  cursor: pointer;
+}
+
+.recorder:hover,
+.recording {
+  border-color: var(--color-border-focus);
+  background: var(--color-interaction-selected);
+}
+
+.recorder:focus-visible,
+.reset:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.reset {
+  border: 0;
+  background: transparent;
+  color: var(--color-fg-muted);
+  font: inherit;
+  font-size: var(--font-size-ui-xs);
+  cursor: pointer;
+}
+
+.error {
+  margin: 0;
+  color: var(--color-status-danger);
+  font-size: var(--font-size-ui-sm);
+}
+
+@media (max-width: 620px) {
+  .row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
