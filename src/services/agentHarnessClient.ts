@@ -6,6 +6,7 @@ import {
   parseAgentMessage,
   unwrapEnvelope,
 } from "../../shared/agentProtocol";
+import { SIDECAR_WS_URL } from "../config/sidecar";
 
 export type ConnectionState = "disconnected" | "connecting" | "connected" | "reconnecting";
 export type RunEvent = Record<string, unknown> & { type: string; runId: string };
@@ -61,7 +62,7 @@ export class AgentHarnessClient {
   private readonly maxReconnectAttempts: number;
 
   constructor(options: AgentHarnessClientOptions = {}) {
-    this.endpoint = options.endpoint || "ws://localhost:4000";
+    this.endpoint = options.endpoint || SIDECAR_WS_URL;
     this.createWebSocket = options.createWebSocket || ((url) => new WebSocket(url));
     this.handshakeTimeoutMs = options.handshakeTimeoutMs ?? 5_000;
     this.maxReconnectAttempts = options.maxReconnectAttempts ?? 6;
@@ -335,7 +336,7 @@ export function createAgentHarnessSocket(): WebSocket {
   const facade = {
     get readyState() { return readyState; },
     get bufferedAmount() { return 0; },
-    get url() { return "ws://localhost:4000"; },
+    get url() { return SIDECAR_WS_URL; },
     get protocol() { return `axiom-agent-v${AGENT_PROTOCOL_VERSION}`; },
     get extensions() { return ""; },
     get binaryType() { return "blob" as BinaryType; },

@@ -17,6 +17,7 @@ import { appendBoundedText } from "../../services/boundedTextBuffer";
 import { invoke } from "@tauri-apps/api/core";
 import { providerHasModelReference, providerModelVariants, selectableModelProviders } from "../../store/providerHelpers";
 import { createAgentHarnessSocket } from "../../services/agentHarnessClient";
+import { SIDECAR_PORT, SIDECAR_WS_URL } from "../../config/sidecar";
 export interface GeneratedTaskDraft {
   key: string;
   title: string;
@@ -320,7 +321,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
     setNodeStatus(selectedNodeId, "running");
     addLog(selectedNodeId, `User prompt: ${userMessage.content}`);
 
-    console.log(`[SidePane] Connecting to ws://localhost:4000...`);
+    console.log(`[SidePane] Connecting to ${SIDECAR_WS_URL}...`);
     let socket: WebSocket;
     try {
       socket = createAgentHarnessSocket();
@@ -340,7 +341,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       addGlobalChatMessage(selectedNodeId, errorMsg);
       notify(
         "Sidecar Connection Error",
-        `Failed to create WebSocket connection to sidecar: ${err.message || String(err)}. Ensure the agent sidecar is running on port 4000.`,
+        `Failed to create WebSocket connection to sidecar: ${err.message || String(err)}. Ensure the agent sidecar is running on port ${SIDECAR_PORT}.`,
         "error"
       );
       return;
@@ -624,7 +625,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
 
     socket.onerror = (error) => {
       console.error(`[SidePane] Explorer WebSocket error:`, error);
-      addLog(selectedNodeId, "Connection to sidecar failed. Ensure sidecar is running on port 4000.");
+      addLog(selectedNodeId, `Connection to sidecar failed. Ensure sidecar is running on port ${SIDECAR_PORT}.`);
       setNodeStatus(selectedNodeId, "error");
       const errorMsg = {
         role: "assistant" as const,
@@ -634,7 +635,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       addGlobalChatMessage(selectedNodeId, errorMsg);
       notify(
         "Sidecar Connection Failed",
-        "Connection to agent sidecar closed unexpectedly. Ensure agent sidecar is running on port 4000.",
+        `Connection to agent sidecar closed unexpectedly. Ensure agent sidecar is running on port ${SIDECAR_PORT}.`,
         "error"
       );
     };
@@ -721,7 +722,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       setIsSummarizing(false);
       notify(
         "Sidecar Connection Error",
-        `Failed to create WebSocket connection to sidecar: ${err.message || String(err)}. Ensure the agent sidecar is running on port 4000.`,
+        `Failed to create WebSocket connection to sidecar: ${err.message || String(err)}. Ensure the agent sidecar is running on port ${SIDECAR_PORT}.`,
         "error"
       );
       return;
@@ -833,7 +834,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       setIsSummarizing(false);
       notify(
         "Sidecar Connection Failed",
-        "Connection to agent sidecar closed unexpectedly during summarization. Ensure agent sidecar is running on port 4000.",
+        `Connection to agent sidecar closed unexpectedly during summarization. Ensure agent sidecar is running on port ${SIDECAR_PORT}.`,
         "error"
       );
     };

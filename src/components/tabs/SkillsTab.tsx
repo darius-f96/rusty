@@ -6,6 +6,7 @@ import { CustomSelect } from "../CustomSelect";
 import { notify } from "../../notificationStore";
 import { providerHasModelReference, selectableProviderModels } from "../../store/providerHelpers";
 import { createAgentHarnessSocket } from "../../services/agentHarnessClient";
+import { SIDECAR_PORT } from "../../config/sidecar";
 
 const AVAILABLE_TOOLS = [
   { id: "read_file", label: "Read Files" },
@@ -148,7 +149,7 @@ export const SkillsTab: React.FC = () => {
         setIsGenerating(false);
         notify(
           "Sidecar Connection Error",
-          `Failed to create WebSocket connection to sidecar: ${err.message || String(err)}. Ensure the agent sidecar is running on port 4000.`,
+          `Failed to create WebSocket connection to sidecar: ${err.message || String(err)}. Ensure the agent sidecar is running on port ${SIDECAR_PORT}.`,
           "error"
         );
         return;
@@ -203,7 +204,7 @@ export const SkillsTab: React.FC = () => {
         setIsGenerating(false);
         notify(
           "Sidecar Connection Failed",
-          "Connection to agent sidecar closed unexpectedly. Ensure agent sidecar is running on port 4000.",
+          `Connection to agent sidecar closed unexpectedly. Ensure agent sidecar is running on port ${SIDECAR_PORT}.`,
           "error"
         );
       };

@@ -12,6 +12,7 @@ import { scheduleTreeRefresh } from "../filetree/FileTreePresenter";
 import { appendBoundedText } from "../../services/boundedTextBuffer";
 import { providerHasModelReference, selectableProviderModels } from "../../store/providerHelpers";
 import { createAgentHarnessSocket } from "../../services/agentHarnessClient";
+import { SIDECAR_PORT } from "../../config/sidecar";
 
 interface AgentTabProps {
   tab: any;
@@ -359,7 +360,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
       setIsStreaming(false);
       notify(
         "Sidecar Connection Error",
-        `Failed to create WebSocket connection to sidecar: ${err.message || String(err)}. Ensure the agent sidecar is running on port 4000.`,
+        `Failed to create WebSocket connection to sidecar: ${err.message || String(err)}. Ensure the agent sidecar is running on port ${SIDECAR_PORT}.`,
         "error"
       );
       return;
@@ -628,7 +629,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
     socket.onerror = () => {
       consoleBufferRef.current = appendBoundedText(
         consoleBufferRef.current,
-        "Connection to agent sidecar failed. Ensure sidecar is running on port 4000.\n",
+        `Connection to agent sidecar failed. Ensure sidecar is running on port ${SIDECAR_PORT}.\n`,
       );
       if (consoleMessageIdRef.current) {
         updateAgentMessage(tab.id, consoleMessageIdRef.current, consoleBufferRef.current);
@@ -636,7 +637,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
       addAgentMessage(tab.id, {
         id: `msg_${Date.now()}`,
         role: "assistant" as const,
-        content: "Connection failed. Please ensure the agent sidecar is running on port 4000.",
+        content: `Connection failed. Please ensure the agent sidecar is running on port ${SIDECAR_PORT}.`,
         timestamp: new Date().toISOString(),
       });
       isStreamingRef.current = false;
@@ -648,7 +649,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
       setAgentQuestions([]);
       notify(
         "Sidecar Connection Failed",
-        "Connection to agent sidecar closed unexpectedly. Ensure agent sidecar is running on port 4000.",
+        `Connection to agent sidecar closed unexpectedly. Ensure agent sidecar is running on port ${SIDECAR_PORT}.`,
         "error"
       );
     };

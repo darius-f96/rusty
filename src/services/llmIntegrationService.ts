@@ -1,6 +1,5 @@
 import type { CustomProvider, ProviderModel, ProviderQuotaSnapshot } from "../store";
-
-const SIDECAR_HTTP_URL = "http://localhost:4000";
+import { SIDECAR_HTTP_URL } from "../config/sidecar";
 
 export interface CopilotConnectionStatus {
   state: "disconnected" | "connecting" | "connected" | "failed";

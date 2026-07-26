@@ -474,6 +474,51 @@ function mixHex(base: string, mix: string, amount: number): string {
   return `#${channels.map((value) => value.toString(16).padStart(2, "0")).join("")}`;
 }
 
+function hexToHsl(hex: string): [number, number, number] {
+  const [red, green, blue] = hexChannels(hex).map((channel) => channel / 255);
+  const max = Math.max(red, green, blue);
+  const min = Math.min(red, green, blue);
+  const lightness = (max + min) / 2;
+  if (max === min) return [0, 0, lightness];
+  const delta = max - min;
+  const saturation = lightness > 0.5 ? delta / (2 - max - min) : delta / (max + min);
+  let hue: number;
+  if (max === red) hue = (green - blue) / delta + (green < blue ? 6 : 0);
+  else if (max === green) hue = (blue - red) / delta + 2;
+  else hue = (red - green) / delta + 4;
+  return [hue * 60, saturation, lightness];
+}
+
+function hslToHex(hue: number, saturation: number, lightness: number): string {
+  if (saturation === 0) {
+    const gray = Math.round(lightness * 255).toString(16).padStart(2, "0");
+    return `#${gray}${gray}${gray}`;
+  }
+  const hueToChannel = (p: number, q: number, t: number): number => {
+    let normalized = t;
+    if (normalized < 0) normalized += 1;
+    if (normalized > 1) normalized -= 1;
+    if (normalized < 1 / 6) return p + (q - p) * 6 * normalized;
+    if (normalized < 1 / 2) return q;
+    if (normalized < 2 / 3) return p + (q - p) * (2 / 3 - normalized) * 6;
+    return p;
+  };
+  const q = lightness < 0.5 ? lightness * (1 + saturation) : lightness + saturation - lightness * saturation;
+  const p = 2 * lightness - q;
+  const h = hue / 360;
+  const channels = [hueToChannel(p, q, h + 1 / 3), hueToChannel(p, q, h), hueToChannel(p, q, h - 1 / 3)];
+  return `#${channels.map((value) => Math.round(value * 255).toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** Softens a color's saturation while preserving its hue and lightness — used
+ * so selection/highlight colors read as a gentle tint rather than a raw,
+ * fully-saturated brand color (some theme accents are quite saturated
+ * reds/pinks, which looked harsh as a selection background). */
+function desaturate(hex: string, amount: number): string {
+  const [hue, saturation, lightness] = hexToHsl(hex);
+  return hslToHex(hue, saturation * (1 - amount), lightness);
+}
+
 function relativeLuminance(color: string): number {
   const [red, green, blue] = hexChannels(color).map((channel) => {
     const value = channel / 255;
@@ -523,6 +568,10 @@ function createTheme(id: string, seed: ThemeSeed): AppTheme {
     : { info: "#7DD3FC", success: "#6EE7B7", warning: "#FCD34D", danger: "#FDA4AF" };
   const logBackground = mixHex(seed.bgEditor, isLight ? "#000000" : "#FFFFFF", isLight ? 0.035 : 0.025);
   const mutedForeground = ensureContrast(seed.textMuted, seed.bgApp, 4.5);
+  // Selection/highlight surfaces use this instead of the raw accent — some
+  // theme accents are highly saturated reds/pinks, which read as a harsh
+  // pure-red tint when used at high alpha for a selection background.
+  const mutedAccent = desaturate(seed.accent, 0.5);
   const syntax = {
     ...seed.syntax,
     comments: ensureContrast(seed.syntax.comments, seed.bgEditor, 3),
@@ -565,7 +614,7 @@ function createTheme(id: string, seed: ThemeSeed): AppTheme {
     interaction: {
       hover: withAlpha(seed.accent, isLight ? 0.09 : 0.12),
       active: withAlpha(seed.accent, isLight ? 0.15 : 0.2),
-      selected: seed.accentBg,
+      selected: withAlpha(mutedAccent, isLight ? 0.16 : 0.2),
       focusRing: withAlpha(seed.accent, 0.28),
       disabled: withAlpha(mutedForeground, 0.45),
     },
@@ -582,9 +631,15 @@ function createTheme(id: string, seed: ThemeSeed): AppTheme {
       lineNumberActive: seed.textLight,
       lineHighlight: mixHex(seed.bgEditor, seed.textNormal, isLight ? 0.045 : 0.065),
       lineHighlightBorder: "#00000000",
-      selection: withAlpha(seed.textNormal, isLight ? 0.16 : 0.22),
-      inactiveSelection: withAlpha(seed.textNormal, isLight ? 0.1 : 0.14),
-      selectionHighlight: withAlpha(seed.textNormal, isLight ? 0.08 : 0.11),
+      // Monaco's theme colors only accept hex notation (see withHexAlpha) —
+      // these previously used withAlpha, which emits an rgba(...) string
+      // Monaco can't parse for editor.selectionBackground and friends. That
+      // caused it to fall back to a raw/invalid-color render (a solid,
+      // fully-opaque red) instead of the intended soft translucent tint,
+      // regardless of which theme was active.
+      selection: withHexAlpha(seed.textNormal, isLight ? 0.16 : 0.22),
+      inactiveSelection: withHexAlpha(seed.textNormal, isLight ? 0.1 : 0.14),
+      selectionHighlight: withHexAlpha(seed.textNormal, isLight ? 0.08 : 0.11),
       cursor: ensureContrast(
         mixHex(seed.bgEditor, seed.textNormal, isLight ? 0.55 : 0.48),
         seed.bgEditor,
@@ -595,7 +650,7 @@ function createTheme(id: string, seed: ThemeSeed): AppTheme {
       background: logBackground,
       foreground: seed.textNormal,
       cursor: seed.accent,
-      selection: withAlpha(seed.accent, isLight ? 0.25 : 0.35),
+      selection: withAlpha(mutedAccent, isLight ? 0.25 : 0.35),
     },
     logs: {
       background: logBackground,

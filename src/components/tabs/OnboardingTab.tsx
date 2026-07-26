@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import {
   ArrowRight,
   BookOpen,
@@ -274,6 +275,13 @@ export const OnboardingTab: React.FC = () => {
   const openTab = useWorkspaceStore((state) => state.openTab);
   const createCanvasTab = useWorkspaceStore((state) => state.createCanvasTab);
 
+  // package.json's version drifts from the app's real version (tauri.conf.json,
+  // bumped per release) — read the actual running app version from Tauri instead.
+  const [appVersion, setAppVersion] = useState(CURRENT_ONBOARDING_RELEASE.appVersion);
+  useEffect(() => {
+    getVersion().then(setAppVersion).catch(() => {});
+  }, []);
+
   const handleStart = () => {
     if (rootPath) {
       createCanvasTab();
@@ -292,7 +300,7 @@ export const OnboardingTab: React.FC = () => {
         <div className="max-w-7xl mx-auto px-6 lg:px-10 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <AxiomIcon size={36} className="shadow-lg" />
-            <div><div className="text-[12px] font-mono font-bold tracking-[0.22em] text-[var(--text-light)]">AXIOM</div><div className="text-[8px] font-mono uppercase tracking-wider text-[var(--text-muted)]">{CURRENT_ONBOARDING_RELEASE.id} · v{CURRENT_ONBOARDING_RELEASE.appVersion}</div></div>
+            <div><div className="text-[12px] font-mono font-bold tracking-[0.22em] text-[var(--text-light)]">AXIOM</div><div className="text-[8px] font-mono uppercase tracking-wider text-[var(--text-muted)]">{CURRENT_ONBOARDING_RELEASE.id} · v{appVersion}</div></div>
           </div>
           <nav className="hidden md:flex items-center gap-1 text-[10px] font-mono">
             <button onClick={() => scrollTo("workflow")} className="px-3 py-2 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)] transition-colors cursor-pointer">Workflow</button>
@@ -316,7 +324,7 @@ export const OnboardingTab: React.FC = () => {
                   <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border-color)] bg-[var(--color-surface-elevated)] px-3 py-1.5 text-[9px] font-mono uppercase tracking-[0.16em] text-[var(--accent-color)]">
                     <ShieldCheck size={12} /> {CURRENT_ONBOARDING_RELEASE.id}
                   </div>
-                  <div className="mt-2 pl-1 text-[8px] font-mono uppercase tracking-[0.16em] text-[var(--text-muted)]">Axiom version {CURRENT_ONBOARDING_RELEASE.appVersion}</div>
+                  <div className="mt-2 pl-1 text-[8px] font-mono uppercase tracking-[0.16em] text-[var(--text-muted)]">Axiom version {appVersion}</div>
                 </div>
               </div>
               <h1 className="max-w-3xl text-4xl sm:text-5xl xl:text-6xl font-semibold tracking-[-0.045em] leading-[1.04] text-[var(--text-light)]">
@@ -610,7 +618,7 @@ export const OnboardingTab: React.FC = () => {
             <button onClick={handleStart} className="group mt-8 inline-flex items-center gap-2 rounded-xl bg-[var(--accent-color)] px-5 py-3 text-xs font-mono font-bold text-[var(--color-primary-foreground)] shadow-lg hover:brightness-110 transition-all cursor-pointer">
               {rootPath ? "Create an Axiom" : "Open your first workspace"}<ArrowRight size={15} className="group-hover:translate-x-0.5 transition-transform" />
             </button>
-            <div className="mt-8 text-[8px] font-mono uppercase tracking-[0.18em] text-[var(--text-muted)]">Guide: {CURRENT_ONBOARDING_RELEASE.id} · Axiom v{CURRENT_ONBOARDING_RELEASE.appVersion}</div>
+            <div className="mt-8 text-[8px] font-mono uppercase tracking-[0.18em] text-[var(--text-muted)]">Guide: {CURRENT_ONBOARDING_RELEASE.id} · Axiom v{appVersion}</div>
           </div>
         </section>
       </main>
