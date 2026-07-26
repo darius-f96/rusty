@@ -5,6 +5,9 @@ on:
     tags:
       - "v*.*.*"
 
+permissions:
+  contents: write # needed for `gh release create`
+
 jobs:
   build-sign-notarize:
     runs-on: macos-14 # Apple Silicon (aarch64) runner
