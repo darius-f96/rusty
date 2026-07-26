@@ -3,6 +3,7 @@ import { Handle, Position } from "@xyflow/react";
 import { Sparkles, AlertCircle, CheckCircle2, Loader2, Pencil, Check, Trash2, Octagon, Minimize2, Maximize2, Settings } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
 import { CanvasTabContext } from "../tabs/canvas/CanvasTabContext";
+import styles from "./TaskNode.module.css";
 
 export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) => {
   const { tabId } = useContext(CanvasTabContext);
@@ -46,19 +47,12 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
   };
 
   // Get status configuration
-  const statusStyles = {
-    idle: { border: "border-[var(--border-color)] bg-[var(--bg-sidebar)] hover:border-[var(--border-active)] shadow-lg" },
-    running: { border: "border-[var(--accent-color)] bg-[var(--bg-sidebar)] shadow-[0_0_15px_var(--color-focus-ring)] animate-pulse" },
-    success: { border: "border-[var(--color-status-success-border)] bg-[var(--bg-sidebar)] shadow-[0_0_15px_var(--color-status-success-bg)]" },
-    error: { border: "border-[var(--color-status-danger-border)] bg-[var(--bg-sidebar)] shadow-[0_0_15px_var(--color-status-danger-bg)]" }
-  };
-
   return (
-    <div className={`w-80 rounded-lg border text-[var(--text-normal)] overflow-hidden transition-all duration-300 ${statusStyles[nodeStatus].border}`}>
+    <div className={`${styles.node} ${nodeStatus === "idle" ? "" : styles[nodeStatus]}`}>
       {/* Node Header (Draggable surface) */}
-      <div className="flex items-center justify-between border-b border-[var(--border-color)]/70 bg-[var(--color-surface-sunken)] px-3 py-2 select-none cursor-move">
-        <div className="flex items-center space-x-2 flex-1 mr-2 min-w-0">
-          <Sparkles size={14} className={nodeStatus === "running" ? "text-[var(--accent-color)] animate-spin flex-shrink-0" : "text-[var(--accent-color)] flex-shrink-0"} />
+      <div className={styles.header}>
+        <div className={styles.headerMain}>
+          <Sparkles size={14} className={`${styles.sparkle} ${nodeStatus === "running" ? styles.spinning : ""}`} />
           
           {isEditing ? (
             <input
@@ -72,15 +66,15 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
                 if (e.key === "Enter") handleNameSave();
                 if (e.key === "Escape") setIsEditing(false);
               }}
-              className="nodrag bg-[var(--bg-app)] border border-[var(--border-color)] rounded px-1.5 py-0.5 font-sans text-xs text-[var(--text-light)] focus:outline-none focus:border-[var(--border-active)] w-full"
+              className={`nodrag ${styles.nameInput}`}
               autoFocus
             />
           ) : (
-            <span className="font-sans text-xs font-semibold text-[var(--text-light)] truncate">{data.name || "AI Executor Node"}</span>
+            <span className={styles.name}>{data.name || "AI Executor Node"}</span>
           )}
         </div>
         
-        <div className="flex items-center space-x-1 flex-shrink-0">
+        <div className={styles.actions}>
           {isEditing ? (
             <button
               onClick={(e) => {
@@ -89,7 +83,7 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
               }}
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
-              className="nodrag text-[var(--color-status-success)] hover:text-[var(--color-status-success)] p-1 hover:bg-[var(--color-surface-elevated)] rounded transition-colors"
+              className={`nodrag ${styles.iconButton} ${styles.positive}`}
             >
               <Check size={14} />
             </button>
@@ -102,7 +96,7 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
-                className="nodrag text-[var(--text-muted)] hover:text-[var(--text-light)] p-1 hover:bg-[var(--color-surface-elevated)] rounded transition-colors"
+                className={`nodrag ${styles.iconButton}`}
                 title={isMinimized ? "Expand instructions" : "Minimize instructions"}
               >
                 {isMinimized ? <Maximize2 size={14} /> : <Minimize2 size={14} />}
@@ -114,7 +108,7 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
-                className="nodrag text-[var(--text-muted)] hover:text-[var(--text-light)] p-1 hover:bg-[var(--color-surface-elevated)] rounded transition-colors"
+                className={`nodrag ${styles.iconButton}`}
                 title="Rename node"
               >
                 <Pencil size={14} />
@@ -126,7 +120,7 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
-                className="nodrag text-[var(--text-muted)] hover:text-[var(--color-status-danger)] p-1 hover:bg-[var(--color-status-danger-bg)] rounded transition-colors"
+                className={`nodrag ${styles.iconButton} ${styles.danger}`}
                 title="Delete node"
               >
                 <Trash2 size={14} />
@@ -139,7 +133,7 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
                   onMouseDown={(e) => e.stopPropagation()}
-                  className="nodrag text-[var(--color-status-danger)] hover:text-[var(--color-status-danger)] p-1 hover:bg-[var(--color-status-danger-bg)] rounded transition-colors"
+                  className={`nodrag ${styles.iconButton} ${styles.danger}`}
                   title="Stop execution"
                 >
                   <Octagon size={14} />
@@ -149,20 +143,20 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
           )}
 
           {/* Status indicator */}
-          <div className="flex-shrink-0 pl-1">
-            {nodeStatus === "running" && <Loader2 size={14} className="text-[var(--accent-color)] animate-spin" />}
-            {nodeStatus === "success" && <CheckCircle2 size={14} className="text-[var(--color-status-success)]" />}
-            {nodeStatus === "error" && <AlertCircle size={14} className="text-[var(--color-status-danger)]" />}
+          <div className={styles.status}>
+            {nodeStatus === "running" && <Loader2 size={14} className={`${styles.runningIcon} ${styles.spinning}`} />}
+            {nodeStatus === "success" && <CheckCircle2 size={14} className={styles.successIcon} />}
+            {nodeStatus === "error" && <AlertCircle size={14} className={styles.errorIcon} />}
           </div>
         </div>
       </div>
 
       {/* Node Content */}
       {!isMinimized && (
-        <div className="p-3 border-t border-[var(--border-color)]/70">
+        <div className={styles.content}>
           {/* Query Prompt Input */}
           <div>
-            <label className="block text-[9px] uppercase font-bold text-[var(--text-muted)] font-mono mb-1.5">
+            <label className={styles.label}>
               Prompt Instructions
             </label>
             <textarea
@@ -173,15 +167,14 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
               placeholder="e.g. Add error logs to standard handlers, optimize map lookups..."
-              className="nodrag w-full bg-[var(--color-surface-sunken)] border border-[var(--border-color)]/70 rounded p-2 text-[11px] font-mono leading-relaxed text-[var(--text-light)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--border-active)] resize-none overflow-hidden"
-              style={{ minHeight: "60px", height: "auto" }}
+              className={`nodrag ${styles.prompt}`}
             />
           </div>
         </div>
       )}
 
       {/* Node Footer */}
-      <div className="bg-[var(--color-surface-sunken)] px-3 py-1.5 border-t border-[var(--border-color)] flex items-center justify-between text-[10px] select-none">
+      <div className={styles.footer}>
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -199,13 +192,13 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
           }}
           onPointerDown={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
-          className="nodrag text-[var(--text-muted)] hover:text-[var(--accent-color)] hover:scale-110 active:scale-95 transition-all p-0.5 rounded cursor-pointer flex items-center space-x-1 group"
+          className={`nodrag ${styles.openPane}`}
           title="Open Details Pane"
         >
-          <Settings size={13} className="group-hover:rotate-45 transition-transform duration-300 pointer-events-none" />
-          <span className="font-sans text-[9px] font-semibold pointer-events-none">Open Pane</span>
+          <Settings size={13} />
+          <span>Open Pane</span>
         </button>
-        <span className="text-[9px] font-mono text-[var(--text-muted)] truncate max-w-[150px]">
+        <span className={styles.model}>
           {data.model || "default"}
         </span>
       </div>

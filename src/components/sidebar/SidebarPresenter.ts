@@ -43,7 +43,7 @@ export const SIDEBAR_ICONS: SidebarIconItem[] = [
   },
   {
     id: "explorer",
-    label: "Files (⌘1)",
+    label: "Files",
     icon: Files,
     onClick: (_store, helpers) => {
       if (!helpers.isExplorerOpen) {

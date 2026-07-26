@@ -12,6 +12,7 @@ import { searchService, SearchMatch } from "../../services/searchService";
 import { MarkdownRenderer } from "../ui/MarkdownRenderer";
 import { InlineChat } from "../inline-chat/InlineChat";
 import { InlineChatEditorContext } from "../../services/inlineChatService";
+import { createMonacoEditorOptions } from "../../editor/monacoOptions";
 
 const LSP_EDITOR_ENABLED = false;
 const DEFINITION_MENU_WIDTH = 360;
@@ -36,6 +37,7 @@ interface FileTabProps {
 }
 
 export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
+  const editorFontSize = useWorkspaceStore((state) => state.typographyPreferences.editorFontSize);
   const [fileContent, setFileContent] = useState("");
   const [loading, setLoading] = useState(true);
   const [showBlame, setShowBlame] = useState(false);
@@ -612,7 +614,7 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
           onChange={handleEditorChange}
           onMount={handleEditorMount}
           keepCurrentModel
-          options={{
+          options={createMonacoEditorOptions(editorFontSize, {
             minimap: { enabled: true },
             scrollBeyondLastLine: false,
             lineNumbers: (num: number) => {
@@ -623,9 +625,8 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
               return String(num);
             },
             lineNumbersMinChars: showBlame ? maxBlameLength + 2 : 5,
-            fontSize: 12,
             tabSize: 2,
-          }}
+          })}
         />
       )}
     </div>

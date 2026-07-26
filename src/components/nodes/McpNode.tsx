@@ -2,6 +2,7 @@ import React, { useState, memo } from "react";
 import { Handle, Position } from "@xyflow/react";
 import { Plug, Pencil, Check, Trash2, ChevronDown } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
+import styles from "./McpNode.module.css";
 
 export const McpNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) => {
   const updateNode = useWorkspaceStore((state) => state.updateTaskNode);
@@ -29,11 +30,11 @@ export const McpNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) 
   };
 
   return (
-    <div className="w-72 rounded-xl border border-[var(--border-color)] bg-[var(--bg-sidebar)] text-[var(--text-normal)] overflow-hidden transition-all duration-300 hover:border-[var(--border-active)] shadow-lg">
+    <div className={styles.node}>
       {/* Node Header (Draggable surface) */}
-      <div className="flex items-center justify-between border-b border-[var(--border-color)] bg-gradient-to-r from-[var(--color-status-info-bg)] to-transparent px-3 py-2 select-none cursor-move">
-        <div className="flex items-center space-x-2 flex-1 mr-2 min-w-0">
-          <Plug size={14} className="text-[var(--color-status-info)] flex-shrink-0" />
+      <div className={styles.header}>
+        <div className={styles.titleGroup}>
+          <Plug size={14} className={styles.infoIcon} />
           {isEditing ? (
             <input
               type="text"
@@ -46,23 +47,23 @@ export const McpNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) 
                 if (e.key === "Enter") handleNameSave();
                 if (e.key === "Escape") setIsEditing(false);
               }}
-              className="nodrag bg-[var(--bg-app)] border border-[var(--border-color)] rounded px-1.5 py-0.5 font-sans text-xs text-[var(--text-light)] focus:outline-none focus:border-[var(--color-status-info-border)] w-full"
+              className={`nodrag ${styles.nameInput}`}
               autoFocus
             />
           ) : (
-            <span className="font-sans text-xs font-semibold text-[var(--text-light)] truncate">
+            <span className={styles.title}>
               {data.name || "MCP Context"}
             </span>
           )}
         </div>
 
-        <div className="flex items-center space-x-1.5 flex-shrink-0">
+        <div className={styles.actions}>
           {isEditing ? (
             <button
               onClick={handleNameSave}
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
-              className="nodrag text-[var(--color-status-success)] hover:text-[var(--color-status-success)] p-0.5 rounded transition-colors"
+              className={`nodrag ${styles.actionButton} ${styles.saveButton}`}
             >
               <Check size={13} />
             </button>
@@ -72,7 +73,7 @@ export const McpNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) 
                 onClick={(e) => { e.stopPropagation(); setIsEditing(true); }}
                 onPointerDown={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
-                className="nodrag text-[var(--text-muted)] hover:text-[var(--text-light)] p-0.5 rounded transition-colors cursor-pointer"
+                className={`nodrag ${styles.actionButton}`}
                 title="Rename node"
               >
                 <Pencil size={12} />
@@ -81,7 +82,7 @@ export const McpNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) 
                 onClick={(e) => { e.stopPropagation(); deleteNode(id); }}
                 onPointerDown={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
-                className="nodrag text-[var(--text-muted)] hover:text-[var(--color-status-danger)] p-0.5 rounded transition-colors cursor-pointer"
+                className={`nodrag ${styles.actionButton} ${styles.deleteButton}`}
                 title="Delete node"
               >
                 <Trash2 size={12} />
@@ -92,31 +93,31 @@ export const McpNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) 
       </div>
 
       {/* Node Content */}
-      <div className="p-3 space-y-3">
+      <div className={styles.content}>
         {/* MCP Server Selector */}
         <div>
-          <label className="block text-[9px] uppercase font-semibold text-[var(--text-muted)] font-sans mb-1">
+          <label className={styles.label}>
             MCP Server
           </label>
-          <div className="relative">
+          <div className={styles.selector}>
             <button
               onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
-              className="nodrag w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded-lg px-2.5 py-2 text-xs font-sans text-left flex items-center justify-between hover:border-[var(--border-active)] transition-colors"
+              className={`nodrag ${styles.selectorButton}`}
             >
-              <span className={selectedServer ? "text-[var(--text-light)] truncate" : "text-[var(--text-muted)]"}>
+              <span className={selectedServer ? styles.selectedText : styles.placeholder}>
                 {selectedServer ? (selectedServer.displayName || selectedServer.name) : "Select MCP server..."}
               </span>
-              <ChevronDown size={13} className="text-[var(--text-muted)] flex-shrink-0 ml-2" />
+              <ChevronDown size={13} className={styles.chevron} />
             </button>
             {menuOpen && (
               <div
-                className="absolute z-30 left-0 right-0 mt-1 bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-lg shadow-xl py-1 max-h-48 overflow-y-auto"
+                className={styles.menu}
                 onClick={(e) => e.stopPropagation()}
               >
                 {serverNames.length === 0 ? (
-                  <div className="px-3 py-2 text-[10px] font-mono text-[var(--text-muted)]">
+                  <div className={styles.empty}>
                     No servers configured. Add one in MCP Integration.
                   </div>
                 ) : (
@@ -127,10 +128,10 @@ export const McpNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) 
                         key={name}
                         onClick={(e) => { e.stopPropagation(); handleSelectServer(name); }}
                         onPointerDown={(e) => e.stopPropagation()}
-                        className="w-full text-left px-3 py-1.5 hover:bg-[var(--accent-bg)] text-xs font-sans text-[var(--text-normal)] hover:text-[var(--text-light)] transition-colors flex items-center justify-between"
+                        className={styles.menuItem}
                       >
-                        <span className="truncate">{srv.displayName || srv.name}</span>
-                        <span className={`text-[9px] font-mono ml-2 ${srv.enabled ? "text-[var(--color-status-success)]" : "text-[var(--text-muted)]"}`}>
+                        <span className={styles.truncate}>{srv.displayName || srv.name}</span>
+                        <span className={`${styles.transport} ${srv.enabled ? styles.enabled : ""}`}>
                           {srv.transport.type}
                         </span>
                       </button>
@@ -141,7 +142,7 @@ export const McpNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) 
             )}
           </div>
           {selectedServer && (
-            <div className="mt-1 text-[9px] font-mono text-[var(--text-muted)] truncate">
+            <div className={styles.serverDetail}>
               {selectedServer.transport.url || selectedServer.transport.command}
               {!selectedServer.enabled && " · disabled"}
             </div>
@@ -150,7 +151,7 @@ export const McpNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) 
 
         {/* Description / fetch intent */}
         <div>
-          <label className="block text-[9px] uppercase font-semibold text-[var(--text-muted)] font-sans mb-1">
+          <label className={styles.label}>
             Fetch Description
           </label>
           <textarea
@@ -160,8 +161,7 @@ export const McpNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) 
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
             placeholder="What should the LLM fetch from this MCP server?"
-            className="nodrag w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded-lg p-2 text-xs font-sans leading-relaxed text-[var(--text-light)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--color-status-info-border)] resize-none"
-            style={{ minHeight: "45px", height: "auto" }}
+            className={`nodrag ${styles.description}`}
             rows={2}
           />
         </div>

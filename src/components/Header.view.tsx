@@ -1,43 +1,42 @@
 import React from "react";
 import { Search } from "lucide-react";
 import { AxiomIcon } from "./AxiomIcon";
+import styles from "./Header.module.css";
 
 interface HeaderViewProps {
   onSearchOpen: () => void;
+  searchShortcut: string;
   quotaControl: React.ReactNode;
 }
 
-export const HeaderView: React.FC<HeaderViewProps> = ({ onSearchOpen, quotaControl }) => {
+export const HeaderView: React.FC<HeaderViewProps> = ({ onSearchOpen, searchShortcut, quotaControl }) => {
   return (
-    <header className="w-full h-10 px-4 flex items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-app)] select-none z-30 flex-shrink-0">
+    <header className={styles.header}>
       {/* Left Area: Logo */}
-      <div className="flex items-center space-x-2">
+      <div className={styles.brand}>
         <AxiomIcon size={20} />
-        <span className="text-xs font-black tracking-wider text-[var(--text-light)] font-sans">
+        <span className={styles.brandName}>
           Axiom
         </span>
       </div>
 
       {/* Middle Area: Interactive Search Bar */}
-      <div className="flex-1 max-w-sm mx-auto relative px-4">
-        <div className="relative group">
-          <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none" />
+      <div className={styles.searchArea}>
+        <div className={styles.searchControl}>
+          <Search size={12} className={styles.searchIcon} />
           <input
             type="text"
             placeholder="Search workspace..."
             readOnly
             onClick={onSearchOpen}
-            className="w-full h-7 pl-8 pr-12 rounded-md bg-[var(--bg-sidebar)] border border-[var(--border-color)] text-[11px] text-[var(--text-normal)] opacity-85 select-none cursor-pointer transition-all focus:outline-none hover:border-[var(--accent-color)]/40"
+            className={styles.searchInput}
           />
-          <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center space-x-0.5 pointer-events-none">
-            <kbd className="px-1 py-0.2 text-[8px] font-sans font-medium rounded border border-[var(--border-color)] bg-[var(--bg-app)] text-[var(--text-muted)]">⌘</kbd>
-            <kbd className="px-1 py-0.2 text-[8px] font-sans font-medium rounded border border-[var(--border-color)] bg-[var(--bg-app)] text-[var(--text-muted)]">K</kbd>
-          </div>
+          <kbd className={styles.shortcut}>{searchShortcut}</kbd>
         </div>
       </div>
 
       {/* Right Area: provider quota and subscription usage */}
-      <div className="min-w-[250px] flex justify-end">{quotaControl}</div>
+      <div className={styles.quota}>{quotaControl}</div>
     </header>
   );
 };

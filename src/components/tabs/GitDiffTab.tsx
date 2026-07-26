@@ -6,6 +6,7 @@ import { VfsRegistry } from "../../services/vfs";
 import { getFileTypeDetails } from "../../services/fileTypeService";
 import { useDiffViewMode } from "../../hooks/useDiffViewMode";
 import { DiffViewToggle } from "../ui/DiffViewToggle";
+import { createMonacoDiffOptions } from "../../editor/monacoOptions";
 
 interface GitDiffTabProps {
   tab: any;
@@ -15,6 +16,7 @@ interface GitDiffTabProps {
 export const GitDiffTab: React.FC<GitDiffTabProps> = ({ tab, groupId }) => {
   const rootPath = useWorkspaceStore((state) => state.rootPath);
   const editorGroups = useWorkspaceStore((state) => state.editorGroups);
+  const editorFontSize = useWorkspaceStore((state) => state.typographyPreferences.editorFontSize);
   
   const targetGroup = editorGroups.find((g) => g.id === groupId);
   const isActive = targetGroup ? targetGroup.activeTabId === tab.id : false;
@@ -150,14 +152,13 @@ export const GitDiffTab: React.FC<GitDiffTabProps> = ({ tab, groupId }) => {
             original={gitOriginalCode}
             modified={gitModifiedCode}
             onMount={handleEditorMount}
-            options={{
+            options={createMonacoDiffOptions(editorFontSize, {
               readOnly: true,
               minimap: { enabled: false },
               scrollBeyondLastLine: false,
               lineNumbers: "on",
               renderSideBySide,
-              fontSize: 11,
-            }}
+            })}
           />
         )}
       </div>

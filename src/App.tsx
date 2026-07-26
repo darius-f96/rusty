@@ -6,6 +6,8 @@ import { useWorkspaceStore } from "./store";
 import { SearchPalette } from "./components/SearchPalette";
 import { AlertModal } from "./components/AlertModal";
 import { TerminalPanel } from "./components/TerminalPanel";
+import { matchesShortcut } from "./preferences/shortcuts";
+import styles from "./App.module.css";
 
 const MAX_CONSOLE_ARGUMENT_LENGTH = 2_000;
 const MAX_CONSOLE_ENTRY_LENGTH = 8_000;
@@ -48,6 +50,7 @@ function formatConsoleEntry(args: unknown[]): string {
 function App() {
   const addDevLog = useWorkspaceStore((state) => state.addDevLog);
   const initTerminalState = useWorkspaceStore((state) => state.initTerminalState);
+  const keyboardShortcuts = useWorkspaceStore((state) => state.keyboardShortcuts);
   const [searchOpen, setSearchOpen] = useState(false);
 
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -221,12 +224,16 @@ function App() {
 
 
 
-  // Global Keyboard Shortcuts (Cmd+W or Ctrl+W to close active tab, Cmd+1 to toggle sidebar)
+  // Global user-configurable shortcuts.
   // Also blocks reload (Cmd/Ctrl+R, F5) and devtools (F12, Cmd/Ctrl+Shift+I/J/C, Cmd/Ctrl+Alt+I)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
       const key = e.key.toLowerCase();
+      const target = e.target instanceof Element ? e.target : null;
+
+      // Shortcut recorders own the keystroke while focused.
+      if (target?.closest("[data-shortcut-recorder]")) return;
 
       // Reload (hard + soft)
       if (mod && key === "r") {
@@ -264,7 +271,7 @@ function App() {
         return;
       }
 
-      if (mod && key === "w") {
+      if (matchesShortcut(e, keyboardShortcuts.closeActiveTab)) {
         e.preventDefault();
         e.stopPropagation();
 
@@ -275,11 +282,11 @@ function App() {
           state.closeTab(currentActive, state.activeGroupId);
           console.log(`Shortcut captured: Closed active tab ${currentActive}`);
         }
-      } else if (mod && key === "k") {
+      } else if (matchesShortcut(e, keyboardShortcuts.openSearch)) {
         e.preventDefault();
         e.stopPropagation();
         setSearchOpen(true);
-      } else if (mod && (e.key === "1" || e.code === "Digit1")) {
+      } else if (matchesShortcut(e, keyboardShortcuts.toggleExplorer)) {
         e.preventDefault();
         e.stopPropagation();
         toggleExplorer();
@@ -298,15 +305,15 @@ function App() {
       window.removeEventListener("keydown", handleKeyDown, true);
       window.removeEventListener("contextmenu", handleContextMenu);
     };
-  }, [toggleExplorer]);
+  }, [keyboardShortcuts, toggleExplorer]);
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[var(--bg-app)] text-[var(--text-light)] font-sans">
+    <div className={`ide-typography-scope ${styles.app}`}>
       {/* 1. Header Bar */}
       <Header onSearchOpen={() => setSearchOpen(true)} />
 
       {/* 2. Workspace Cards Content Area */}
-      <div className="flex-1 flex min-h-0 w-full p-3 pt-1 gap-3 overflow-hidden">
+      <div className={styles.workbench}>
         {/* Sidebar with explorer and icon dock */}
         <Sidebar
           sidebarWidth={sidebarWidth}
@@ -322,7 +329,7 @@ function App() {
         />
 
         {/* Main Workspace Card Panel */}
-        <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative bg-[var(--bg-editor)] border border-[var(--border-color)] rounded-[20px] shadow-2xl">
+        <div className={styles.workspace}>
           {/* Workspace dynamic tabs and contents */}
           <Workspace />
 

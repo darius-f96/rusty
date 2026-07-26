@@ -9,7 +9,6 @@ import {
 } from "./types";
 import {
   Plug,
-  X,
   Plus,
   Trash2,
   AlertCircle,
@@ -17,6 +16,8 @@ import {
   Loader2,
   Info,
 } from "lucide-react";
+import { Modal } from "../ui/Modal/Modal";
+import { Button } from "../ui/Button/Button";
 import styles from "./McpIntegrationModal.module.css";
 
 const TRANSPORT_OPTIONS: { value: TransportType; label: string }[] = [
@@ -246,32 +247,30 @@ export const McpIntegrationModal: React.FC<McpIntegrationModalProps> = ({
   };
 
   return (
-    <div className={styles.overlay} role="dialog" aria-modal="true">
-      <form className={styles.modal} onSubmit={handleSubmit(onSubmit)}>
-        <div className={styles.header}>
-          <div className={styles.headerLeft}>
-            <Plug size={18} className={styles.headerIcon} />
-            <div>
-              <h2 className={styles.title}>
-                {initialConfig ? "Edit MCP Server" : "Add MCP Server"}
-              </h2>
-              <p className={styles.subtitle}>
-                {initialConfig
-                  ? `Editing: ${initialConfig.displayName || initialConfig.name}`
-                  : "Configure a Model Context Protocol server"}
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            className={styles.closeBtn}
-            onClick={onCancel}
-            aria-label="Close"
-          >
-            <X size={16} />
-          </button>
-        </div>
-
+    <Modal
+      id="mcp-integration"
+      title={initialConfig ? "Edit MCP Server" : "Add MCP Server"}
+      description={
+        initialConfig
+          ? `Editing: ${initialConfig.displayName || initialConfig.name}`
+          : "Configure a Model Context Protocol server"
+      }
+      icon={Plug}
+      onClose={onCancel}
+      size="lg"
+      scrollableBody
+      footer={
+        <>
+          <Button id="mcp-cancel" type="button" variant="secondary" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button id="mcp-save" type="button" variant="primary" onClick={handleSubmit(onSubmit)}>
+            Save
+          </Button>
+        </>
+      }
+    >
+      <form id="mcp-integration-form" onSubmit={handleSubmit(onSubmit)}>
         <div className={styles.body}>
           {/* Identity */}
           <section className={styles.section}>
@@ -843,26 +842,7 @@ export const McpIntegrationModal: React.FC<McpIntegrationModalProps> = ({
             </div>
           </section>
 
-          {test.status !== "idle" && (
-            <div
-              className={`${styles.testResult} ${
-                test.status === "success"
-                  ? styles.testSuccess
-                  : test.status === "error"
-                  ? styles.testError
-                  : styles.testPending
-              }`}
-            >
-              {test.status === "success" && <CheckCircle2 size={15} />}
-              {test.status === "error" && <AlertCircle size={15} />}
-              {test.status === "testing" && <Loader2 size={15} className={styles.spin} />}
-              <span>{test.message}</span>
-            </div>
-          )}
-        </div>
-
-        <div className={styles.footer}>
-          <div className={styles.footerLeft}>
+          <div className={styles.testRow}>
             <button
               type="button"
               className={`${styles.btn} ${styles.btnTest}`}
@@ -875,24 +855,25 @@ export const McpIntegrationModal: React.FC<McpIntegrationModalProps> = ({
                 "Test connection"
               )}
             </button>
-          </div>
-          <div className={styles.footerRight}>
-            <button
-              type="button"
-              className={`${styles.btn} ${styles.btnSecondary}`}
-              onClick={onCancel}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className={`${styles.btn} ${styles.btnPrimary}`}
-            >
-              Save
-            </button>
+            {test.status !== "idle" && (
+              <div
+                className={`${styles.testResult} ${
+                  test.status === "success"
+                    ? styles.testSuccess
+                    : test.status === "error"
+                    ? styles.testError
+                    : styles.testPending
+                }`}
+              >
+                {test.status === "success" && <CheckCircle2 size={15} />}
+                {test.status === "error" && <AlertCircle size={15} />}
+                {test.status === "testing" && <Loader2 size={15} className={styles.spin} />}
+                <span>{test.message}</span>
+              </div>
+            )}
           </div>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 };

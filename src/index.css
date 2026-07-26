@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./styles/tokens.css";
 
 @layer base {
   :root {
@@ -6,8 +7,8 @@
   }
 
   body {
-    background-color: var(--bg-app);
-    color: var(--text-normal);
+    background-color: var(--color-surface-app);
+    color: var(--color-fg-default);
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     margin: 0;
     overflow: hidden;
@@ -21,6 +22,67 @@
     background-color: var(--color-interaction-selected);
     color: inherit;
   }
+}
+
+.ide-typography-scope {
+  font-size: var(--font-size-ui-md);
+  line-height: var(--line-height-ui);
+}
+
+.chat-typography-scope {
+  font-size: var(--font-size-chat-md);
+  line-height: var(--line-height-chat);
+}
+
+/* Compatibility mapping while existing chrome moves from Tailwind font-size
+   utilities to component-level typography roles. */
+.ide-typography-scope .text-xs {
+  font-size: var(--font-size-ui-md);
+}
+
+.ide-typography-scope .text-sm {
+  font-size: var(--font-size-ui-lg);
+}
+
+.ide-typography-scope .text-lg,
+.ide-typography-scope .text-xl {
+  font-size: var(--font-size-ui-xl);
+}
+
+.ide-typography-scope :where([class*="text-[8px]"], [class*="text-[9px]"], [class*="text-[10px]"]) {
+  font-size: var(--font-size-ui-xs);
+}
+
+.ide-typography-scope :where([class*="text-[11px]"]) {
+  font-size: var(--font-size-ui-sm);
+}
+
+.ide-typography-scope :where([class*="text-[12px]"]) {
+  font-size: var(--font-size-ui-md);
+}
+
+.ide-typography-scope :where([class*="text-[13px]"], [class*="text-[14px]"]) {
+  font-size: var(--font-size-ui-lg);
+}
+
+.chat-typography-scope .text-xs {
+  font-size: var(--font-size-chat-md);
+}
+
+.chat-typography-scope .text-sm {
+  font-size: var(--font-size-chat-lg);
+}
+
+.chat-typography-scope :where([class*="text-[8px]"], [class*="text-[9px]"], [class*="text-[10px]"]) {
+  font-size: var(--font-size-chat-xs);
+}
+
+.chat-typography-scope :where([class*="text-[11px]"]) {
+  font-size: var(--font-size-chat-sm);
+}
+
+.chat-typography-scope :where([class*="text-[12px]"], [class*="text-[13px]"]) {
+  font-size: var(--font-size-chat-md);
 }
 
 /* Theme-driven highlight.js rules. Keeping these local avoids a dark-only

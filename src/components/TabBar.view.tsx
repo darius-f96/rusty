@@ -2,6 +2,7 @@ import React, { RefObject } from "react";
 import { X, Cpu, Settings, GitCommit, ChevronDown, FolderOpen, Columns, Wand2, BookOpen } from "lucide-react";
 import { FileIcon } from "../services/fileTypeService";
 import { AxiomIcon } from "./AxiomIcon";
+import styles from "./TabBar.module.css";
 
 interface TabBarViewProps {
   groupId: string;
@@ -39,14 +40,12 @@ export const TabBarView: React.FC<TabBarViewProps> = ({
           setActiveGroupId(groupId);
         }
       }}
-      className={`flex items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-header)] h-9 select-none z-20 relative flex-shrink-0 w-full ${
-        activeGroupId === groupId ? "shadow-[inset_0_-1px_0_var(--accent-color)]" : ""
-      }`}
+      className={`${styles.bar} ${activeGroupId === groupId ? styles.focused : ""}`}
     >
       {/* Scrollable Tab Container */}
       <div
         ref={tabsContainerRef}
-        className="flex-1 flex items-stretch h-full overflow-x-auto scrollbar-none scroll-smooth min-w-0 tabs-container"
+        className={`${styles.tabs} scrollbar-none tabs-container`}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => {
           const tabId = e.dataTransfer.getData("text/plain");
@@ -58,9 +57,6 @@ export const TabBarView: React.FC<TabBarViewProps> = ({
       >
         {openTabs.map((tab) => {
           const isActive = tab.id === activeTabId;
-          const activeTabStyles = tab.type === "canvas"
-            ? "bg-[var(--bg-canvas)] border-b-[var(--bg-canvas)] text-[var(--text-light)] font-semibold"
-            : "bg-[var(--bg-editor)] border-b-[var(--bg-editor)] text-[var(--text-light)] font-semibold";
           const isFocusedGroup = activeGroupId === groupId;
 
           return (
@@ -77,17 +73,13 @@ export const TabBarView: React.FC<TabBarViewProps> = ({
                 e.dataTransfer.setData("text/plain", tab.id);
                 e.dataTransfer.setData("from-group-id", groupId);
               }}
-              className={`group flex items-center space-x-2 px-4.5 h-[calc(100%+1px)] -mb-[1px] border-r border-[var(--border-color)] text-[11px] font-mono cursor-pointer select-none transition-all flex-shrink-0 rounded-t-xl relative z-10 ${
-                isActive
-                  ? `${activeTabStyles} border-b`
-                  : "bg-[var(--bg-header)] text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)]/20 border-b border-b-transparent"
+              className={`${styles.tab} ${
+                isActive ? (tab.type === "canvas" ? styles.activeCanvas : styles.activeEditor) : ""
               }`}
             >
               {/* Top Accent Line for Active Tab of Active Group */}
               {isActive && (
-                <div className={`absolute top-0 left-0 right-0 h-[2px] rounded-t-xl ${
-                  isFocusedGroup ? "bg-[var(--accent-color)]" : "bg-[var(--border-color)]"
-                }`} />
+                <div className={`${styles.accent} ${isFocusedGroup ? styles.accentFocused : ""}`} />
               )}
 
               {tab.type === "canvas" && (
@@ -95,8 +87,8 @@ export const TabBarView: React.FC<TabBarViewProps> = ({
                   size={11}
                   className={
                     isActive
-                      ? "text-[var(--accent-color)]"
-                      : "text-[var(--text-muted)]"
+                      ? styles.iconActive
+                      : styles.icon
                   }
                 />
               )}
@@ -104,7 +96,7 @@ export const TabBarView: React.FC<TabBarViewProps> = ({
                 <FileIcon
                   fileName={tab.title}
                   size={11}
-                  className="flex-shrink-0"
+                  className={styles.icon}
                 />
               )}
               {tab.type === "task" && (
@@ -112,8 +104,8 @@ export const TabBarView: React.FC<TabBarViewProps> = ({
                   size={11}
                   className={
                     isActive
-                      ? "text-[var(--accent-color)]"
-                      : "text-[var(--text-muted)]"
+                      ? styles.iconActive
+                      : styles.icon
                   }
                 />
               )}
@@ -122,8 +114,8 @@ export const TabBarView: React.FC<TabBarViewProps> = ({
                   size={11}
                   className={
                     isActive
-                      ? "text-[var(--accent-color)]"
-                      : "text-[var(--text-muted)]"
+                      ? styles.iconActive
+                      : styles.icon
                   }
                 />
               )}
@@ -132,8 +124,8 @@ export const TabBarView: React.FC<TabBarViewProps> = ({
                   size={11}
                   className={
                     isActive
-                      ? "text-[var(--accent-color)]"
-                      : "text-[var(--text-muted)]"
+                      ? styles.iconActive
+                      : styles.icon
                   }
                 />
               )}
@@ -142,8 +134,8 @@ export const TabBarView: React.FC<TabBarViewProps> = ({
                   size={11}
                   className={
                     isActive
-                      ? "text-[var(--accent-color)]"
-                      : "text-[var(--text-muted)]"
+                      ? styles.iconActive
+                      : styles.icon
                   }
                 />
               )}
@@ -152,8 +144,8 @@ export const TabBarView: React.FC<TabBarViewProps> = ({
                   size={11}
                   className={
                     isActive
-                      ? "text-[var(--accent-color)]"
-                      : "text-[var(--text-muted)]"
+                      ? styles.iconActive
+                      : styles.icon
                   }
                 />
               )}
@@ -162,8 +154,8 @@ export const TabBarView: React.FC<TabBarViewProps> = ({
                   size={11}
                   className={
                     isActive
-                      ? "text-[var(--accent-color)]"
-                      : "text-[var(--text-muted)]"
+                      ? styles.iconActive
+                      : styles.icon
                   }
                 />
               )}
@@ -172,27 +164,27 @@ export const TabBarView: React.FC<TabBarViewProps> = ({
                   size={11}
                   className={
                     isActive
-                      ? "text-[var(--accent-color)]"
-                      : "text-[var(--text-muted)]"
+                      ? styles.iconActive
+                      : styles.icon
                   }
                 />
               )}
               {tab.type === "onboarding" && (
                 <BookOpen
                   size={11}
-                  className={isActive ? "text-[var(--accent-color)]" : "text-[var(--text-muted)]"}
+                  className={isActive ? styles.iconActive : styles.icon}
                 />
               )}
 
-              <span className="truncate max-w-[120px]">{tab.title}</span>
+              <span className={styles.title}>{tab.title}</span>
 
-              <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+              <div className={styles.tabActions}>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     splitTab(tab.id, groupId);
                   }}
-                  className="p-0.5 rounded-sm hover:bg-[var(--border-color)]/80 text-[var(--text-muted)] hover:text-[var(--text-light)]"
+                  className={styles.iconButton}
                   title="Split editor"
                 >
                   <Columns size={10} />
@@ -202,7 +194,7 @@ export const TabBarView: React.FC<TabBarViewProps> = ({
                     e.stopPropagation();
                     closeTab(tab.id, groupId);
                   }}
-                  className="p-0.5 rounded-sm hover:bg-[var(--border-color)]/80 text-[var(--text-muted)] hover:text-[var(--text-light)]"
+                  className={styles.iconButton}
                   title="Close tab"
                 >
                   <X size={10} />
@@ -214,13 +206,13 @@ export const TabBarView: React.FC<TabBarViewProps> = ({
       </div>
 
       {/* Tab Switcher Dropdown */}
-      <div className="relative flex items-center h-full px-2 border-l border-[var(--border-color)] bg-[var(--bg-header)] z-30 flex-shrink-0">
+      <div className={styles.switcher}>
         <button
           onClick={(e) => {
             e.stopPropagation();
             setDropdownOpen(!dropdownOpen);
           }}
-          className="p-1 rounded hover:bg-[var(--accent-bg)]/50 text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer"
+          className={styles.iconButton}
           title="Open Editors"
         >
           <ChevronDown size={14} />
@@ -230,11 +222,11 @@ export const TabBarView: React.FC<TabBarViewProps> = ({
           <>
             {/* Click-away backdrop overlay */}
             <div
-              className="fixed inset-0 z-40 bg-transparent"
+              className={styles.backdrop}
               onClick={() => setDropdownOpen(false)}
             />
-            <div className="absolute right-2 top-8 w-64 bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-lg shadow-2xl py-1.5 z-50 font-mono text-[11px] max-h-80 overflow-y-auto">
-              <div className="px-3 py-1 text-[9px] uppercase tracking-wider font-bold text-[var(--text-muted)] border-b border-[var(--border-color)]/30 pb-1.5 mb-1.5">
+            <div className={styles.menu}>
+              <div className={styles.menuTitle}>
                 Open Editors
               </div>
               {openTabs.map((tab) => {
@@ -246,13 +238,9 @@ export const TabBarView: React.FC<TabBarViewProps> = ({
                       setActiveTabId(tab.id, groupId);
                       setDropdownOpen(false);
                     }}
-                    className={`group flex items-center justify-between px-3 py-1.5 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] cursor-pointer transition-colors ${
-                      isActive
-                        ? "text-[var(--accent-color)] font-semibold bg-[var(--accent-bg)]/20"
-                        : "text-[var(--text-normal)]"
-                    }`}
+                    className={`${styles.menuRow} ${isActive ? styles.menuRowActive : ""}`}
                   >
-                    <div className="flex items-center space-x-2 truncate mr-4">
+                    <div className={styles.menuIdentity}>
                       {tab.type === "canvas" && <AxiomIcon size={11} />}
                       {tab.type === "file" && (
                         <FileIcon fileName={tab.title} size={11} />
@@ -264,7 +252,7 @@ export const TabBarView: React.FC<TabBarViewProps> = ({
                       {tab.type === "git-diff" && <GitCommit size={11} />}
                       {tab.type === "workspace" && <FolderOpen size={11} />}
                       {tab.type === "onboarding" && <BookOpen size={11} />}
-                      <span className="truncate">{tab.title}</span>
+                      <span className={styles.title}>{tab.title}</span>
                     </div>
 
                     <button
@@ -275,7 +263,7 @@ export const TabBarView: React.FC<TabBarViewProps> = ({
                           setDropdownOpen(false);
                         }
                       }}
-                      className="p-0.5 rounded-sm hover:bg-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--color-status-danger)] opacity-0 group-hover:opacity-100 transition-opacity"
+                      className={`${styles.iconButton} ${styles.menuClose}`}
                     >
                       <X size={10} />
                     </button>

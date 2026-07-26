@@ -13,6 +13,8 @@ import { Save, RotateCcw } from "lucide-react";
 import { useDiffViewMode } from "../../../hooks/useDiffViewMode";
 import { DiffViewToggle } from "../../ui/DiffViewToggle";
 import { getMonacoLanguageId } from "../../../services/lspLanguage";
+import { useWorkspaceStore } from "../../../store";
+import { createMonacoDiffOptions } from "../../../editor/monacoOptions";
 
 interface EdgeDiffTabContentProps {
   sourceModifiedFiles: string[];
@@ -33,6 +35,7 @@ export const EdgeDiffTabContent: React.FC<EdgeDiffTabContentProps> = ({
   modifiedCode,
   tabId
 }) => {
+  const editorFontSize = useWorkspaceStore((state) => state.typographyPreferences.editorFontSize);
   const [editedCode, setEditedCode] = useState<string>("");
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -146,14 +149,13 @@ export const EdgeDiffTabContent: React.FC<EdgeDiffTabContentProps> = ({
               original={originalCode}
               modified={displayCode}
               onMount={handleEditorMount}
-              options={{
+              options={createMonacoDiffOptions(editorFontSize, {
                 readOnly: false,
                 minimap: { enabled: false },
                 scrollBeyondLastLine: false,
                 lineNumbers: "on",
                 renderSideBySide,
-                fontSize: 11,
-              }}
+              })}
             />
           </div>
         ) : (

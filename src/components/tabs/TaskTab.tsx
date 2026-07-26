@@ -11,6 +11,7 @@ import { DiffViewToggle } from "../ui/DiffViewToggle";
 import { Chat } from "../ui/Chat";
 import { ChatInput } from "../ui/ChatInput";
 import { selectableProviderModels } from "../../store/providerHelpers";
+import { createMonacoDiffOptions } from "../../editor/monacoOptions";
 
 const EMPTY_ARRAY: any[] = [];
 
@@ -28,6 +29,7 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, onStopExec
   const activeCustomProviderId = useWorkspaceStore((state) => state.activeCustomProviderId);
   const activeModel = useWorkspaceStore((state) => state.activeModel);
   const updateTaskNode = useWorkspaceStore((state) => state.updateTaskNode);
+  const editorFontSize = useWorkspaceStore((state) => state.typographyPreferences.editorFontSize);
   const chatHistory = useWorkspaceStore((state) => state.globalChatHistory[taskNodeId] || EMPTY_ARRAY);
   
   const targetGroup = editorGroups.find((g) => g.id === groupId);
@@ -377,14 +379,13 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, onStopExec
                     original={originalCode}
                     modified={displayCode}
                     onMount={handleEditorMount}
-                    options={{
+                    options={createMonacoDiffOptions(editorFontSize, {
                       readOnly: false,
                       minimap: { enabled: false },
                       scrollBeyondLastLine: false,
                       lineNumbers: "on",
                       renderSideBySide,
-                      fontSize: 11,
-                    }}
+                    })}
                   />
                 )}
               </div>

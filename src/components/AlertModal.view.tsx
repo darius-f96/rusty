@@ -1,12 +1,15 @@
 import React from "react";
 import { CheckCircle2, AlertCircle, Info, AlertTriangle } from "lucide-react";
-import { Modal } from "./Modal";
+import { Modal } from "./ui/Modal/Modal";
+import { Button } from "./ui/Button/Button";
+import { Callout } from "./ui/Callout/Callout";
+import type { CalloutVariant } from "./ui/Callout/Callout";
 
 export const variantConfig = {
-  success: { Icon: CheckCircle2, iconClass: "text-[var(--color-status-success)]", titleDefault: "Success" },
-  error: { Icon: AlertCircle, iconClass: "text-[var(--color-status-danger)]", titleDefault: "Error" },
-  info: { Icon: Info, iconClass: "text-[var(--accent-color)]", titleDefault: "Info" },
-  danger: { Icon: AlertTriangle, iconClass: "text-[var(--color-status-danger)]", titleDefault: "Warning" },
+  success: { Icon: CheckCircle2, calloutVariant: "success" as CalloutVariant, titleDefault: "Success" },
+  error: { Icon: AlertCircle, calloutVariant: "danger" as CalloutVariant, titleDefault: "Error" },
+  info: { Icon: Info, calloutVariant: "info" as CalloutVariant, titleDefault: "Info" },
+  danger: { Icon: AlertTriangle, calloutVariant: "danger" as CalloutVariant, titleDefault: "Warning" },
 } as const;
 
 export type NotificationVariant = keyof typeof variantConfig;
@@ -28,19 +31,20 @@ export const AlertModalView: React.FC<AlertModalViewProps> = ({ notification, cl
 
   return (
     <Modal
+      id="alert-modal"
       title={notification.title || cfg.titleDefault}
       icon={cfg.Icon}
-      iconClassName={cfg.iconClass}
       onClose={clear}
-      onConfirm={clear}
-      confirmLabel="OK"
-      variant={isDanger ? "danger" : "default"}
-      width="w-[420px]"
+      size="sm"
+      footer={
+        <Button id="alert-modal-ok" type="button" variant={isDanger ? "danger" : "primary"} onClick={clear}>
+          OK
+        </Button>
+      }
     >
-      <div className={`flex items-start space-x-3 text-xs font-mono leading-relaxed ${isDanger ? "text-[var(--color-status-danger)]" : "text-[var(--text-normal)]"}`}>
-        <cfg.Icon size={18} className={`flex-shrink-0 mt-0.5 ${cfg.iconClass}`} />
+      <Callout variant={cfg.calloutVariant}>
         <span className="whitespace-pre-wrap">{notification.message}</span>
-      </div>
+      </Callout>
     </Modal>
   );
 };

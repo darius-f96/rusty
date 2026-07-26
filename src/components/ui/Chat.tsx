@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useLayoutEffect } from "react";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { FileText, Folder, Loader2, Terminal } from "lucide-react";
 import { AgentActivityCard } from "./SubagentActivityPanel";
+import styles from "./Chat.module.css";
 
 export interface Message {
   id: string;
@@ -108,9 +109,6 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
 
     const isUser = msg.role === "user";
     const title = isUser ? "USER" : "AGENT";
-    const borderLeftClass = isUser ? "border-l-[var(--accent-color)]" : "border-l-red-700/80";
-    const headerTextColor = isUser ? "text-[var(--accent-color)]" : "text-[var(--color-status-danger)]";
-    const bgClass = isUser ? "bg-[var(--accent-bg)]/5" : "bg-[var(--bg-sidebar)]/30";
 
     let formattedTime = "";
     if (msg.timestamp) {
@@ -123,42 +121,42 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
     }
 
     return (
-      <div key={msg.id} className={`mb-5 border border-[var(--border-color)] border-l-4 ${borderLeftClass} rounded-lg ${bgClass} overflow-hidden`}>
+      <div key={msg.id} className={`${styles.message} ${isUser ? styles.userMessage : styles.agentMessage}`}>
         {/* Programmatic Header */}
-        <div className="flex items-center justify-between px-3.5 py-2 bg-[var(--color-log-header)] border-b border-[var(--color-border-subtle)] text-[10px] font-mono select-none">
-          <div className="flex items-center space-x-2">
-            <span className={`font-bold tracking-wider ${headerTextColor}`}>[{title}]</span>
+        <div className={styles.messageHeader}>
+          <div className={styles.messageIdentity}>
+            <span className={isUser ? styles.userTitle : styles.agentTitle}>[{title}]</span>
             {formattedTime && (
-              <span className="text-[var(--text-muted)] font-light">{formattedTime}</span>
+              <span className={styles.time}>{formattedTime}</span>
             )}
           </div>
-          <span className="text-[var(--text-muted)] uppercase tracking-wider text-[9px] font-light">
+          <span className={styles.messageType}>
             {isUser ? "Input Query" : "Execution Result"}
           </span>
         </div>
 
         {/* Content Area */}
-        <div className="p-4 text-xs leading-relaxed text-[var(--text-normal)] select-text text-left max-w-full overflow-hidden">
-          <div className="prose max-w-none">
+        <div className={styles.content}>
+          <div>
             <MarkdownRenderer content={msg.content} />
           </div>
 
           {/* Attachments List */}
           {msg.attachments && msg.attachments.length > 0 && (
-            <div className="mt-4 pt-3 border-t border-[var(--border-color)]/20">
-              <div className="text-[9px] font-mono text-[var(--text-muted)] mb-2 uppercase tracking-wider font-semibold">Context Documents:</div>
-              <div className="flex flex-wrap gap-2">
-                {msg.attachments.map((att, idx) => (
+            <div className={styles.attachments}>
+              <div className={styles.attachmentLabel}>Context Documents:</div>
+              <div className={styles.attachmentList}>
+                {msg.attachments.map((att) => (
                   <div
-                    key={idx}
-                    className="flex items-center space-x-2 px-2.5 py-1 rounded bg-[var(--color-surface-elevated)] border border-[var(--color-border-subtle)] text-[10px] font-mono text-[var(--color-fg-default)] hover:border-[var(--color-border-focus)] transition-colors"
+                    key={att.path}
+                    className={styles.attachment}
                   >
                     {att.isDir ? (
                       <Folder size={11} className="text-[var(--color-status-warning)]" />
                     ) : (
                       <FileText size={11} className="text-[var(--color-status-info)]" />
                     )}
-                    <span className="truncate max-w-[200px]">{att.name}</span>
+                    <span className={styles.attachmentName} title={att.name}>{att.name}</span>
                   </div>
                 ))}
               </div>
@@ -179,18 +177,18 @@ export const Chat: React.FC<ChatProps> = ({ messages, isStreaming = false, strea
     <div
       ref={containerRef}
       onScroll={handleScroll}
-      className={`flex-1 overflow-y-auto ${compact ? "px-1" : "px-4"} py-4 space-y-4 scrollbar-wider min-h-0 min-w-0`}
+      className={`chat-typography-scope ${styles.container} flex-1 overflow-y-auto ${compact ? "px-1" : "px-4"} py-4 space-y-4 scrollbar-wider min-h-0 min-w-0`}
     >
       {visibleMessages.length === 0 ? (
-        <div className="h-full flex flex-col items-center justify-center text-center text-[var(--text-muted)] select-none py-12">
+        <div className={`${styles.empty} h-full flex flex-col items-center justify-center text-center select-none py-12`}>
           <Terminal size={32} className="text-[var(--accent-color)]/30 mb-3 animate-pulse" />
-          <p className="text-xs font-mono">Agent interface initialized. Ready to receive commands.</p>
+          <p>Agent interface initialized. Ready to receive commands.</p>
         </div>
       ) : (
         visibleMessages.map(renderMessage)
       )}
       {isStreaming && (
-        <div className="flex items-center gap-2 px-3 py-2 text-[11px] font-mono text-[var(--text-muted)]" aria-live="polite">
+        <div className={`${styles.streaming} flex items-center gap-2 px-3 py-2`} aria-live="polite">
           <Loader2 size={14} className="animate-spin text-[var(--accent-color)]" />
           <span>{streamingLabel}</span>
         </div>

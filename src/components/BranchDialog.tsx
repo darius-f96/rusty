@@ -1,6 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
-import { GitBranch, GitMerge, GitPullRequest, Trash2, AlertCircle, AlertTriangle } from "lucide-react";
-import { Modal } from "./Modal";
+import { GitBranch, GitMerge, GitPullRequest, Trash2, AlertCircle } from "lucide-react";
+import { Modal } from "./ui/Modal/Modal";
+import { Button } from "./ui/Button/Button";
+import { Field } from "./ui/FormControls/Field";
+import { Input } from "./ui/FormControls/Input";
+import { Checkbox } from "./ui/FormControls/Checkbox";
+import { Callout } from "./ui/Callout/Callout";
+import styles from "./BranchDialog.module.css";
 
 interface BranchDialogProps {
   mode: "create" | "merge" | "rebase" | "delete";
@@ -31,8 +37,7 @@ export const BranchDialog: React.FC<BranchDialogProps> = ({ mode, currentBranch,
       placeholder: "e.g. feature/my-new-branch",
       label: "Branch name",
       confirmLabel: "Create",
-      needsInput: true,
-      variant: "default" as const,
+      danger: false,
     },
     merge: {
       icon: GitMerge,
@@ -40,8 +45,7 @@ export const BranchDialog: React.FC<BranchDialogProps> = ({ mode, currentBranch,
       placeholder: "",
       label: "Merge into current branch",
       confirmLabel: "Merge",
-      needsInput: false,
-      variant: "default" as const,
+      danger: false,
     },
     rebase: {
       icon: GitPullRequest,
@@ -49,8 +53,7 @@ export const BranchDialog: React.FC<BranchDialogProps> = ({ mode, currentBranch,
       placeholder: "",
       label: "Rebase current branch onto",
       confirmLabel: "Rebase",
-      needsInput: false,
-      variant: "default" as const,
+      danger: false,
     },
     delete: {
       icon: Trash2,
@@ -58,8 +61,7 @@ export const BranchDialog: React.FC<BranchDialogProps> = ({ mode, currentBranch,
       placeholder: "",
       label: "Select a branch to delete",
       confirmLabel: "Delete",
-      needsInput: false,
-      variant: "danger" as const,
+      danger: true,
     },
   }[mode];
 
@@ -103,21 +105,16 @@ export const BranchDialog: React.FC<BranchDialogProps> = ({ mode, currentBranch,
 
   const renderBranchRow = (b: string) => {
     const rowCurrent = b === currentBranch || b === `origin/${currentBranch}`;
+    const selected = branchName === b;
     return (
       <div
         key={b}
         onClick={() => { setBranchName(b); setError(null); }}
-        className={`flex items-center px-2.5 py-1.5 rounded-md cursor-pointer text-xs font-mono transition-colors ${
-          branchName === b
-            ? "bg-[var(--accent-bg)] text-[var(--accent-color)] font-semibold"
-            : "hover:bg-[var(--bg-app)] text-[var(--text-normal)]"
-        }`}
+        className={`${styles.branchRow} ${styles.mono} ${selected ? styles.branchRowSelected : ""}`}
       >
-        <GitBranch size={12} className="mr-2 flex-shrink-0" />
-        <span className="truncate">{b}</span>
-        {rowCurrent && (
-          <span className="ml-auto text-[9px] text-[var(--text-muted)] uppercase pl-2 flex-shrink-0">current</span>
-        )}
+        <GitBranch size={12} className={styles.branchIcon} />
+        <span className={styles.branchName}>{b}</span>
+        {rowCurrent && <span className={styles.branchCurrentTag}>current</span>}
       </div>
     );
   };
@@ -127,29 +124,38 @@ export const BranchDialog: React.FC<BranchDialogProps> = ({ mode, currentBranch,
 
   return (
     <Modal
+      id="branch-dialog"
       title={config.title}
       icon={config.icon}
-      iconClassName={config.variant === "danger" ? "text-[var(--color-status-danger)]" : "text-[var(--accent-color)]"}
       onClose={onCancel}
-      onConfirm={handleConfirm}
-      confirmLabel={showOriginWarning ? "Delete from Origin" : config.confirmLabel}
-      disableConfirm={mode === "create" ? !branchName.trim() : !branchName}
-      variant={config.variant === "danger" ? "danger" : "default"}
+      footer={
+        <>
+          <Button id="branch-dialog-cancel" type="button" variant="secondary" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button
+            id="branch-dialog-confirm"
+            type="button"
+            variant={config.danger ? "danger" : "primary"}
+            onClick={handleConfirm}
+            disabled={mode === "create" ? !branchName.trim() : !branchName}
+          >
+            {showOriginWarning ? "Delete from Origin" : config.confirmLabel}
+          </Button>
+        </>
+      }
     >
       {mode !== "create" && (
-        <div className="text-[10px] font-mono text-[var(--text-muted)] bg-[var(--bg-app)]/50 rounded-lg px-3 py-2 border border-[var(--border-color)]/50">
-          <span className="opacity-60">Current branch: </span>
-          <span className="text-[var(--accent-color)] font-bold">{currentBranch}</span>
-        </div>
+        <p className={`${styles.currentBranchInfo} ${styles.mono}`}>
+          Current branch: <span className={styles.currentBranchValue}>{currentBranch}</span>
+        </p>
       )}
 
-      <div>
-        <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider font-mono block mb-1.5">
-          {config.label}
-        </label>
-        {mode === "create" ? (
-          <input
+      {mode === "create" ? (
+        <Field id="branch-dialog-name" label={config.label}>
+          <Input
             ref={inputRef}
+            id="branch-dialog-name"
             type="text"
             value={branchName}
             onChange={(e) => { setBranchName(e.target.value); setError(null); }}
@@ -157,91 +163,63 @@ export const BranchDialog: React.FC<BranchDialogProps> = ({ mode, currentBranch,
               if (e.key === "Enter") handleConfirm();
             }}
             placeholder={config.placeholder}
-            className="w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-xs font-mono text-[var(--text-light)] focus:border-[var(--accent-color)] focus:outline-none"
           />
-        ) : mode === "delete" ? (
-          <div className="space-y-2 max-h-[260px] overflow-y-auto bg-[var(--bg-app)]/50 border border-[var(--border-color)] rounded-lg p-2">
+        </Field>
+      ) : mode === "delete" ? (
+        <Field id="branch-dialog-list" label={config.label}>
+          <div id="branch-dialog-list" className={`${styles.branchList} ${styles.branchListCompact}`}>
             {localBranches.length > 0 && (
               <div>
-                <div className="px-2.5 pt-1 pb-0.5 text-[9px] font-mono font-bold uppercase tracking-wider text-[var(--text-muted)] select-none">
-                  Local
-                </div>
-                <div className="space-y-0.5">
-                  {localBranches.map(renderBranchRow)}
-                </div>
+                <div className={`${styles.branchListLabel} ${styles.mono}`}>Local</div>
+                {localBranches.map(renderBranchRow)}
               </div>
             )}
             {remoteBranches.length > 0 && (
               <div>
-                <div className="px-2.5 pt-1 pb-0.5 text-[9px] font-mono font-bold uppercase tracking-wider text-[var(--text-muted)] select-none">
-                  Origin
-                </div>
-                <div className="space-y-0.5">
-                  {remoteBranches.map(renderBranchRow)}
-                </div>
+                <div className={`${styles.branchListLabel} ${styles.mono}`}>Origin</div>
+                {remoteBranches.map(renderBranchRow)}
               </div>
             )}
             {localBranches.length === 0 && remoteBranches.length === 0 && (
-              <div className="px-2.5 py-1.5 text-[var(--text-muted)] text-center italic text-[11px]">
-                No branches available
-              </div>
+              <div className={styles.emptyState}>No branches available</div>
             )}
           </div>
-        ) : (
-          <div className="space-y-0.5 max-h-[200px] overflow-y-auto bg-[var(--bg-app)]/50 border border-[var(--border-color)] rounded-lg p-2">
-            {localBranches.filter(b => b !== currentBranch).map((b) => (
-              <div
-                key={b}
-                onClick={() => { setBranchName(b); setError(null); }}
-                className={`flex items-center px-2.5 py-1.5 rounded-md cursor-pointer text-xs font-mono transition-colors ${
-                  branchName === b
-                    ? "bg-[var(--accent-bg)] text-[var(--accent-color)] font-semibold"
-                    : "hover:bg-[var(--bg-app)] text-[var(--text-normal)]"
-                }`}
-              >
-                <GitBranch size={12} className="mr-2 flex-shrink-0" />
-                <span className="truncate">{b}</span>
-              </div>
-            ))}
+        </Field>
+      ) : (
+        <Field id="branch-dialog-list" label={config.label}>
+          <div id="branch-dialog-list" className={styles.branchList}>
+            {localBranches.filter(b => b !== currentBranch).map(renderBranchRow)}
           </div>
-        )}
-      </div>
+        </Field>
+      )}
 
       {mode === "create" && (
-        <label className="flex items-center space-x-2 cursor-pointer text-xs text-[var(--text-normal)]">
-          <input
-            type="checkbox"
-            checked={checkoutAfter}
-            onChange={(e) => setCheckoutAfter(e.target.checked)}
-            className="accent-[var(--accent-color)]"
-          />
-          <span>Checkout after creation</span>
-        </label>
+        <Checkbox
+          id="branch-dialog-checkout-after"
+          label="Checkout after creation"
+          checked={checkoutAfter}
+          onChange={(e) => setCheckoutAfter(e.target.checked)}
+        />
       )}
 
       {showLocalDeleteOptions && (
-        <label className="flex items-center space-x-2 cursor-pointer text-xs text-[var(--text-normal)]">
-          <input
-            type="checkbox"
-            checked={forceDelete}
-            onChange={(e) => setForceDelete(e.target.checked)}
-            className="accent-rose-500"
-          />
-          <span>Force delete (<span className="font-mono text-[var(--color-status-danger)]">-D</span>) — even if not merged</span>
-        </label>
+        <Checkbox
+          id="branch-dialog-force-delete"
+          label={<>Force delete (<span className={`${styles.mono} ${styles.forceDeleteFlag}`}>-D</span>) — even if not merged</>}
+          checked={forceDelete}
+          onChange={(e) => setForceDelete(e.target.checked)}
+        />
       )}
 
       {showOriginWarning && (
-        <div className="flex items-start space-x-2 text-xs text-[var(--color-status-danger)] font-mono bg-[var(--color-status-danger-bg)] border border-[var(--color-status-danger-border)] rounded-lg px-3 py-2">
-          <AlertTriangle size={14} className="flex-shrink-0 mt-0.5 text-[var(--color-status-danger)]" />
-          <span className="leading-relaxed">
-            This will permanently delete <span className="font-bold text-[var(--color-status-danger)]">{branchName}</span> from the remote origin via <span className="font-bold">push --delete</span>. This action cannot be undone.
-          </span>
-        </div>
+        <Callout variant="danger">
+          This will permanently delete <strong>{branchName}</strong> from the remote origin via{" "}
+          <strong>push --delete</strong>. This action cannot be undone.
+        </Callout>
       )}
 
       {error && (
-        <div className="flex items-center space-x-2 text-xs text-[var(--color-status-danger)] font-mono">
+        <div className={styles.errorRow} role="alert">
           <AlertCircle size={12} />
           <span>{error}</span>
         </div>

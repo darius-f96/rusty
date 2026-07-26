@@ -7,6 +7,8 @@ import { DiffViewToggle } from "../../ui/DiffViewToggle";
 import { notify } from "../../../notificationStore";
 import { CustomSelect } from "../../CustomSelect";
 import { getMonacoLanguageId } from "../../../services/lspLanguage";
+import { useWorkspaceStore } from "../../../store";
+import { createMonacoDiffOptions } from "../../../editor/monacoOptions";
 
 // ── Attribution palette ─────────────────────────────────────────────────────
 // Each slot: [border stripe hex, background rgba, overview ruler hex]
@@ -180,6 +182,7 @@ const FileDiffCard: React.FC<FileDiffCardProps> = ({
   onResetFile,
   toggleCollapse,
 }) => {
+  const editorFontSize = useWorkspaceStore((state) => state.typographyPreferences.editorFontSize);
   const [hasRendered, setHasRendered] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const diffEditorRef = useRef<any>(null);
@@ -337,16 +340,15 @@ const FileDiffCard: React.FC<FileDiffCardProps> = ({
                   );
                 }, 200);
               }}
-              options={{
+              options={createMonacoDiffOptions(editorFontSize, {
                 readOnly: false,
                 minimap: { enabled: true },
                 scrollBeyondLastLine: false,
                 lineNumbers: "on",
                 renderSideBySide: renderSideBySide,
-                fontSize: 11,
                 scrollbar: { vertical: "hidden", handleMouseWheel: false },
                 automaticLayout: true,
-              }}
+              })}
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center bg-[var(--bg-app)] text-[var(--text-muted)] text-[11px] font-mono">

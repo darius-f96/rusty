@@ -3,6 +3,7 @@ import { Trash2 } from "lucide-react";
 import { useWorkspaceStore } from "../../../store";
 import { STICKY_COLORS, getNextColor } from "./stickyColors";
 import { CanvasTabContext } from "../../tabs/canvas/CanvasTabContext";
+import styles from "./StickyNode.module.css";
 
 export const StickyNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) => {
   const { tabId } = useContext(CanvasTabContext);
@@ -88,7 +89,7 @@ export const StickyNode: React.FC<{ id: string; data: any }> = memo(({ id, data 
 
   return (
     <div
-      className={`rounded-lg ${color.bg} shadow-lg overflow-hidden flex flex-col transition-shadow duration-200 hover:shadow-xl`}
+      className={`${styles.note} ${styles[color.name]}`}
       style={{
         width: `${width}px`,
         height: `${height}px`,
@@ -96,25 +97,26 @@ export const StickyNode: React.FC<{ id: string; data: any }> = memo(({ id, data 
     >
       {/* Header - Color indicator and controls */}
       <div
-        className={`${color.headerBg} px-2 py-1.5 flex items-center justify-between select-none cursor-move flex-shrink-0`}
+        className={styles.header}
       >
-        <div className="flex items-center space-x-1.5">
-          <div className="w-3 h-3 rounded-full bg-slate-700/20" />
-          <div className="w-2 h-2 rounded-full bg-slate-700/10" />
+        <div className={styles.dots}>
+          <div className={styles.dotLarge} />
+          <div className={styles.dotSmall} />
         </div>
-        <div className="flex items-center space-x-1">
+        <div className={styles.actions}>
           <button
             onClick={handleColorSwitch}
             onPointerDown={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
-            className="nodrag w-4 h-4 rounded-full bg-slate-700/20 hover:bg-slate-700/40 transition-colors cursor-pointer"
+            className={`nodrag ${styles.colorButton}`}
+            aria-label="Switch note color"
             title="Switch color"
           />
           <button
             onClick={handleDelete}
             onPointerDown={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
-            className="nodrag text-slate-600 hover:text-slate-800 p-0.5 rounded transition-colors cursor-pointer"
+            className={`nodrag ${styles.delete}`}
             title="Delete note"
           >
             <Trash2 size={12} />
@@ -124,7 +126,7 @@ export const StickyNode: React.FC<{ id: string; data: any }> = memo(({ id, data 
 
       {/* Content area */}
       <div
-        className="flex-1 p-2 min-h-0 overflow-hidden"
+        className={styles.content}
         onClick={handleContentFocus}
       >
         <textarea
@@ -135,9 +137,7 @@ export const StickyNode: React.FC<{ id: string; data: any }> = memo(({ id, data 
           onPointerDown={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
           placeholder="Type your note..."
-          className={`nodrag w-full h-full bg-transparent resize-none text-slate-700 placeholder-slate-400 font-sans text-xs leading-relaxed focus:outline-none ${
-            isEditing ? "cursor-text" : "cursor-pointer"
-          }`}
+          className={`nodrag ${styles.textarea} ${isEditing ? styles.editing : styles.readonly}`}
           style={{
             overflowY: isEditing ? "auto" : "hidden",
           }}
@@ -154,13 +154,13 @@ export const StickyNode: React.FC<{ id: string; data: any }> = memo(({ id, data 
       <div
         onMouseDown={startResize}
         onPointerDown={(e) => e.stopPropagation()}
-        className="nodrag absolute right-0 bottom-0 w-4 h-4 cursor-se-resize flex items-end justify-end p-0.5 z-50 select-none group"
+        className={`nodrag ${styles.resize}`}
       >
         <svg
           width="10"
           height="10"
           viewBox="0 0 10 10"
-          className="text-slate-500 opacity-60 group-hover:opacity-100 transition-opacity"
+          className={styles.resizeIcon}
         >
           <line x1="2" y1="10" x2="10" y2="2" stroke="currentColor" strokeWidth="1.5" />
           <line x1="5" y1="10" x2="10" y2="5" stroke="currentColor" strokeWidth="1.5" />
