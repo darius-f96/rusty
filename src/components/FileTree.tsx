@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { 
-  Folder, 
-  FolderOpen, 
-  ChevronDown, 
+import {
+  Folder,
+  FolderOpen,
+  ChevronDown,
   ChevronRight,
   Plus,
   FolderPlus,
@@ -12,7 +12,8 @@ import {
   FolderInput,
   ExternalLink,
   FilePlus,
-  TreePine
+  TreePine,
+  EyeOff
 } from "lucide-react";
 import { useWorkspaceStore } from "../store";
 import { FileIcon } from "../services/fileTypeService";
@@ -21,6 +22,7 @@ import { MoveDialog } from "./MoveDialog";
 import { CreateDialog } from "./CreateDialog";
 import { notify } from "../notificationStore";
 import { useConfirm } from "./useConfirm";
+import { gitPresenter } from "./git/GitPresenter";
 
 import { fileTreePresenter, refreshTree } from "./filetree/FileTreePresenter";
 
@@ -326,6 +328,26 @@ export const FileTree: React.FC<FileTreeProps> = ({ entries }) => {
       console.error(err);
     }
   };
+
+  const handleAddToGit = async (node: any) => {
+    const rootPath = useWorkspaceStore.getState().rootPath;
+    if (!rootPath) return;
+    try {
+      await gitPresenter.stageFile(rootPath, node.path);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleAddToGitignore = async (node: any) => {
+    const rootPath = useWorkspaceStore.getState().rootPath;
+    if (!rootPath) return;
+    try {
+      await gitPresenter.addToGitignore(rootPath, node.path);
+    } catch (err) {
+      console.error(err);
+    }
+  };
  
   const handleNewFileFromMenu = (node: any) => {
     const targetDir = node.is_dir ? node.path : node.path.substring(0, node.path.lastIndexOf("/"));
@@ -414,6 +436,8 @@ export const FileTree: React.FC<FileTreeProps> = ({ entries }) => {
           onRename={() => { setRenamingPath(contextMenu.node.path); setContextMenu(null); }}
           onNewFile={() => { handleNewFileFromMenu(contextMenu.node); setContextMenu(null); }}
           onNewFolder={() => { handleNewFolderFromMenu(contextMenu.node); setContextMenu(null); }}
+          onAddToGit={() => { handleAddToGit(contextMenu.node); setContextMenu(null); }}
+          onAddToGitignore={() => { handleAddToGitignore(contextMenu.node); setContextMenu(null); }}
         />
       )}
 
@@ -453,7 +477,9 @@ const FileTreeContextMenu: React.FC<{
   onRename: () => void;
   onNewFile: () => void;
   onNewFolder: () => void;
-}> = ({ x, y, onMove, onDelete, onOpenInFinder, onRename, onNewFile, onNewFolder }) => {
+  onAddToGit: () => void;
+  onAddToGitignore: () => void;
+}> = ({ x, y, onMove, onDelete, onOpenInFinder, onRename, onNewFile, onNewFolder, onAddToGit, onAddToGitignore }) => {
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ x, y });
 
@@ -475,6 +501,9 @@ const FileTreeContextMenu: React.FC<{
     { icon: Pencil, label: "Rename", action: "rename" },
     { icon: FolderInput, label: "Move...", action: "move" },
     { type: "divider" as const },
+    { icon: Plus, label: "Add to Git", action: "addToGit" },
+    { icon: EyeOff, label: "Add to .gitignore", action: "addToGitignore" },
+    { type: "divider" as const },
     { icon: ExternalLink, label: "Reveal in Finder", action: "finder" },
     { type: "divider" as const },
     { icon: Trash2, label: "Delete", action: "delete", danger: true },
@@ -488,6 +517,8 @@ const FileTreeContextMenu: React.FC<{
       case "rename": onRename(); break;
       case "newFile": onNewFile(); break;
       case "newFolder": onNewFolder(); break;
+      case "addToGit": onAddToGit(); break;
+      case "addToGitignore": onAddToGitignore(); break;
     }
   };
 
