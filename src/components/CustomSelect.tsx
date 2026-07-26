@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
+import React, { useState, useEffect, useRef, useLayoutEffect, useId } from "react";
 import { CustomSelectView } from "./CustomSelect.view";
 
 export interface Option {
@@ -12,6 +12,7 @@ export interface OptionGroup {
 }
 
 interface CustomSelectProps {
+  id?: string;
   value: string;
   onChange: (val: string) => void;
   options?: Option[];
@@ -24,6 +25,7 @@ interface CustomSelectProps {
 }
 
 export const CustomSelect: React.FC<CustomSelectProps> = ({
+  id,
   value,
   onChange,
   options,
@@ -34,6 +36,8 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
   dropdownClassName = "",
   direction = "down"
 }) => {
+  const generatedId = useId();
+  const controlId = id || `custom-select-${generatedId.replace(/:/g, "")}`;
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
@@ -46,11 +50,10 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
     : options || [];
   const selectedOption = allOptions.find(o => o.id === value);
 
-  // Compute dropdown position from the trigger button's viewport rect.
   const updatePosition = () => {
     if (!buttonRef.current) return;
     const r = buttonRef.current.getBoundingClientRect();
-    const dropH = 224; // approx max-height of the panel (max-h-56)
+    const dropH = 224;
     const openUp = direction === "up" || (direction === "down" && r.bottom + dropH > window.innerHeight && r.top - dropH > 8);
     setPos({
       top: openUp ? r.top : r.bottom,
@@ -60,7 +63,6 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
     });
   };
 
-  // Clamp horizontally so the panel never overflows the viewport right edge.
   useLayoutEffect(() => {
     if (!isOpen || !dropdownRef.current || !pos) return;
     const dw = dropdownRef.current.offsetWidth;
@@ -83,7 +85,6 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
     updatePosition();
     const onScroll = () => updatePosition();
     const onResize = () => updatePosition();
-    // capture=true so scroll events inside scrollable ancestors reposition too
     window.addEventListener("scroll", onScroll, true);
     window.addEventListener("resize", onResize);
     return () => {
@@ -93,7 +94,6 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, direction]);
 
-  // Outside click: close only when the click is outside both trigger and panel.
   useEffect(() => {
     if (!isOpen) return;
     const handleOutsideClick = (e: MouseEvent) => {
@@ -106,7 +106,6 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, [isOpen]);
 
-  // Reset search when opening/closing
   useEffect(() => {
     if (!isOpen) {
       setSearchQuery("");
@@ -133,6 +132,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
 
   return (
     <CustomSelectView
+      id={controlId}
       value={value}
       placeholder={placeholder}
       className={className}

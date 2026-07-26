@@ -4,6 +4,7 @@ import { Option, OptionGroup } from "./CustomSelect";
 import styles from "./CustomSelect.module.css";
 
 interface CustomSelectViewProps {
+  id: string;
   value: string;
   placeholder: string;
   className: string;
@@ -26,6 +27,7 @@ interface CustomSelectViewProps {
 }
 
 export const CustomSelectView: React.FC<CustomSelectViewProps> = ({
+  id,
   value,
   placeholder,
   className,
@@ -46,11 +48,15 @@ export const CustomSelectView: React.FC<CustomSelectViewProps> = ({
   filteredOptions,
   onChange,
 }) => {
+  const listboxId = `${id}-options`;
+
   const renderOption = (opt: Option) => {
     const isSelected = opt.id === value;
     return (
       <div
         key={opt.id}
+        role="option"
+        aria-selected={isSelected}
         onClick={() => {
           onChange(opt.id);
           setIsOpen(false);
@@ -65,10 +71,13 @@ export const CustomSelectView: React.FC<CustomSelectViewProps> = ({
 
   return (
     <div ref={containerRef} className={`${styles.root} ${className}`}>
-      {/* Dropdown Button */}
       <button
+        id={id}
         ref={buttonRef}
         type="button"
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-controls={isOpen ? listboxId : undefined}
         onClick={() => setIsOpen(!isOpen)}
         className={buttonClassName || styles.button}
       >
@@ -78,15 +87,17 @@ export const CustomSelectView: React.FC<CustomSelectViewProps> = ({
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
+          aria-hidden="true"
         >
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
         </svg>
       </button>
 
-      {/* Dropdown Options List — portaled to document.body */}
       {isOpen && pos && createPortal(
         <div
+          id={listboxId}
           ref={dropdownRef}
+          role="listbox"
           data-custom-select-dropdown
           style={{
             position: "fixed",
@@ -100,7 +111,9 @@ export const CustomSelectView: React.FC<CustomSelectViewProps> = ({
           {showSearch && (
             <div className={styles.searchWrap}>
               <input
+                id={`${id}-search`}
                 type="text"
+                aria-label="Search options"
                 placeholder="Search..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
