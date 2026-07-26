@@ -220,6 +220,18 @@ export class DelegationManager {
     const completedAt = new Date().toISOString();
     record.handle.status = status;
     record.handle.completedAt = completedAt;
+    // Non-completion outcomes previously only reached the UI via subagent_update
+    // — invisible from the sidecar terminal, which made a real timeout look
+    // indistinguishable from "no error occurred" when reading server logs.
+    if (status !== "completed") {
+      const startedAt = record.handle.startedAt ? Date.parse(record.handle.startedAt) : NaN;
+      const elapsedMs = Number.isFinite(startedAt) ? Date.now() - startedAt : undefined;
+      console.warn(
+        `[DelegationManager] agent ${record.handle.agentId} (${record.handle.task.objective}) settled as "${status}"` +
+        (elapsedMs !== undefined ? ` after ${Math.round(elapsedMs / 1000)}s` : "") +
+        ` (configured timeoutMs=${record.handle.task.timeoutMs}): ${error || "no error message"}`,
+      );
+    }
     const result: DelegationResult = {
       agentId: record.handle.agentId,
       status,

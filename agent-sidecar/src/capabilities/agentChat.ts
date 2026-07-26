@@ -339,7 +339,7 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
             expectedOutput: { type: "string", enum: ["findings", "review", "recommendation"] },
             evidenceRequired: { type: "boolean" },
             maxTurns: { type: "integer", minimum: 1, maximum: 20 },
-            timeoutMs: { type: "integer", minimum: 1000, maximum: 600000 },
+            timeoutMs: { type: "integer", minimum: 1000, maximum: 1200000 },
             benefit: { type: "string", enum: ["coverage", "parallelism", "independent_review", "specialization"] },
           },
           required: ["description", "prompt"],
@@ -367,7 +367,10 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
             expectedOutput: args.expectedOutput || "findings",
             evidenceRequired: args.evidenceRequired ?? true,
             maxTurns: Math.max(1, Math.min(20, Number(args.maxTurns) || 8)),
-            timeoutMs: Math.max(1_000, Math.min(600_000, Number(args.timeoutMs) || 120_000)),
+            // Default and cap both raised from 120s/600s: reasoning-heavy
+            // providers (notably Codex) routinely still had turns in flight
+            // at the old defaults, especially under concurrent delegation.
+            timeoutMs: Math.max(1_000, Math.min(1_200_000, Number(args.timeoutMs) || 240_000)),
             benefit: args.benefit || "coverage",
           };
           const handle = await delegationManager.spawn(runId, "parent", task, {

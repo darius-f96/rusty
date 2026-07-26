@@ -28,16 +28,3 @@ npm install
 cd agent-sidecar && npm install && cd ..
 npm run tauri dev
 ```
-
-## Releasing
-
-Pushing a tag matching `v*.*.*` triggers `.github/workflows/release.yml`,
-which builds, signs, and notarizes the macOS app, publishes a GitHub release
-with the DMG attached, and updates the
-[Homebrew tap](https://github.com/traian18/homebrew-axiom) automatically.
-
-```bash
-# bump "version" in src-tauri/tauri.conf.json, commit it, then:
-git tag vX.Y.Z
-git push origin vX.Y.Z
-```

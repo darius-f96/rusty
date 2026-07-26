@@ -1081,6 +1081,7 @@ pub fn run() {
             git::git_init,
             git::git_stage_file,
             git::git_unstage_file,
+            git::git_add_to_gitignore,
             git::git_discard_changes,
             git::git_commit,
             git::git_get_head_content,

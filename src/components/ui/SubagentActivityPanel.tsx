@@ -159,6 +159,7 @@ export const SubagentActivityPanel: React.FC<SubagentActivityPanelProps> = ({ su
                           {subagent.scope?.length ? <div><span className="text-[var(--text-muted)]">Scope:</span> {subagent.scope.join(", ")}</div> : null}
                           {subagent.excludedScope?.length ? <div><span className="text-[var(--text-muted)]">Excluded:</span> {subagent.excludedScope.join(", ")}</div> : null}
                           {subagent.expectedOutput && <div><span className="text-[var(--text-muted)]">Deliverable:</span> {subagent.expectedOutput}</div>}
+                          {subagent.timeoutMs && <div><span className="text-[var(--text-muted)]">Timeout:</span> {Math.round(subagent.timeoutMs / 1000)}s</div>}
                           {subagent.error && <div role="alert" className="text-[var(--color-status-danger)] whitespace-pre-wrap">{subagent.error}</div>}
                           {subagent.result && (
                             <div>
