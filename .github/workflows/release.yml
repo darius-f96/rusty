@@ -1,0 +1,124 @@
+name: Release macOS
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build-sign-notarize:
+    runs-on: macos-14 # Apple Silicon (aarch64) runner
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Install dependencies
+        run: |
+          npm install
+          npm --prefix agent-sidecar install
+
+      - name: Download bundled Node runtime
+        working-directory: src-tauri/bin
+        run: |
+          curl -LO https://nodejs.org/dist/v22.23.1/node-v22.23.1-darwin-arm64.tar.gz
+          tar xzf node-v22.23.1-darwin-arm64.tar.gz
+          cp node-v22.23.1-darwin-arm64/bin/node node-aarch64-apple-darwin
+          chmod +x node-aarch64-apple-darwin
+          rm -rf node-v22.23.1-darwin-arm64*
+
+      - name: Import Developer ID certificate
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
+          CERT_PATH="$RUNNER_TEMP/cert.p12"
+
+          echo -n "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode -o "$CERT_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+
+          # Apple's intermediate/root certs are required to build a valid signing
+          # chain; codesign fails without them present in the signing keychain.
+          curl -sO https://www.apple.com/certificateauthority/AppleRootCA-G2.cer
+          curl -sO https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer
+          security import AppleRootCA-G2.cer -k "$KEYCHAIN_PATH"
+          security import DeveloperIDG2CA.cer -k "$KEYCHAIN_PATH"
+
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed 's/"//g')
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security default-keychain -s "$KEYCHAIN_PATH"
+
+      - name: Write notarization API key
+        env:
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/private_keys"
+          printf '%s' "$APPLE_API_KEY_P8" > "$RUNNER_TEMP/private_keys/AuthKey.p8"
+
+      - name: Build, sign, and notarize app
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY_ID }}
+        run: |
+          export APPLE_API_KEY_PATH="$RUNNER_TEMP/private_keys/AuthKey.p8"
+          npm run tauri build -- --bundles app
+
+      - name: Package and sign DMG
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          APP="src-tauri/target/release/bundle/macos/Axiom-IDE.app"
+          VERSION="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          OUT="Axiom-IDE_${VERSION}_aarch64.dmg"
+          STAGING="$(mktemp -d)"
+
+          cp -R "$APP" "$STAGING/"
+          ln -s /Applications "$STAGING/Applications"
+          hdiutil create -volname "Axiom-IDE" -srcfolder "$STAGING" -ov -format UDZO "$OUT"
+          codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$OUT"
+
+          echo "DMG_PATH=$OUT" >> "$GITHUB_ENV"
+          echo "APP_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "DMG_SHA256=$(shasum -a 256 "$OUT" | cut -d' ' -f1)" >> "$GITHUB_ENV"
+
+      - name: Verify notarization
+        run: |
+          xcrun stapler validate "src-tauri/target/release/bundle/macos/Axiom-IDE.app"
+          spctl -a -vvv --type execute "src-tauri/target/release/bundle/macos/Axiom-IDE.app"
+
+      - name: Create GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" "$DMG_PATH" \
+            --repo "${{ github.repository }}" \
+            --title "Axiom-IDE ${{ github.ref_name }}" \
+            --notes "macOS build, signed with a Developer ID certificate and notarized by Apple. Apple Silicon (aarch64) only."
+
+      - name: Update Homebrew tap
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/traian18/homebrew-axiom.git" tap
+          cd tap
+          sed -i '' "s/version \".*\"/version \"$APP_VERSION\"/" Casks/axiom-ide.rb
+          sed -i '' "s/sha256 \".*\"/sha256 \"$DMG_SHA256\"/" Casks/axiom-ide.rb
+          git -c user.name="axiom-release-bot" -c user.email="actions@users.noreply.github.com" commit -am "axiom-ide ${APP_VERSION}"
+          git push
+
+      - name: Clean up keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" || true
