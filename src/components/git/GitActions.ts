@@ -16,6 +16,7 @@ export interface GitActions {
   pull: (rootDir: string) => Promise<void>;
   stageFile: (rootDir: string, filePath: string) => Promise<void>;
   unstageFile: (rootDir: string, filePath: string) => Promise<void>;
+  addToGitignore: (rootDir: string, filePath: string) => Promise<void>;
   discardChanges: (
     rootDir: string,
     filePath: string,

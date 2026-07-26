@@ -7,6 +7,8 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+axiom
+axiom/*
 node_modules
 dist
 dist-ssr
@@ -28,3 +30,6 @@ src-tauri/target/
 src-tauri/gen/
 .gemini/
 
+/.axiom/chats/agent_agent_1785076189451.json
+/.axiom/runs/c7bb5879-581b-4b82-87c6-956b61d4abf1-682638ab4c0f/events.jsonl
+/.axiom/chats/agent_agent_1785083153717.json

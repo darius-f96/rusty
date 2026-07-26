@@ -69,6 +69,21 @@ export const gitPresenter: GitActions = {
     }
   },
 
+  async addToGitignore(rootDir: string, filePath: string): Promise<void> {
+    console.log(`GitPresenter: Adding to .gitignore: ${filePath}`);
+    try {
+      await invoke("git_add_to_gitignore", { rootDir, filePath });
+      await useWorkspaceStore.getState().loadGitStatus();
+      const tree: any[] = await invoke("get_directory_structure", { rootDir });
+      useWorkspaceStore.getState().setFileTree(tree);
+      notify("Added to .gitignore", "File will no longer show up as a change.", "success");
+    } catch (err: any) {
+      console.error("Failed to add to .gitignore:", err);
+      notify("Failed", String(err), "error");
+      throw err;
+    }
+  },
+
   async discardChanges(
     rootDir: string,
     filePath: string,

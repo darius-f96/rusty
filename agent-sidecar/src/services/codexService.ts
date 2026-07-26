@@ -56,7 +56,6 @@ interface LoginAttempt {
   userCode?: string;
 }
 
-const activeRuns = new Map<string, CodexRun>();
 let authDiagnostics: string[] = [];
 let loginAttempt: LoginAttempt | null = null;
 
@@ -199,6 +198,9 @@ class CodexAppServerClient {
   private startPromise: Promise<void> | null = null;
   private nextRequestId = 0;
   private pending = new Map<string, PendingRequest>();
+  // Scoped per-instance: each CodexAppServerClient owns its own process, so
+  // its runs must not be visible to (or clearable by) any other instance.
+  activeRuns = new Map<string, CodexRun>();
 
   async start(): Promise<void> {
     if (this.process) return;
@@ -298,7 +300,7 @@ class CodexAppServerClient {
       return;
     }
     if (message?.method) {
-      handleCodexNotification(message.method, message.params || {});
+      handleCodexNotification(message.method, message.params || {}, this.activeRuns);
       return;
     }
     if (message?.id === undefined) return;
@@ -319,7 +321,7 @@ class CodexAppServerClient {
     }
 
     const params = message.params || {};
-    const run = activeRuns.get(params.threadId);
+    const run = this.activeRuns.get(params.threadId);
     const tool = run?.tools.get(params.tool);
     if (!run || !tool) {
       this.respond(message.id, {
@@ -362,8 +364,8 @@ class CodexAppServerClient {
       pending.reject(error);
     }
     this.pending.clear();
-    for (const run of activeRuns.values()) failRun(run, error);
-    activeRuns.clear();
+    for (const run of this.activeRuns.values()) failRun(run, error);
+    this.activeRuns.clear();
     addAuthDiagnostic(error.message);
   }
 
@@ -377,15 +379,15 @@ class CodexAppServerClient {
       pending.reject(error);
     }
     this.pending.clear();
-    for (const run of activeRuns.values()) failRun(run, error);
-    activeRuns.clear();
+    for (const run of this.activeRuns.values()) failRun(run, error);
+    this.activeRuns.clear();
     child.kill();
   }
 }
 
 const appServer = new CodexAppServerClient();
 
-function handleCodexNotification(method: string, params: any): void {
+function handleCodexNotification(method: string, params: any, activeRuns: Map<string, CodexRun>): void {
   if (method === "account/login/completed" && loginAttempt?.state === "connecting") {
     if (!loginAttempt.loginId || !params.loginId || loginAttempt.loginId === params.loginId) {
       loginAttempt = params.success
@@ -665,11 +667,19 @@ async function runCodexTurn(options: {
   const status = await getCodexConnectionStatus();
   if (!status.authenticated) throw new Error(status.message || "OpenAI Codex sign-in is required.");
 
+  // Each turn gets its own app-server process rather than sharing the module
+  // singleton. Concurrent turns (e.g. several delegated subagents) used to
+  // multiplex through one process/pipe, contending with each other and making
+  // them disproportionately likely to still be running when a delegation
+  // timeout fired. This mirrors how Claude Code subagent calls already spawn
+  // an isolated process per call.
+  const client = new CodexAppServerClient();
+
   const tools = codexDynamicTools(options.tools || []);
   const toolGuidance = tools.specs.length
     ? "\n\nAxiom owns workspace state and permissions. Use only tools in the axiom namespace for workspace operations. Do not use Codex shell or file-editing tools."
     : "\n\nReturn the requested answer directly. Do not inspect or change files and do not use tools.";
-  const threadResult = await appServer.request("thread/start", {
+  const threadResult = await client.request("thread/start", {
     model: options.modelId,
     cwd: usableCwd(options.cwd),
     approvalPolicy: "never",
@@ -705,7 +715,7 @@ async function runCodexTurn(options: {
     reject: rejectRun,
     settled: false,
   };
-  activeRuns.set(threadId, run);
+  client.activeRuns.set(threadId, run);
 
   let abortRequested = false;
   let interruptSent = false;
@@ -713,7 +723,7 @@ async function runCodexTurn(options: {
     abortRequested = true;
     if (interruptSent || run.settled || !run.turnId) return;
     interruptSent = true;
-    void appServer.request("turn/interrupt", { threadId, turnId: run.turnId }, 10_000).catch(() => {});
+    void client.request("turn/interrupt", { threadId, turnId: run.turnId }, 10_000).catch(() => {});
   };
   const abortHandler = () => interrupt();
   options.signal?.addEventListener("abort", abortHandler, { once: true });
@@ -724,7 +734,7 @@ async function runCodexTurn(options: {
 
   try {
     sendLog(`Calling OpenAI Codex model ${options.modelId}.`);
-    const turnResult = await appServer.request("turn/start", {
+    const turnResult = await client.request("turn/start", {
       threadId,
       input: [{ type: "text", text: conversationText(options.userMessage, options.history) }],
       model: options.modelId,
@@ -739,8 +749,10 @@ async function runCodexTurn(options: {
   } finally {
     if (abortTimer) clearInterval(abortTimer);
     options.signal?.removeEventListener("abort", abortHandler);
-    activeRuns.delete(threadId);
-    void appServer.request("thread/unsubscribe", { threadId }, 10_000).catch(() => {});
+    client.activeRuns.delete(threadId);
+    // The whole process is dedicated to this turn, so stop it outright
+    // rather than unsubscribing from the thread on a shared process.
+    void client.stop();
   }
 }
 

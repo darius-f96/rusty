@@ -350,6 +350,61 @@ pub async fn git_unstage_file(root_dir: String, file_path: String) -> Result<(),
     }
 }
 
+/// Adds a file to the repository root `.gitignore`, creating it if needed.
+/// The entry is anchored to the repo root (leading `/`) so it only matches
+/// this exact path rather than any same-named file elsewhere in the tree.
+/// If the file is already tracked, unstages/untracks it too, since adding a
+/// pattern to `.gitignore` alone has no effect on files git already tracks.
+#[tauri::command]
+pub async fn git_add_to_gitignore(root_dir: String, file_path: String) -> Result<(), String> {
+    let root_path = Path::new(&root_dir);
+    let full_path = Path::new(&file_path);
+    let relative = full_path
+        .strip_prefix(root_path)
+        .map_err(|_| "File is not in the workspace root".to_string())?
+        .to_str()
+        .ok_or_else(|| "Invalid file path encoding".to_string())?;
+
+    let pattern = format!("/{relative}");
+    let gitignore_path = root_path.join(".gitignore");
+
+    let existing = std::fs::read_to_string(&gitignore_path).unwrap_or_default();
+    let already_present = existing.lines().any(|line| line.trim() == pattern);
+
+    if !already_present {
+        let mut content = existing;
+        if !content.is_empty() && !content.ends_with('\n') {
+            content.push('\n');
+        }
+        content.push_str(&pattern);
+        content.push('\n');
+        std::fs::write(&gitignore_path, content).map_err(|e| e.to_string())?;
+    }
+
+    // If the file is already tracked, `.gitignore` won't stop git from seeing
+    // its future edits — untrack it (keeping the file on disk) so it fully
+    // drops out of status.
+    let is_tracked = Command::new("git")
+        .args(&["ls-files", "--error-unmatch", relative])
+        .current_dir(&root_dir)
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+
+    if is_tracked {
+        let output = Command::new("git")
+            .args(&["rm", "--cached", "-r", "--ignore-unmatch", relative])
+            .current_dir(&root_dir)
+            .output()
+            .map_err(|e| e.to_string())?;
+        if !output.status.success() {
+            return Err(String::from_utf8_lossy(&output.stderr).into_owned());
+        }
+    }
+
+    Ok(())
+}
+
 /// Discards unstaged modifications.
 /// Attempts `git checkout -- <file>`, falling back to `git restore <file>`,
 /// and deletes the physical file if it is fully untracked.

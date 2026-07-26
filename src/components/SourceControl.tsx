@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
-import { GitBranch, Plus, Minus, RotateCcw, Check, AlertCircle, ArrowUp, ArrowDown, GitCommit, ChevronDown } from "lucide-react";
+import { createPortal } from "react-dom";
+import { GitBranch, Plus, Minus, RotateCcw, Check, AlertCircle, ArrowUp, ArrowDown, GitCommit, ChevronDown, EyeOff } from "lucide-react";
 import { useWorkspaceStore } from "../store";
 import { invoke } from "@tauri-apps/api/core";
 import { gitPresenter } from "./git/GitPresenter";
 import { GitBranchManager } from "./git/GitBranchManager";
+import { GitFileStatus } from "./git/GitActions";
 import { notify } from "../notificationStore";
 import { useConfirm } from "./useConfirm";
 
@@ -25,6 +27,7 @@ export const SourceControl: React.FC = () => {
   const [isHistoryExpanded, setIsHistoryExpanded] = useState(true);
   const [historyCommits, setHistoryCommits] = useState<any[]>([]);
   const [showBranchPopover, setShowBranchPopover] = useState(false);
+  const [fileContextMenu, setFileContextMenu] = useState<{ x: number; y: number; file: GitFileStatus } | null>(null);
   const branchLoadIdRef = useRef(0);
 
   const lastRename = useWorkspaceStore((state) => state.lastRename);
@@ -222,6 +225,33 @@ export const SourceControl: React.FC = () => {
     }
   };
 
+  const handleAddToGitignore = async (filePath: string) => {
+    try {
+      await gitPresenter.addToGitignore(activeRepo, filePath);
+      await loadRepoData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleFileContextMenu = (e: React.MouseEvent, file: GitFileStatus) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setFileContextMenu({ x: e.clientX, y: e.clientY, file });
+  };
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest("[data-context-menu]")) return;
+      setFileContextMenu(null);
+    };
+    if (fileContextMenu) {
+      document.addEventListener("mousedown", handleOutsideClick);
+      return () => document.removeEventListener("mousedown", handleOutsideClick);
+    }
+  }, [fileContextMenu]);
+
   const handleDiscardChanges = async (e: React.MouseEvent, filePath: string, fileName: string) => {
     e.stopPropagation();
     try {
@@ -392,6 +422,8 @@ export const SourceControl: React.FC = () => {
   };
 
   const unstagedList = buildUnstagedList();
+  const modifiedList = unstagedList.filter((file) => file.status_type !== "untracked");
+  const untrackedList = unstagedList.filter((file) => file.status_type === "untracked");
   const totalChanges = (gitStatus?.staged.length || 0) + unstagedList.length;
 
   return (
@@ -572,14 +604,14 @@ export const SourceControl: React.FC = () => {
           </div>
         )}
 
-        {/* 2. Unstaged Changes List */}
-        {gitStatus && unstagedList.length > 0 && (
+        {/* 2. Unstaged (modified/deleted/renamed) Changes List */}
+        {gitStatus && modifiedList.length > 0 && (
           <div className="space-y-1">
             <div className="px-2 py-1 flex items-center justify-between text-[10px] font-mono font-bold text-[var(--text-muted)] uppercase tracking-wider">
               <div className="flex items-center space-x-1.5">
                 <span>Changes</span>
                 <span className="bg-[var(--border-color)] px-1.5 py-0.2 rounded-full text-[9px] text-[var(--text-normal)]">
-                  {unstagedList.length}
+                  {modifiedList.length}
                 </span>
               </div>
               <button
@@ -593,7 +625,7 @@ export const SourceControl: React.FC = () => {
             </div>
 
             <div className="space-y-0.5">
-              {unstagedList.map((file) => {
+              {modifiedList.map((file) => {
                 const indicator = getStatusIndicator(file.status_type);
                 const isRenamed = file.status_type === "renamed";
                 const relativeDir = isRenamed
@@ -604,6 +636,7 @@ export const SourceControl: React.FC = () => {
                   <div
                     key={`unstaged-${file.path}`}
                     onClick={() => !isRenamed && handleOpenFileDiff(file.path, file.name, "unstaged")}
+                    onContextMenu={(e) => !isRenamed && handleFileContextMenu(e, file)}
                     className="group flex items-center justify-between px-2.5 py-1.5 rounded hover:bg-[var(--accent-bg)]/20 cursor-pointer transition-colors"
                   >
                     <div className="flex flex-col min-w-0 flex-1">
@@ -628,7 +661,7 @@ export const SourceControl: React.FC = () => {
                         </button>
                       )}
 
-                      {!isRenamed && file.status_type !== "untracked" && (
+                      {!isRenamed && (
                         <button
                           onClick={(e) => handleDiscardChanges(e, file.path, file.name)}
                           className="opacity-0 group-hover:opacity-100 p-1 text-[var(--text-muted)] hover:text-[var(--color-status-warning)] hover:bg-[var(--color-surface-sunken)] rounded transition-all cursor-pointer"
@@ -637,7 +670,7 @@ export const SourceControl: React.FC = () => {
                           <RotateCcw size={11} />
                         </button>
                       )}
-                      
+
                       {!isRenamed && (
                         <button
                           onClick={(e) => handleStageFile(e, file.path)}
@@ -647,6 +680,69 @@ export const SourceControl: React.FC = () => {
                           <Plus size={11} />
                         </button>
                       )}
+
+                      <span className={`w-4 text-center text-[10px] font-mono select-none ${indicator.colorClass}`}>
+                        {indicator.char}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* 2b. Untracked (new) Files List */}
+        {gitStatus && untrackedList.length > 0 && (
+          <div className="space-y-1">
+            <div className="px-2 py-1 flex items-center justify-between text-[10px] font-mono font-bold text-[var(--text-muted)] uppercase tracking-wider">
+              <div className="flex items-center space-x-1.5">
+                <span>Untracked</span>
+                <span className="bg-[var(--border-color)] px-1.5 py-0.2 rounded-full text-[9px] text-[var(--text-normal)]">
+                  {untrackedList.length}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-0.5">
+              {untrackedList.map((file) => {
+                const indicator = getStatusIndicator(file.status_type);
+                const relativeDir = file.path.substring(activeRepo.length + 1, file.path.length - file.name.length - 1);
+
+                return (
+                  <div
+                    key={`untracked-${file.path}`}
+                    onClick={() => handleOpenFileDiff(file.path, file.name, "unstaged")}
+                    onContextMenu={(e) => handleFileContextMenu(e, file)}
+                    className="group flex items-center justify-between px-2.5 py-1.5 rounded hover:bg-[var(--accent-bg)]/20 cursor-pointer transition-colors"
+                  >
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <span className="text-[var(--text-normal)] group-hover:text-[var(--text-light)] truncate font-mono text-[11px]">
+                        {file.name}
+                      </span>
+                      {relativeDir && (
+                        <span className="text-[9px] text-[var(--text-muted)] truncate select-none">
+                          {relativeDir}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center space-x-1.5">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleAddToGitignore(file.path); }}
+                        className="opacity-0 group-hover:opacity-100 p-1 text-[var(--text-muted)] hover:text-[var(--color-status-info)] hover:bg-[var(--color-surface-sunken)] rounded transition-all cursor-pointer"
+                        title="Add to .gitignore"
+                      >
+                        <EyeOff size={11} />
+                      </button>
+
+                      <button
+                        onClick={(e) => handleStageFile(e, file.path)}
+                        className="opacity-0 group-hover:opacity-100 p-1 text-[var(--text-muted)] hover:text-[var(--color-status-success)] hover:bg-[var(--color-surface-sunken)] rounded transition-all cursor-pointer"
+                        title="Add to Git"
+                      >
+                        <Plus size={11} />
+                      </button>
 
                       <span className={`w-4 text-center text-[10px] font-mono select-none ${indicator.colorClass}`}>
                         {indicator.char}
@@ -737,6 +833,76 @@ export const SourceControl: React.FC = () => {
       )}
 
       {ConfirmModalComponent}
+
+      {fileContextMenu && (
+        <GitFileContextMenu
+          x={fileContextMenu.x}
+          y={fileContextMenu.y}
+          file={fileContextMenu.file}
+          onAddToGit={async () => {
+            setFileContextMenu(null);
+            try {
+              await gitPresenter.stageFile(activeRepo, fileContextMenu.file.path);
+              await loadRepoData();
+            } catch (err) {
+              console.error(err);
+            }
+          }}
+          onAddToGitignore={() => {
+            setFileContextMenu(null);
+            handleAddToGitignore(fileContextMenu.file.path);
+          }}
+        />
+      )}
     </div>
+  );
+};
+
+const GitFileContextMenu: React.FC<{
+  x: number;
+  y: number;
+  file: GitFileStatus;
+  onAddToGit: () => void;
+  onAddToGitignore: () => void;
+}> = ({ x, y, onAddToGit, onAddToGitignore }) => {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ x, y });
+
+  useEffect(() => {
+    if (menuRef.current) {
+      const rect = menuRef.current.getBoundingClientRect();
+      let adjX = x;
+      let adjY = y;
+      if (x + rect.width > window.innerWidth) adjX = window.innerWidth - rect.width - 8;
+      if (y + rect.height > window.innerHeight) adjY = window.innerHeight - rect.height - 8;
+      setPos({ x: adjX, y: adjY });
+    }
+  }, [x, y]);
+
+  const items = [
+    { icon: Plus, label: "Add to Git", action: onAddToGit },
+    { icon: EyeOff, label: "Add to .gitignore", action: onAddToGitignore },
+  ];
+
+  return createPortal(
+    <div
+      ref={menuRef}
+      data-context-menu="true"
+      style={{ left: pos.x, top: pos.y }}
+      className="fixed z-[9999] bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-lg shadow-2xl py-1 min-w-[180px] font-sans text-xs"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {items.map((item, idx) => (
+        <button
+          key={idx}
+          onClick={item.action}
+          className="w-full flex items-center space-x-2.5 px-3 py-1.5 text-left text-[var(--text-normal)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)] transition-colors"
+        >
+          <item.icon size={13} className="flex-shrink-0" />
+          <span>{item.label}</span>
+        </button>
+      ))}
+    </div>,
+    document.body
   );
 };
