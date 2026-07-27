@@ -100,83 +100,91 @@ export const SearchPaletteView: React.FC<SearchPaletteViewProps> = ({
         </div>
 
         {/* Results Area */}
-        <div className={`${styles.results} ${styles.groups}`}>
-          {searching && (
-            <div className={styles.state}>
-              <span className={styles.spinner} />
-              <span>Searching workspace...</span>
-            </div>
-          )}
+        <div className={styles.results}>
+          {/* WebKit (Tauri's macOS WKWebView) miscomputes scrollHeight when a
+              single element is both a flex/overflow-y:auto item and a grid
+              container — it reports scrollHeight === clientHeight and silently
+              clips content instead of scrolling. Keeping the scroll container
+              (.results) and the grid container (.groups) as separate elements
+              avoids that quirk while behaving identically in Chromium. */}
+          <div className={styles.groups}>
+            {searching && (
+              <div className={styles.state}>
+                <span className={styles.spinner} />
+                <span>Searching workspace...</span>
+              </div>
+            )}
 
-          {!searching && results.length === 0 && (
-            <div className={`${styles.state} ${styles.emptyState}`}>
-              <AlignLeft size={24} className={styles.mutedIcon} />
-              <span>
-                {query.trim() ? "No search results match." : "Type a query above to search files and reference contents."}
-              </span>
-            </div>
-          )}
+            {!searching && results.length === 0 && (
+              <div className={`${styles.state} ${styles.emptyState}`}>
+                <AlignLeft size={24} className={styles.mutedIcon} />
+                <span>
+                  {query.trim() ? "No search results match." : "Type a query above to search files and reference contents."}
+                </span>
+              </div>
+            )}
 
-          {!searching &&
-            Object.entries(groupedResults).map(([filePath, fileGroup]) => {
-              const relPath = rootPath ? filePath.replace(rootPath, "") : filePath;
-              return (
-                <div key={filePath} className={styles.group}>
-                  {/* File Header */}
-                  <div className={styles.fileHeader}>
-                    <File size={12} className={styles.mutedIcon} />
-                    <span className={styles.fileName}>{fileGroup.name}</span>
-                    <span className={styles.path}>{relPath}</span>
-                  </div>
+            {!searching &&
+              Object.entries(groupedResults).map(([filePath, fileGroup]) => {
+                const relPath = rootPath ? filePath.replace(rootPath, "") : filePath;
+                return (
+                  <div key={filePath} className={styles.group}>
+                    {/* File Header */}
+                    <div className={styles.fileHeader}>
+                      <File size={12} className={styles.mutedIcon} />
+                      <span className={styles.fileName}>{fileGroup.name}</span>
+                      <span className={styles.path}>{relPath}</span>
+                    </div>
 
-                  {/* Matches inside File */}
-                  <div className={styles.matches}>
-                    {fileGroup.items.map((item) => {
-                      const flatIdx = currentFlatIndex;
-                      currentFlatIndex++; // increment flat tracker
-                      const isSelected = selectedIndex === flatIdx;
+                    {/* Matches inside File */}
+                    <div className={styles.matches}>
+                      {fileGroup.items.map((item) => {
+                        const flatIdx = currentFlatIndex;
+                        currentFlatIndex++; // increment flat tracker
+                        const isSelected = selectedIndex === flatIdx;
 
-                      return (
-                        <button
-                          type="button"
-                          key={item.line + "_" + item.content}
-                          onClick={() => handleSelectResult(item)}
-                          className={`${styles.match} ${isSelected ? styles.matchSelected : ""}`}
-                        >
-                          <div className={styles.matchInner}>
-                            {item.is_content_match ? (
-                              <>
-                                <span className={styles.line}>
-                                  Line {item.line}
-                                </span>
-                                <span className={styles.content}>
-                                  {item.content}
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                <span className={styles.filenameBadge}>
-                                  Filename
-                                </span>
-                                <span className={styles.filenameMatch}>
-                                  {fileGroup.name} (match)
-                                </span>
-                              </>
+                        return (
+                          <button
+                            type="button"
+                            key={item.line + "_" + item.content}
+                            onClick={() => handleSelectResult(item)}
+                            className={`${styles.match} ${isSelected ? styles.matchSelected : ""}`}
+                          >
+                            <div className={styles.matchInner}>
+                              {item.is_content_match ? (
+                                <>
+                                  <span className={styles.line}>
+                                    Line {item.line}
+                                  </span>
+                                  <span className={styles.content}>
+                                    {item.content}
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <span className={styles.filenameBadge}>
+                                    Filename
+                                  </span>
+                                  <span className={styles.filenameMatch}>
+                                    {fileGroup.name} (match)
+                                  </span>
+                                </>
+                              )}
+                            </div>
+
+                            {isSelected && (
+                              <span className={styles.openHint}>
+                                ↵ Open
+                              </span>
                             )}
-                          </div>
-
-                          {isSelected && (
-                            <span className={styles.openHint}>
-                              ↵ Open
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+          </div>
         </div>
 
         {/* Footer Area */}
