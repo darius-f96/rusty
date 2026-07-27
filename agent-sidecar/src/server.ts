@@ -240,7 +240,12 @@ app.get("/llm/claude-code/status", async (_req, res) => {
 });
 
 app.post("/llm/claude-code/login", async (_req, res) => {
-  res.status(202).json(await startClaudeCodeLogin());
+  try {
+    res.status(202).json(await startClaudeCodeLogin());
+  } catch (err: any) {
+    console.error("Claude Code login error:", err?.stack || err);
+    res.status(500).json({ error: err?.message || "Could not start Claude Code authorization." });
+  }
 });
 
 app.get("/llm/claude-code/models", async (_req, res) => {

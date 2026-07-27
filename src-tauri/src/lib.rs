@@ -928,6 +928,34 @@ async fn search_project(
     Ok(final_results)
 }
 
+/// Minimal UTC "YYYY-MM-DDTHH:MM:SSZ" formatter with no external crate dependency,
+/// good enough for correlating sidecar log lines against other timestamps.
+fn chrono_now_iso8601() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let (days, secs_of_day) = (secs / 86_400, secs % 86_400);
+    let (hour, minute, second) = (secs_of_day / 3600, (secs_of_day % 3600) / 60, secs_of_day % 60);
+
+    // Howard Hinnant's civil_from_days algorithm.
+    let z = days as i64 + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = if month <= 2 { y + 1 } else { y };
+
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+        year, month, day, hour, minute, second
+    )
+}
+
 fn spawn_sidecar(app: &tauri::App) {
     // Resolve the bundled server.js from the app resources.
     // In dev, resources are copied to target/debug/resources/; in release they're
@@ -959,6 +987,27 @@ fn spawn_sidecar(app: &tauri::App) {
         }
     };
 
+    // Persist sidecar stdout/stderr to a log file. println!/eprintln! only reach
+    // a visible console when the app is launched from a terminal - for a normal
+    // Finder/Dock launch they vanish, leaving no way to diagnose a sidecar crash.
+    let log_file = app.path().app_log_dir().ok().and_then(|dir| {
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            eprintln!("[sidecar] failed to create log dir {}: {}", dir.display(), e);
+            return None;
+        }
+        let log_path = dir.join("sidecar.log");
+        match std::fs::OpenOptions::new().create(true).append(true).open(&log_path) {
+            Ok(f) => {
+                println!("[sidecar] logging to {}", log_path.display());
+                Some(Arc::new(Mutex::new(f)))
+            }
+            Err(e) => {
+                eprintln!("[sidecar] failed to open log file {}: {}", log_path.display(), e);
+                None
+            }
+        }
+    });
+
     match sidecar_cmd
         .args([server_js.to_string_lossy().to_string()])
         .spawn()
@@ -974,18 +1023,34 @@ fn spawn_sidecar(app: &tauri::App) {
                 *state.0.lock().unwrap() = Some(child);
             }
 
-            // Forward sidecar stdout/stderr to the host console so it's observable.
+            // Forward sidecar stdout/stderr to the host console and to disk.
             tauri::async_runtime::spawn(async move {
+                let write_log = |line: &str| {
+                    if let Some(f) = &log_file {
+                        let timestamp = chrono_now_iso8601();
+                        if let Ok(mut f) = f.lock() {
+                            let _ = writeln!(f, "[{}] {}", timestamp, line);
+                        }
+                    }
+                };
                 while let Some(event) = rx.recv().await {
                     match event {
                         CommandEvent::Stdout(bytes) => {
-                            println!("[sidecar] {}", String::from_utf8_lossy(&bytes).trim());
+                            let line = String::from_utf8_lossy(&bytes);
+                            let line = line.trim();
+                            println!("[sidecar] {}", line);
+                            write_log(line);
                         }
                         CommandEvent::Stderr(bytes) => {
-                            eprintln!("[sidecar] {}", String::from_utf8_lossy(&bytes).trim());
+                            let line = String::from_utf8_lossy(&bytes);
+                            let line = line.trim();
+                            eprintln!("[sidecar] {}", line);
+                            write_log(line);
                         }
                         CommandEvent::Terminated(status) => {
-                            println!("[sidecar] process exited: {:?}", status);
+                            let line = format!("process exited: {:?}", status);
+                            println!("[sidecar] {}", line);
+                            write_log(&line);
                             break;
                         }
                         _ => {}

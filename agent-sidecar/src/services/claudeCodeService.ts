@@ -222,12 +222,44 @@ export async function readClaudeCodeQuota(): Promise<{
 
 export async function startClaudeCodeLogin(): Promise<ClaudeCodeConnectionStatus> {
   cachedStatus = null;
-  const child = spawn(claudeExecutable(), ["auth", "login", "--claudeai"], {
+  const executable = claudeExecutable();
+  const child = spawn(executable, ["auth", "login", "--claudeai"], {
     detached: true,
-    stdio: "ignore",
+    stdio: ["ignore", "pipe", "pipe"],
     env: { ...process.env, NO_COLOR: "1" },
   });
+
+  let output = "";
+  const captureOutput = (chunk: Buffer) => {
+    output = `${output}${chunk.toString("utf8")}`.slice(-4_000);
+  };
+  child.stdout?.on("data", captureOutput);
+  child.stderr?.on("data", captureOutput);
+
+  child.once("error", (error) => {
+    console.error(`Claude Code login process failed to start (${executable}):`, error);
+    cachedStatus = {
+      state: "failed",
+      authenticated: false,
+      message: `Could not start the Claude Code CLI: ${error.message}`,
+    };
+  });
+  child.once("exit", (code, signal) => {
+    if (code === 0 || code === null && !signal) return;
+    console.error(
+      `Claude Code login process exited unexpectedly (${executable}): code=${code ?? "none"}, signal=${signal || "none"}\n${output}`,
+    );
+    cachedStatus = {
+      state: "failed",
+      authenticated: false,
+      message: signal
+        ? `The Claude Code CLI crashed (signal ${signal}). See the sidecar log for details.`
+        : `The Claude Code CLI exited unexpectedly (code ${code}). See the sidecar log for details.`,
+      diagnostics: output ? [output] : undefined,
+    };
+  });
   child.unref();
+
   return {
     state: "connecting",
     authenticated: false,
