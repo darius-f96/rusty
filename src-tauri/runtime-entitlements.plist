@@ -2,12 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Required by the bundled Node, Bun, and V8 runtimes under hardened runtime. -->
+	<!-- Required by the bundled Node, Bun, and V8 runtimes under hardened runtime.
+	     No disable-library-validation: every nested binary/.node addon is
+	     re-signed with our own Developer ID in the same signing pass, so
+	     library validation already passes on Team ID match. Granting it here
+	     too pushes Apple's notary review into an extended (multi-hour) queue. -->
 	<key>com.apple.security.cs.allow-jit</key>
 	<true/>
 	<key>com.apple.security.cs.allow-unsigned-executable-memory</key>
-	<true/>
-	<key>com.apple.security.cs.disable-library-validation</key>
 	<true/>
 </dict>
 </plist>
