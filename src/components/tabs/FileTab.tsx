@@ -27,6 +27,10 @@ loader.init().then((monaco) => {
   const activeThemeId = useWorkspaceStore.getState().activeThemeId;
   const activeTheme = themes[activeThemeId] || themes.dark;
   defineMonacoTheme(monaco, activeTheme);
+  // No real LSP is attached yet (LSP_EDITOR_ENABLED is off below), so Monaco's
+  // built-in TS worker would otherwise flag false-positive module/JSX errors
+  // with no awareness of this project's actual tsconfig.
+  MonacoLspBinding.disableBuiltInTsDiagnostics(monaco);
 }).catch((error) => {
   console.warn("Failed to initialize Monaco for file tabs:", error);
 });

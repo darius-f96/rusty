@@ -250,10 +250,17 @@ export class MonacoLspBinding {
    * definition/completion providers, so those coexist as a fallback — but the
    * cross-file jump still routes through our openCodeEditor override, so
    * navigation is consistent across languages.
+   *
+   * Called unconditionally at Monaco startup (see ThemeRuntime/FileTab), not
+   * just when an LSP attaches: the built-in worker has no awareness of this
+   * project's tsconfig, module resolution, or file system, so left enabled it
+   * produces false-positive "cannot find module"/"cannot use JSX" errors on
+   * any file with project-relative imports. Real diagnostics come from the
+   * LSP's own markers once `LSP_EDITOR_ENABLED` is turned on for a language.
    */
-  private static disableBuiltInTsDiagnostics() {
+  public static disableBuiltInTsDiagnostics(monacoInstance?: any) {
     if (this.tsDiagnosticsDisabled) return;
-    const monaco = (window as any).monaco;
+    const monaco = monacoInstance || (window as any).monaco;
     if (!monaco?.languages?.typescript) return;
     this.tsDiagnosticsDisabled = true;
     try {
