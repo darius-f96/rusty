@@ -267,6 +267,20 @@ export async function startClaudeCodeLogin(): Promise<ClaudeCodeConnectionStatus
   };
 }
 
+export async function logoutClaudeCode(): Promise<ClaudeCodeConnectionStatus> {
+  try {
+    await execFileAsync(claudeExecutable(), ["auth", "logout"], {
+      env: { ...process.env, NO_COLOR: "1" },
+      timeout: 20_000,
+    });
+  } catch (error: any) {
+    throw new Error(error?.message || "Could not sign out of Claude Code.");
+  } finally {
+    cachedStatus = null;
+  }
+  return { state: "disconnected", authenticated: false, message: "Signed out of Claude Code." };
+}
+
 export async function discoverClaudeCodeModels(): Promise<DiscoveredProviderModel[]> {
   const status = await getClaudeCodeConnectionStatus(true);
   if (!status.authenticated) throw new Error(status.message || "Claude Code sign-in is required.");

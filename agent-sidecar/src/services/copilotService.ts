@@ -69,6 +69,35 @@ function resolveCopilotCliLoader(): string {
   throw new Error("The bundled GitHub Copilot CLI could not be located.");
 }
 
+// On macOS, the Copilot CLI's SEA binary otherwise self-extracts its embedded
+// index.js/app.js/prebuilds/*.node into ~/Library/Caches/copilot/pkg on first
+// run. Those extracted files carry GitHub's own code signature, so under our
+// hardened-runtime, Library-Validation-enabled build, loading that runtime.node
+// fails with "mapping process and mapped file (non-platform) have different
+// Team IDs". COPILOT_CLI_DIST_DIR (read by the CLI itself) points it at this
+// npm package's own copy of those same files instead, which sign-sidecar-binaries.sh
+// already re-signs with our Developer ID in the normal build pass - same Team ID,
+// no Library Validation exemption needed, and no per-user cache extraction at all.
+function resolveCopilotDistDir(): string | undefined {
+  if (process.platform !== "darwin") return undefined;
+  const packageName = process.arch === "arm64" ? "copilot-darwin-arm64" : "copilot-darwin-x64";
+  for (const root of candidateNodeModuleRoots()) {
+    const candidate = path.join(root, "@github", packageName);
+    if (fs.existsSync(path.join(candidate, "index.js"))) return candidate;
+  }
+  return undefined;
+}
+
+function runtimeEnvWithDistDir(): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value !== undefined) env[key] = value;
+  }
+  const distDir = resolveCopilotDistDir();
+  if (distDir) env.COPILOT_CLI_DIST_DIR = distDir;
+  return env;
+}
+
 function keychainEnabledRuntimeConnection() {
   // Empty mode provides Axiom's required session isolation, but the SDK also sets
   // COPILOT_DISABLE_KEYTAR=1 in that mode. Launch through the bundled Node runtime
@@ -81,6 +110,7 @@ function keychainEnabledRuntimeConnection() {
       'delete process.env.COPILOT_DISABLE_KEYTAR; import(require("node:url").pathToFileURL(process.argv[1]).href);',
       resolveCopilotCliLoader(),
     ],
+    env: runtimeEnvWithDistDir(),
   });
 }
 
@@ -372,7 +402,7 @@ export async function startCopilotLogin(): Promise<CopilotConnectionStatus> {
   addAuthDiagnostic("Starting Copilot CLI login.");
   loginAttempt.message = "Opening GitHub authorization in your browser…";
   const child = spawn(command, commandArgs, {
-    env: { ...process.env, COPILOT_HOME: copilotHome(), NO_COLOR: "1" },
+    env: { ...runtimeEnvWithDistDir(), COPILOT_HOME: copilotHome(), NO_COLOR: "1" },
     stdio: ["pipe", "pipe", "pipe"],
   });
   loginProcess = child;
@@ -433,6 +463,30 @@ export async function startCopilotLogin(): Promise<CopilotConnectionStatus> {
   });
 
   return withDiagnostics({ state: "connecting", authenticated: false, message: loginAttempt.message });
+}
+
+export async function logoutCopilot(): Promise<CopilotConnectionStatus> {
+  if (loginProcess) {
+    loginProcess.kill();
+    loginProcess = null;
+  }
+  loginAttempt = null;
+  try {
+    const sdk = await getClient();
+    const currentAuth = await sdk.rpc.account.getCurrentAuth();
+    if (currentAuth.authInfo) {
+      await sdk.rpc.account.logout({ authInfo: currentAuth.authInfo });
+      addAuthDiagnostic("Signed out of GitHub Copilot; credential removed from keychain and persisted state.");
+    }
+  } catch (error: any) {
+    addAuthDiagnostic(`Sign-out failed: ${error?.message || String(error)}`);
+    throw new Error(error?.message || "Could not sign out of GitHub Copilot.");
+  } finally {
+    // The SDK client caches auth state in-process, so it must be restarted for
+    // getAuthStatus() to stop reporting the now-removed credential.
+    await stopClient();
+  }
+  return withDiagnostics({ state: "disconnected", authenticated: false, message: "Signed out of GitHub Copilot." });
 }
 
 export function normalizeCopilotModel(model: ModelInfo): DiscoveredProviderModel {

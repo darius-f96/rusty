@@ -581,6 +581,22 @@ export async function startCodexLogin(): Promise<CodexConnectionStatus> {
   }
 }
 
+export async function logoutCodex(): Promise<CodexConnectionStatus> {
+  loginAttempt = null;
+  try {
+    await appServer.request("account/logout", {}, 20_000);
+    addAuthDiagnostic("Signed out of OpenAI Codex; credential removed from CODEX_HOME.");
+  } catch (error: any) {
+    addAuthDiagnostic(`Sign-out failed: ${error?.message || String(error)}`);
+    throw new Error(error?.message || "Could not sign out of OpenAI Codex.");
+  } finally {
+    // account/read caches auth on the app-server side, so restart the process
+    // to force a clean read of the now-empty CODEX_HOME auth file.
+    await appServer.stop();
+  }
+  return withDiagnostics({ state: "disconnected", authenticated: false, message: "Signed out of OpenAI Codex." });
+}
+
 export function normalizeCodexModel(model: any): DiscoveredProviderModel {
   const remoteId = String(model?.model || model?.id || "").trim();
   if (!remoteId) throw new Error("Codex returned a model without an ID.");

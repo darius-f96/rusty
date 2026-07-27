@@ -76,6 +76,7 @@ import { discoverProviderModels, testProviderConnection } from "./services/llmPr
 import {
   discoverCopilotModels,
   getCopilotConnectionStatus,
+  logoutCopilot,
   shutdownCopilotService,
   startCopilotLogin,
   testCopilotConnection,
@@ -83,6 +84,7 @@ import {
 import {
   discoverCodexModels,
   getCodexConnectionStatus,
+  logoutCodex,
   shutdownCodexService,
   startCodexLogin,
   testCodexConnection,
@@ -90,6 +92,7 @@ import {
 import {
   discoverClaudeCodeModels,
   getClaudeCodeConnectionStatus,
+  logoutClaudeCode,
   startClaudeCodeLogin,
   testClaudeCodeConnection,
 } from "./services/claudeCodeService";
@@ -223,6 +226,14 @@ app.post("/llm/copilot/login", async (_req, res) => {
   }
 });
 
+app.post("/llm/copilot/logout", async (_req, res) => {
+  try {
+    res.json(await logoutCopilot());
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || "Could not sign out of GitHub Copilot." });
+  }
+});
+
 app.get("/llm/copilot/models", async (_req, res) => {
   try {
     res.json({ models: await discoverCopilotModels() });
@@ -240,6 +251,14 @@ app.post("/llm/codex/login", async (_req, res) => {
     res.status(202).json(await startCodexLogin());
   } catch (err: any) {
     res.status(500).json({ error: err?.message || "Could not start OpenAI authorization." });
+  }
+});
+
+app.post("/llm/codex/logout", async (_req, res) => {
+  try {
+    res.json(await logoutCodex());
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || "Could not sign out of OpenAI Codex." });
   }
 });
 
@@ -261,6 +280,14 @@ app.post("/llm/claude-code/login", async (_req, res) => {
   } catch (err: any) {
     console.error("Claude Code login error:", err?.stack || err);
     res.status(500).json({ error: err?.message || "Could not start Claude Code authorization." });
+  }
+});
+
+app.post("/llm/claude-code/logout", async (_req, res) => {
+  try {
+    res.json(await logoutClaudeCode());
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || "Could not sign out of Claude Code." });
   }
 });
 

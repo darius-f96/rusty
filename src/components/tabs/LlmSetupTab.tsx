@@ -48,6 +48,7 @@ export const LlmSetupTab: React.FC = () => {
   const [copilotStatus, setCopilotStatus] = useState<CopilotConnectionStatus | null>(null);
   const [codexStatus, setCodexStatus] = useState<CodexConnectionStatus | null>(null);
   const [claudeCodeStatus, setClaudeCodeStatus] = useState<ClaudeCodeConnectionStatus | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
   const managedStatus = isCodex ? codexStatus : isClaudeCode ? claudeCodeStatus : copilotStatus;
   const managedVendor = isCodex ? "OpenAI" : isClaudeCode ? "Anthropic" : "GitHub";
   const managedProduct = isCodex ? "Codex" : isClaudeCode ? "Claude Code" : "Copilot";
@@ -261,6 +262,31 @@ export const LlmSetupTab: React.FC = () => {
       else if (isClaudeCode) setClaudeCodeStatus(failed);
       else setCopilotStatus(failed);
       notify("Sign-in failed", error?.message || `Could not start ${managedVendor} authorization.`, "error");
+    }
+  };
+
+  const handleManagedLogout = async () => {
+    if (!selectedProvider) return;
+    setSigningOut(true);
+    try {
+      const status = isCodex
+        ? await llmIntegrationService.logoutCodex()
+        : isClaudeCode
+          ? await llmIntegrationService.logoutClaudeCode()
+          : await llmIntegrationService.logoutCopilot();
+      if (isCodex) setCodexStatus(status as CodexConnectionStatus);
+      else if (isClaudeCode) setClaudeCodeStatus(status as ClaudeCodeConnectionStatus);
+      else setCopilotStatus(status as CopilotConnectionStatus);
+      setConnectionStatus((current) => {
+        const next = { ...current };
+        delete next[selectedProvider.id];
+        return next;
+      });
+      notify("Signed out", `Disconnected the ${managedVendor} account from ${managedProduct}.`, "success");
+    } catch (error: any) {
+      notify("Sign-out failed", error?.message || `Could not sign out of ${managedProduct}.`, "error");
+    } finally {
+      setSigningOut(false);
     }
   };
 
@@ -717,18 +743,30 @@ export const LlmSetupTab: React.FC = () => {
                           )}
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => void handleManagedLogin()}
-                        disabled={managedStatus?.state === "connecting"}
-                        className="whitespace-nowrap rounded-lg bg-[var(--accent-color)] px-3 py-2 font-mono text-[10px] font-bold text-[var(--color-primary-foreground)] transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {managedStatus?.state === "connecting"
-                          ? "Signing in…"
-                          : managedStatus?.authenticated
-                            ? "Re-authenticate"
-                            : isClaudeCode ? "Check Claude Login" : `Sign in with ${managedVendor}`}
-                      </button>
+                      <div className="flex flex-shrink-0 items-center gap-2">
+                        {managedStatus?.authenticated && (
+                          <button
+                            type="button"
+                            onClick={() => void handleManagedLogout()}
+                            disabled={signingOut || managedStatus?.state === "connecting"}
+                            className="whitespace-nowrap rounded-lg border border-[var(--border-color)] bg-[var(--bg-app)] px-3 py-2 font-mono text-[10px] font-bold text-[var(--text-normal)] transition-colors hover:border-[var(--color-status-danger)] hover:text-[var(--color-status-danger)] disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {signingOut ? "Signing out…" : "Sign Out"}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => void handleManagedLogin()}
+                          disabled={managedStatus?.state === "connecting"}
+                          className="whitespace-nowrap rounded-lg bg-[var(--accent-color)] px-3 py-2 font-mono text-[10px] font-bold text-[var(--color-primary-foreground)] transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {managedStatus?.state === "connecting"
+                            ? "Signing in…"
+                            : managedStatus?.authenticated
+                              ? "Re-authenticate"
+                              : isClaudeCode ? "Check Claude Login" : `Sign in with ${managedVendor}`}
+                        </button>
+                      </div>
                     </div>
                     {managedStatus?.state === "connecting" && managedStatus.userCode && (
                       <div className="rounded-xl border border-[var(--accent-color)]/40 bg-[var(--accent-bg)]/10 p-4 text-center">
