@@ -11,6 +11,7 @@ import {
   resolveProviderApiKey,
   resolveProviderModelSelection,
 } from "./llmProviders";
+import { TokenUsageSample } from "./usageTracking";
 
 interface ActivePiRun {
   stop: (reason: string) => Promise<void>;
@@ -18,8 +19,6 @@ interface ActivePiRun {
 }
 
 const activePiRuns = new Map<string, ActivePiRun>();
-const DEFAULT_SUBAGENT_MAX_TURNS = 4;
-const DEFAULT_SUBAGENT_GRACE_TURNS = 1;
 
 /** Stop the main Pi session and all background agents associated with a chat tab. */
 export async function stopPiAgentRun(tabId: string, reason = "Stopped by user."): Promise<boolean> {
@@ -125,6 +124,24 @@ interface RunPiAgentChatOptions {
   enableSubagents?: boolean;
   consumeDeferredQuestion?: () => DeferredUserQuestion | undefined;
   requestUserQuestion?: (question: DeferredUserQuestion) => Promise<string>;
+  onUsage?: (sample: TokenUsageSample) => void;
+}
+
+/** Pi's session doesn't expose a per-round usage hook, so usage is summed once at the end of the run. */
+function sumSessionUsage(messages: any[]): TokenUsageSample | undefined {
+  let found = false;
+  const total: TokenUsageSample = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0 };
+  for (const entry of messages) {
+    const usage = entry?.role === "assistant" ? entry?.usage : undefined;
+    if (!usage) continue;
+    found = true;
+    total.input += usage.input || 0;
+    total.output += usage.output || 0;
+    total.cacheRead += usage.cacheRead || 0;
+    total.cacheWrite += usage.cacheWrite || 0;
+    total.totalTokens += usage.totalTokens || (usage.input || 0) + (usage.output || 0);
+  }
+  return found ? total : undefined;
 }
 
 function supportsPiRuntime(): boolean {
@@ -352,12 +369,8 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
     return undefined;
   }
 
-  // Pi Subagents defaults to unlimited turns. Bound delegated investigations so
-  // a slow provider or an overly broad prompt cannot spend tokens indefinitely.
-  const { setDefaultMaxTurns, setGraceTurns } = await importEsm<any>("@tintinweb/pi-subagents/dist/agent-runner.js");
-  setDefaultMaxTurns(DEFAULT_SUBAGENT_MAX_TURNS);
-  setGraceTurns(DEFAULT_SUBAGENT_GRACE_TURNS);
-  options.sendLog(`Subagent budget: ${DEFAULT_SUBAGENT_MAX_TURNS} turns maximum (${DEFAULT_SUBAGENT_GRACE_TURNS} final wrap-up turn).`);
+  // Pi Subagents defaults to unlimited turns — leave that default in place so
+  // delegated investigations can run for as long as they actually need.
 
   const loadedExtensions = resourceLoader.getExtensions().extensions;
   const hasWebAccessExtension = loadedExtensions.some((extension: any) =>
@@ -851,6 +864,8 @@ export async function runPiAgentChat(options: RunPiAgentChatOptions): Promise<st
       sendAggregationUpdate("completed", "Final synthesized response is ready.", "Aggregation complete.");
     }
     const lastAssistant = [...session.messages].reverse().find((entry: any) => entry?.role === "assistant");
+    const usageSample = sumSessionUsage(session.messages);
+    if (usageSample) options.onUsage?.(usageSample);
     flushPendingTokens();
     return textFromAssistantMessage(lastAssistant) || latestText || "Agent complete.";
   } finally {

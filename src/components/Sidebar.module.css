@@ -88,6 +88,29 @@
   box-shadow: 0 2px 5px color-mix(in srgb, var(--color-surface-overlay) 35%, transparent);
 }
 
+.badgeText {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  min-width: 1.5rem;
+  height: 0.85rem;
+  padding: 0 3px;
+  place-items: center;
+  border: 1px solid var(--color-surface-sidebar);
+  border-radius: var(--radius-sm);
+  background: var(--color-status-info-solid);
+  color: var(--color-status-info-solid-foreground);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: var(--font-size-ui-xs);
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  transform: translateX(-50%) scale(0.85);
+  box-shadow: 0 2px 5px color-mix(in srgb, var(--color-surface-overlay) 35%, transparent);
+}
+
 .tooltip {
   position: absolute;
   z-index: 50;

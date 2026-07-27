@@ -4,6 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import * as readline from "node:readline";
 import type { DiscoveredProviderModel } from "./llmProviders";
+import type { TokenUsageSample } from "./usageTracking";
 
 export const OPENAI_CODEX_PROVIDER_ID = "openai-codex";
 
@@ -37,6 +38,8 @@ interface CodexRun {
   maxToolCalls: number;
   sendLog: (message: string) => void;
   sendToken: (token: string) => void;
+  onUsage?: (sample: TokenUsageSample) => void;
+  latestTokenUsage?: TokenUsageSample;
   resolve: (text: string) => void;
   reject: (error: Error) => void;
   settled: boolean;
@@ -185,12 +188,35 @@ function failRun(run: CodexRun, error: Error): void {
 function completeRun(run: CodexRun): void {
   if (run.settled) return;
   run.settled = true;
+  if (run.latestTokenUsage) run.onUsage?.(run.latestTokenUsage);
   const result = run.text.trim() ? run.text : run.commentaryText;
   if (!result.trim()) {
     run.reject(new Error("OpenAI Codex completed the turn without returning text."));
     return;
   }
   run.resolve(result);
+}
+
+/**
+ * `thread/tokenUsage/updated` reports the thread's running total, matching one
+ * "turn" in Axiom's model since each turn gets its own ephemeral thread — so
+ * the latest notification value is stored and reported once, on completion,
+ * rather than summed across multiple notifications.
+ */
+function usageFromCodexNotification(params: any): TokenUsageSample | undefined {
+  const breakdown = params?.tokenUsage || params?.usage;
+  if (!breakdown || typeof breakdown !== "object") return undefined;
+  const input = Number(breakdown.inputTokens) || 0;
+  const output = Number(breakdown.outputTokens) || 0;
+  const reasoning = Number(breakdown.reasoningOutputTokens);
+  return {
+    input,
+    output,
+    cacheRead: Number(breakdown.cachedInputTokens) || 0,
+    cacheWrite: 0,
+    reasoning: Number.isFinite(reasoning) ? reasoning : undefined,
+    totalTokens: Number(breakdown.totalTokens) || input + output,
+  };
 }
 
 class CodexAppServerClient {
@@ -428,6 +454,11 @@ function handleCodexNotification(method: string, params: any, activeRuns: Map<st
     failRun(run, errorFromRpc(params.error, "OpenAI Codex turn failed."));
     return;
   }
+  if (method === "thread/tokenUsage/updated") {
+    const sample = usageFromCodexNotification(params);
+    if (sample) run.latestTokenUsage = sample;
+    return;
+  }
   if (method === "turn/completed") {
     const status = params.turn?.status;
     if (status === "completed") completeRun(run);
@@ -663,6 +694,7 @@ async function runCodexTurn(options: {
   maxToolCalls?: number;
   shouldAbort?: () => boolean;
   signal?: AbortSignal;
+  onUsage?: (sample: TokenUsageSample) => void;
 }): Promise<string> {
   const status = await getCodexConnectionStatus();
   if (!status.authenticated) throw new Error(status.message || "OpenAI Codex sign-in is required.");
@@ -711,6 +743,7 @@ async function runCodexTurn(options: {
     maxToolCalls: options.maxToolCalls || 120,
     sendLog,
     sendToken,
+    onUsage: options.onUsage,
     resolve: resolveRun,
     reject: rejectRun,
     settled: false,
@@ -764,6 +797,7 @@ export async function completeCodexText(options: {
   reasoning?: "minimal" | "low" | "medium" | "high" | "xhigh";
   cwd?: string;
   signal?: AbortSignal;
+  onUsage?: (sample: TokenUsageSample) => void;
 }): Promise<string> {
   return runCodexTurn(options);
 }
@@ -780,6 +814,7 @@ export async function callCodexWithToolsStreaming(options: {
   maxRounds?: number;
   reasoning?: "minimal" | "low" | "medium" | "high" | "xhigh";
   shouldAbort?: () => boolean;
+  onUsage?: (sample: TokenUsageSample) => void;
 }): Promise<string> {
   return runCodexTurn({
     ...options,

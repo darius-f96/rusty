@@ -1,11 +1,12 @@
-import { FolderOpen, Files, GitBranch, Cpu, Settings, Bot, Wand2, Plug, BookOpen } from "lucide-react";
+import { FolderOpen, Files, GitBranch, Cpu, Settings, Bot, Wand2, Plug, BookOpen, Gauge } from "lucide-react";
 import React from "react";
 import type { WorkspaceState } from "../../store";
 import { AxiomIcon } from "../AxiomIcon";
+import { formatCompactTokenCount } from "../../services/tokenFormat";
 
 export type SidebarStoreState = Pick<
   WorkspaceState,
-  "openTab" | "createCanvasTab" | "createAgentTab" | "gitStatus"
+  "openTab" | "createCanvasTab" | "createAgentTab" | "gitStatus" | "metricsTodayTotal"
 >;
 
 export interface SidebarIconItem {
@@ -14,6 +15,7 @@ export interface SidebarIconItem {
   icon: React.ComponentType<any>;
   onClick: (storeState: SidebarStoreState, helpers: SidebarHelpers) => void;
   badgeCount?: (storeState: SidebarStoreState) => number;
+  badgeText?: (storeState: SidebarStoreState) => string | undefined;
 }
 
 export interface SidebarHelpers {
@@ -145,6 +147,20 @@ export const SIDEBAR_ICONS: SidebarIconItem[] = [
         type: "onboarding",
         title: "Welcome to Axiom",
         key: "onboarding",
+      });
+    },
+  },
+  {
+    id: "metrics",
+    label: "Token Metrics",
+    icon: Gauge,
+    badgeText: (store) => store.metricsTodayTotal > 0 ? formatCompactTokenCount(store.metricsTodayTotal) : undefined,
+    onClick: (store) => {
+      store.openTab({
+        id: "metrics",
+        type: "metrics",
+        title: "Token Metrics",
+        key: "metrics",
       });
     },
   },

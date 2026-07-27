@@ -6,7 +6,8 @@ export interface DelegatedTask {
   excludedScope?: string[];
   expectedOutput: "findings" | "review" | "recommendation";
   evidenceRequired: boolean;
-  maxTurns: number;
+  /** Undefined means unbounded — the subagent runs until it finishes or hits timeoutMs. */
+  maxTurns?: number;
   timeoutMs: number;
   benefit: "coverage" | "parallelism" | "independent_review" | "specialization";
 }
@@ -261,7 +262,9 @@ export class DelegationManager {
   private validateTask(task: DelegatedTask): void {
     if (!task.objective.trim()) throw new Error("Delegated task objective is required.");
     if (!Array.isArray(task.scope) || task.scope.length === 0) throw new Error("Delegated task scope is required.");
-    if (!Number.isInteger(task.maxTurns) || task.maxTurns < 1) throw new Error("Delegated task maxTurns must be positive.");
+    if (task.maxTurns !== undefined && (!Number.isInteger(task.maxTurns) || task.maxTurns < 1)) {
+      throw new Error("Delegated task maxTurns must be positive when set.");
+    }
     if (!Number.isFinite(task.timeoutMs) || task.timeoutMs < 1) throw new Error("Delegated task timeoutMs must be positive.");
   }
 

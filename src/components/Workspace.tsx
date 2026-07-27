@@ -16,6 +16,7 @@ import { AgentTab } from "./tabs/AgentTab";
 import { SkillsTab } from "./tabs/SkillsTab";
 import { McpIntegrationTab } from "./mcp/McpIntegrationTab";
 import { OnboardingTab } from "./tabs/OnboardingTab";
+import { MetricsTab } from "./tabs/MetricsTab";
 import { createPortal } from "react-dom";
 import { AlertTriangle, X, Save, HelpCircle } from "lucide-react";
 import { canvasFileService } from "./tabs/canvas/services/canvasFileService";
@@ -457,6 +458,11 @@ export const Workspace: React.FC = () => {
           return;
         }
 
+        if (data.type === "usage_update" && data.nodeId === nodeId) {
+          window.dispatchEvent(new CustomEvent("axiom-node-usage", { detail: { nodeId, usage: data.usage } }));
+          return;
+        }
+
         if (data.type === "read_file") {
           try {
             console.log(`WebSocket [read_file] intercept for: ${data.path}`);
@@ -829,6 +835,9 @@ export const Workspace: React.FC = () => {
           )}
           {tab.type === "onboarding" && (
             <OnboardingTab />
+          )}
+          {tab.type === "metrics" && (
+            <MetricsTab />
           )}
         </div>
       );

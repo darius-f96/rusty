@@ -48,6 +48,7 @@ export const TAB_CONFIGS: Record<string, TabTypeConfig> = {
   skills: { type: "skills", label: "Skills", allowDuplicates: false, isSingleton: true },
   "mcp-integration": { type: "mcp-integration", label: "MCP Integration", allowDuplicates: false, isSingleton: true },
   onboarding: { type: "onboarding", label: "Welcome to Axiom", allowDuplicates: false, isSingleton: true },
+  metrics: { type: "metrics", label: "Token Metrics", allowDuplicates: false, isSingleton: true },
 };
 
 // Global registry of mounted tab instances' hook callbacks

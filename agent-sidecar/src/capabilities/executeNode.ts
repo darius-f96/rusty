@@ -14,6 +14,7 @@ import { createMcpTools, McpServerConfig } from "../services/mcpClient";
 import { createLspTools } from "../services/lspTools";
 import { runPiAgentChat } from "../services/piAgentChat";
 import { callLlmWithToolsPiStreaming } from "../services/llmRuntime";
+import { createUsageReporter } from "../services/usageBroadcast";
 import {
   acquireTaskExecutionSlot,
   getTaskExecutionLimit,
@@ -268,6 +269,13 @@ File writing rules:
     (ws as any).__activeAgentTabId = nodeId;
     const piModel = model || customProvider?.models?.find((item: any) => item.supported !== false)?.id || "";
     if (!piModel) throw new Error("No model is selected. Configure one in LLM Setup.");
+    const usageReporter = createUsageReporter(ws, {
+      workspaceRoot,
+      surface: "node_execution",
+      nodeId,
+      model: piModel,
+      provider: customProvider?.id,
+    });
     const piResponse = await runPiAgentChat({
       tabId: nodeId,
       model: piModel,
@@ -281,6 +289,7 @@ File writing rules:
       sendToken: (token) => safeSend(ws, { type: "token", nodeId, content: token }),
       sendSubagentUpdate: (subagent) => safeSend(ws, { type: "subagent_update", tabId: nodeId, nodeId, subagent }),
       enableSubagents: false,
+      onUsage: usageReporter,
     });
     if (piResponse !== undefined) {
       runResult = { status: "success", modified: Array.from(modifiedFiles), response: piResponse };
@@ -300,6 +309,7 @@ File writing rules:
         cwd: workspaceRoot,
         history: chatHistory || [],
         shouldAbort: () => ws.readyState !== WebSocket.OPEN,
+        onUsage: usageReporter,
       });
       runResult = { status: "success", modified: Array.from(modifiedFiles), response: responseText };
     }

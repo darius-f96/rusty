@@ -16,3 +16,5 @@ export { IconButton } from "./IconButton/IconButton";
 export type { IconButtonProps } from "./IconButton/IconButton";
 export { Callout } from "./Callout/Callout";
 export type { CalloutProps, CalloutVariant } from "./Callout/Callout";
+export { TokenBadge } from "./TokenBadge/TokenBadge";
+export type { TokenBadgeProps, TokenUsageLike } from "./TokenBadge/TokenBadge";

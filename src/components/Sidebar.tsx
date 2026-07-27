@@ -96,6 +96,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         return activeTabId === "settings";
       case "onboarding":
         return activeTab?.type === "onboarding";
+      case "metrics":
+        return activeTab?.type === "metrics";
       default:
         return false;
     }
@@ -106,6 +108,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     createCanvasTab: state.createCanvasTab,
     createAgentTab: state.createAgentTab,
     gitStatus: state.gitStatus,
+    metricsTodayTotal: state.metricsTodayTotal,
   })));
   const topIcons = SIDEBAR_ICONS
     .filter((item) => item.id !== "settings" && item.id !== "onboarding")

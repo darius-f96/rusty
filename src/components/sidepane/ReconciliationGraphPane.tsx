@@ -19,6 +19,7 @@ import { VfsExplorer } from "./components/VfsExplorer";
 import type { ReconciliationLedgerEntry, ReconciliationSnapshot } from "../../store/types";
 import { invoke } from "@tauri-apps/api/core";
 import { createAgentHarnessSocket } from "../../services/agentHarnessClient";
+import { TokenBadge, TokenUsageLike } from "../ui/TokenBadge/TokenBadge";
 
 
 interface ReconciliationGraphPaneProps {
@@ -43,6 +44,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
   const [selectedModel, setSelectedModel] = useState(activeModel || "");
   const [activeTab, setActiveTab] = useState<"overview" | "chat" | "console" | "files" | "vfs">("overview");
   const [isReconciling, setIsReconciling] = useState(false);
+  const [runUsage, setRunUsage] = useState<TokenUsageLike | null>(null);
   const [chatMessages, setChatMessages] = useState<{ role: string; content: string }[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [isMaximized, setIsMaximized] = useState(false);
@@ -437,6 +439,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
     );
     if (!(await ensureReconciliationSnapshot(pendingPaths, runTaskFileRecords))) return;
     setIsReconciling(true);
+    setRunUsage(null);
     if (!userMsgText) {
       clearConsoleLog();
     }
@@ -503,6 +506,11 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
 
         if (msg.type === "log") {
           addConsoleLog(msg.message);
+          return;
+        }
+
+        if (msg.type === "usage_update" && msg.nodeId === reconciliationStreamId) {
+          setRunUsage(msg.usage);
           return;
         }
 
@@ -1250,7 +1258,12 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
             </div>
 
             {/* Input area */}
-            <div className="p-3 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/20">
+            <div className="p-3 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/20 space-y-2">
+              {runUsage && (
+                <div className="flex justify-end">
+                  <TokenBadge usage={runUsage} live={isReconciling} />
+                </div>
+              )}
               <form
                 onSubmit={(e) => {
                   e.preventDefault();

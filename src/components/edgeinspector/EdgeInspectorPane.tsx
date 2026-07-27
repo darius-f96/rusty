@@ -118,6 +118,7 @@ export const EdgeInspectorPane: React.FC<EdgeInspectorPaneProps> = ({ onClose })
             chatInput={ws.chatInput}
             setChatInput={ws.setChatInput}
             isResolving={ws.isResolving}
+            runUsage={ws.runUsage}
             chatEndRef={ws.chatEndRef}
             handleSendChat={ws.handleSendChat}
           />

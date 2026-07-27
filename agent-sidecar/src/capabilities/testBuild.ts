@@ -22,6 +22,7 @@ import { safeSend } from "../services/websocket";
 import { executeCommand } from "../services/commandExecution";
 import { callLlmWithToolsPiStreaming } from "../services/llmRuntime";
 import type { NormalizedCommand } from "../services/commandPermissions";
+import { createUsageReporter } from "../services/usageBroadcast";
 
 const MAX_ATTEMPTS = 5;
 const BUILD_TIMEOUT_MS = 5 * 60_000;
@@ -213,6 +214,14 @@ Read the affected files and fix the errors so the build passes.`;
         cwd: workspaceRoot,
         history: [],
         shouldAbort: () => ws.readyState !== WebSocket.OPEN,
+        onUsage: createUsageReporter(ws, {
+          workspaceRoot,
+          surface: "test_build",
+          nodeId: streamId,
+          tabId,
+          model,
+          provider: customProvider?.id,
+        }),
       });
 
       sendLog("Model finished. Re-running build...");

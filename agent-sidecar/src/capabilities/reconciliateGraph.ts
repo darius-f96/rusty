@@ -2,6 +2,7 @@ import path from "path";
 import { WebSocket } from "ws";
 import { callLlmWithToolsPiStreaming } from "../services/llmRuntime";
 import { request, safeSend, validateRpcResponse } from "../services/websocket";
+import { createUsageReporter } from "../services/usageBroadcast";
 
 interface ReconciliationNode {
   id: string;
@@ -362,6 +363,14 @@ Workspace root: ${workspaceRoot || "unknown"}
     if (duplicateEntries.length > 0) {
       const modelReference = model || customProvider?.models?.find((item: any) => item.supported !== false)?.id || "";
       if (!modelReference) throw new Error("No model is selected. Configure one in LLM Setup.");
+      const usageReporter = createUsageReporter(ws, {
+        workspaceRoot,
+        surface: "graph_reconciliation",
+        nodeId: reconciliationStreamId,
+        tabId,
+        model: modelReference,
+        provider: customProvider?.id,
+      });
       sendLog(`Reviewing ${duplicateEntries.length} overlapping file${duplicateEntries.length === 1 ? "" : "s"} one at a time with ${modelReference}.`);
       const priorChat = Array.isArray(chatHistory)
         ? (userMessage ? chatHistory.slice(0, -1) : chatHistory)
@@ -412,6 +421,7 @@ ${JSON.stringify(compactFileContext(fileContext), null, 2)}`;
             // bounded in the prompt so provider adapters cannot re-expand it.
             history: [],
             shouldAbort: () => ws.readyState !== WebSocket.OPEN,
+            onUsage: usageReporter,
           });
           reports.push(`${fileContext.path}\n${truncateContextText(fileReport, 4_000)}`);
           if (!finalizedFiles.has(fileContext.path)) {

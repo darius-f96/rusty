@@ -13,6 +13,7 @@ import { safeSend, request, validateRpcResponse } from "../services/websocket";
 import { createListFilesTool, createSearchCodebaseTool, listFilesRecursive } from "../services/tools";
 import { callLlmWithToolsPiStreaming } from "../services/llmRuntime";
 import { createMcpTools, McpServerConfig } from "../services/mcpClient";
+import { createUsageReporter } from "../services/usageBroadcast";
 
 export async function globalExplore(ws: WebSocket, data: any): Promise<void> {
   const { nodeId, prompt, workspaceRoot, model, chatHistory, customProvider, mcpServers, planOnly } = data;
@@ -161,6 +162,13 @@ IMPORTANT: End your response with a section marked "--- SUMMARY ---" that contai
         cwd: workspaceRoot,
         history: chatHistory || [],
         shouldAbort: () => ws.readyState !== WebSocket.OPEN,
+        onUsage: createUsageReporter(ws, {
+          workspaceRoot,
+          surface: "global_explore",
+          nodeId,
+          model: modelReference,
+          provider: customProvider?.id,
+        }),
       });
 
       runResult = { response: responseText };

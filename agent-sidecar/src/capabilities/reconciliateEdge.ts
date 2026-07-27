@@ -11,6 +11,7 @@ import path from "path";
 import { safeSend, request, validateRpcResponse } from "../services/websocket";
 import { createListFilesTool, createSearchCodebaseTool } from "../services/tools";
 import { callLlmWithToolsPiStreaming } from "../services/llmRuntime";
+import { createUsageReporter } from "../services/usageBroadcast";
 
 export async function reconciliateEdge(ws: WebSocket, data: any): Promise<void> {
   const { edgeId, sourceTaskId, targetTaskId, modifiedFiles, userMessage, chatHistory, workspaceRoot, model, sourcePrompt, targetPrompt, customProvider } = data;
@@ -107,6 +108,13 @@ Workspace root: ${workspaceRoot || "unknown"}
       cwd: workspaceRoot,
       history: chatHistory || [],
       shouldAbort: () => ws.readyState !== WebSocket.OPEN,
+      onUsage: createUsageReporter(ws, {
+        workspaceRoot,
+        surface: "edge_reconciliation",
+        nodeId: edgeId,
+        model: modelReference,
+        provider: customProvider?.id,
+      }),
     });
 
     safeSend(ws, {

@@ -18,6 +18,7 @@ import { DeferredUserQuestion, SubagentUpdate, hasActiveBackgroundSubagents, run
 import { createRunCommandTool } from "./tools/runCommandTool";
 import { FileEventPersistence, RunEventRecorder } from "../services/eventPersistence";
 import { DelegatedTask, DelegationManager } from "../services/delegationManager";
+import { createUsageReporter } from "../services/usageBroadcast";
 import {
   AGENT_TAB_HARNESS_POLICY,
   GLOBAL_CHAT_TASK_DEPENDENCY_POLICY,
@@ -33,6 +34,12 @@ type AgentTool = {
 };
 
 const activeDelegationManagers = new Map<string, { manager: DelegationManager; runId: string }>();
+
+function formatTokenCount(tokens: number): string {
+  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M tok`;
+  if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}k tok`;
+  return `${tokens} tok`;
+}
 
 export async function stopAgentChatDelegations(runOrTabId: string, reason?: string): Promise<boolean> {
   const active = activeDelegationManagers.get(runOrTabId);
@@ -104,6 +111,7 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
       turnCount: result?.metadata.turnsUsed,
       maxTurns: handle.task.maxTurns,
       toolUses: result?.metadata.toolsCalled.length,
+      tokens: result?.metadata.tokensUsed !== undefined ? formatTokenCount(result.metadata.tokensUsed) : undefined,
       startedAt: handle.startedAt,
       parentAgentId: handle.parentAgentId,
       scope: handle.task.scope,
@@ -324,6 +332,14 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
       || customProvider?.id === "anthropic-claude-code";
     const modelReference = model || customProvider?.models?.find((item: any) => item.supported !== false)?.id || "";
     if (!modelReference) throw new Error("No model is selected. Configure a provider and model in LLM Setup.");
+    const usageReporter = createUsageReporter(ws, {
+      workspaceRoot,
+      surface: "agent_chat",
+      runId,
+      tabId,
+      model: modelReference,
+      provider: customProvider?.id,
+    });
 
     if (!vfsOnly && providerUsesManagedRuntime) {
       const delegateTaskTool: AgentTool = {
@@ -338,7 +354,7 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
             excludedScope: { type: "array", items: { type: "string" }, description: "Paths or concerns the subagent must not inspect." },
             expectedOutput: { type: "string", enum: ["findings", "review", "recommendation"] },
             evidenceRequired: { type: "boolean" },
-            maxTurns: { type: "integer", minimum: 1, maximum: 20 },
+            maxTurns: { type: "integer", minimum: 1 },
             timeoutMs: { type: "integer", minimum: 1000, maximum: 1200000 },
             benefit: { type: "string", enum: ["coverage", "parallelism", "independent_review", "specialization"] },
           },
@@ -366,7 +382,9 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
             excludedScope: Array.isArray(args.excludedScope) ? args.excludedScope.map(String) : undefined,
             expectedOutput: args.expectedOutput || "findings",
             evidenceRequired: args.evidenceRequired ?? true,
-            maxTurns: Math.max(1, Math.min(20, Number(args.maxTurns) || 8)),
+            // Undefined (the default) means unbounded — the subagent runs until it
+            // finishes or hits timeoutMs, rather than being cut off at a fixed turn count.
+            maxTurns: args.maxTurns !== undefined ? Math.max(1, Number(args.maxTurns)) : undefined,
             // Default and cap both raised from 120s/600s: reasoning-heavy
             // providers (notably Codex) routinely still had turns in flight
             // at the old defaults, especially under concurrent delegation.
@@ -376,6 +394,7 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
           const handle = await delegationManager.spawn(runId, "parent", task, {
             execute: async (delegatedTask, context) => {
               let turnsUsed = 0;
+              let tokensUsed = 0;
               const wrapTool = (tool: AgentTool): AgentTool => ({
                 ...tool,
                 execute: async (toolArgs: any) => {
@@ -386,6 +405,10 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
               const findings = await callLlmWithToolsPiStreaming({
                 modelReference,
                 customProvider,
+                onUsage: (sample) => {
+                  tokensUsed += sample.totalTokens || (sample.input || 0) + (sample.output || 0);
+                  usageReporter(sample);
+                },
                 systemPrompt: `You are a read-only Axiom subagent. Investigate only the assigned task using the provided harness tools.
 - Do not create, edit, move, or delete files.
 - Do not run commands and do not delegate further.
@@ -401,7 +424,7 @@ ${delegatedTask.excludedScope?.length ? `- Excluded scope: ${delegatedTask.exclu
                 cwd: workspaceRoot,
                 shouldAbort: () => context.signal.aborted || ws.readyState !== WebSocket.OPEN,
               });
-              return { findings, turnsUsed };
+              return { findings, turnsUsed, tokensUsed };
             },
           });
           const result = await delegationManager.join(handle.agentId);
@@ -543,6 +566,7 @@ Questions:
         return question;
       },
       requestUserQuestion,
+      onUsage: usageReporter,
     });
 
     const responseText = piResponse ?? await callLlmWithToolsPiStreaming({
@@ -557,6 +581,7 @@ Questions:
       cwd: workspaceRoot,
       history: chatHistory || [],
       shouldAbort: () => ws.readyState !== WebSocket.OPEN,
+      onUsage: usageReporter,
     });
 
     sendLog("Agent complete.");
