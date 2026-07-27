@@ -34,11 +34,7 @@ const signingIdentity = process.env.APPLE_SIGNING_IDENTITY;
 if (signingIdentity) {
   execFileSync(
     path.join(rootDir, "scripts", "sign-sidecar-binaries.sh"),
-    [
-      runtimeDir,
-      signingIdentity,
-      path.join(rootDir, "src-tauri", "runtime-entitlements.plist"),
-    ],
+    [runtimeDir, signingIdentity],
     { stdio: "inherit" },
   );
 } else {
