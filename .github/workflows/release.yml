@@ -71,14 +71,40 @@ jobs:
           mkdir -p "$RUNNER_TEMP/private_keys"
           printf '%s' "$APPLE_API_KEY_P8" > "$RUNNER_TEMP/private_keys/AuthKey.p8"
 
-      - name: Build, sign, and notarize app
+      - name: Build and sign app
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY_ID }}
         run: |
-          export APPLE_API_KEY_PATH="$RUNNER_TEMP/private_keys/AuthKey.p8"
           npm run tauri build -- --bundles app
+
+      - name: Re-sign bundled runtimes with JIT entitlements
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          APP="src-tauri/target/release/bundle/macos/Axiom-IDE.app"
+          scripts/sign-macos-app.sh "$APP" "$APPLE_SIGNING_IDENTITY"
+
+      - name: Notarize app
+        env:
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+        run: |
+          APP="src-tauri/target/release/bundle/macos/Axiom-IDE.app"
+          ARCHIVE="$RUNNER_TEMP/Axiom-IDE-notarization.zip"
+          ditto -c -k --keepParent "$APP" "$ARCHIVE"
+          xcrun notarytool submit "$ARCHIVE" \
+            --key "$RUNNER_TEMP/private_keys/AuthKey.p8" \
+            --key-id "$APPLE_API_KEY_ID" \
+            --issuer "$APPLE_API_ISSUER" \
+            --wait
+          xcrun stapler staple "$APP"
+
+      - name: Verify app signature and notarization
+        run: |
+          APP="src-tauri/target/release/bundle/macos/Axiom-IDE.app"
+          codesign --verify --deep --strict --verbose=4 "$APP"
+          xcrun stapler validate "$APP"
+          spctl -a -vvv --type execute "$APP"
 
       - name: Package and sign DMG
         env:
@@ -97,11 +123,6 @@ jobs:
           echo "DMG_PATH=$OUT" >> "$GITHUB_ENV"
           echo "APP_VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "DMG_SHA256=$(shasum -a 256 "$OUT" | cut -d' ' -f1)" >> "$GITHUB_ENV"
-
-      - name: Verify notarization
-        run: |
-          xcrun stapler validate "src-tauri/target/release/bundle/macos/Axiom-IDE.app"
-          spctl -a -vvv --type execute "src-tauri/target/release/bundle/macos/Axiom-IDE.app"
 
       - name: Create GitHub release
         env:
