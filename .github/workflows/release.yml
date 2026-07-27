@@ -91,12 +91,36 @@ jobs:
         run: |
           APP="src-tauri/target/release/bundle/macos/Axiom-IDE.app"
           ARCHIVE="$RUNNER_TEMP/Axiom-IDE-notarization.zip"
+          KEY_ARGS=(--key "$RUNNER_TEMP/private_keys/AuthKey.p8" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER")
+
           ditto -c -k --keepParent "$APP" "$ARCHIVE"
-          xcrun notarytool submit "$ARCHIVE" \
-            --key "$RUNNER_TEMP/private_keys/AuthKey.p8" \
-            --key-id "$APPLE_API_KEY_ID" \
-            --issuer "$APPLE_API_ISSUER" \
-            --wait
+
+          # Submit without --wait so we control the polling loop and always get
+          # a submission id to fetch the notarization log from, even on timeout.
+          SUBMIT_OUT="$(xcrun notarytool submit "$ARCHIVE" "${KEY_ARGS[@]}" --output-format json)"
+          echo "$SUBMIT_OUT"
+          SUBMISSION_ID="$(echo "$SUBMIT_OUT" | jq -r '.id')"
+          echo "submission id: $SUBMISSION_ID"
+
+          STATUS="In Progress"
+          for i in $(seq 1 40); do # ~20 minutes at 30s intervals
+            sleep 30
+            INFO_OUT="$(xcrun notarytool info "$SUBMISSION_ID" "${KEY_ARGS[@]}" --output-format json)"
+            STATUS="$(echo "$INFO_OUT" | jq -r '.status')"
+            echo "[poll $i] status: $STATUS"
+            if [ "$STATUS" != "In Progress" ]; then
+              break
+            fi
+          done
+
+          echo "--- notarization log ---"
+          xcrun notarytool log "$SUBMISSION_ID" "${KEY_ARGS[@]}" || true
+
+          if [ "$STATUS" != "Accepted" ]; then
+            echo "Notarization did not succeed (status: $STATUS)" >&2
+            exit 1
+          fi
+
           xcrun stapler staple "$APP"
 
       - name: Verify app signature and notarization
