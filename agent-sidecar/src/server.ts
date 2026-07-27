@@ -105,29 +105,45 @@ import { LspInstaller } from "./services/lspInstaller";
 import { getPackageSpec, listRegisteredLanguages } from "./services/lspRegistry";
 
 // ── Global Process Crash Prevention & Logging ──────────────────────
-process.on("uncaughtException", (error) => {
-  console.error("CRITICAL [Uncaught Exception]:", error);
-  try {
-    fs.appendFileSync(
-      path.join(process.cwd(), "sidecar_error.log"),
-      `[${new Date().toISOString()}] Uncaught Exception: ${error?.stack || error}\n\n`
-    );
-  } catch (logErr) {
-    console.error("Failed to write to sidecar_error.log:", logErr);
+// If stdout/stderr itself is broken (e.g. this process was orphaned when its
+// parent closed the pipe), console.error() below throws EPIPE - which is
+// itself an uncaught exception, which logs again, which EPIPEs again,
+// forever, at full CPU, until disk fills up. Once we see one I/O failure
+// from logging, stop trying to log via that channel for the rest of the
+// process lifetime instead of retrying indefinitely.
+let consoleLoggingBroken = false;
+let fileLoggingBroken = false;
+const MAX_ERROR_LOG_BYTES = 20 * 1024 * 1024;
+const errorLogPath = path.join(process.cwd(), "sidecar_error.log");
+
+function safeLogCrash(label: string, detail: string) {
+  if (!consoleLoggingBroken) {
+    try {
+      console.error(`CRITICAL [${label}]:`, detail);
+    } catch {
+      consoleLoggingBroken = true;
+    }
   }
+  if (fileLoggingBroken) return;
+  try {
+    const existingSize = fs.existsSync(errorLogPath) ? fs.statSync(errorLogPath).size : 0;
+    if (existingSize > MAX_ERROR_LOG_BYTES) {
+      fileLoggingBroken = true;
+      return;
+    }
+    fs.appendFileSync(errorLogPath, `[${new Date().toISOString()}] ${label}: ${detail}\n\n`);
+  } catch {
+    fileLoggingBroken = true;
+  }
+}
+
+process.on("uncaughtException", (error) => {
+  safeLogCrash("Uncaught Exception", error?.stack || String(error));
 });
 
-process.on("unhandledRejection", (reason, promise) => {
-  console.error("CRITICAL [Unhandled Rejection]: Promise:", promise, "Reason:", reason);
-  try {
-    const reasonStr = reason instanceof Error ? reason.stack : String(reason);
-    fs.appendFileSync(
-      path.join(process.cwd(), "sidecar_error.log"),
-      `[${new Date().toISOString()}] Unhandled Rejection at Promise: ${reasonStr}\n\n`
-    );
-  } catch (logErr) {
-    console.error("Failed to write to sidecar_error.log:", logErr);
-  }
+process.on("unhandledRejection", (reason) => {
+  const reasonStr = reason instanceof Error ? reason.stack || reason.message : String(reason);
+  safeLogCrash("Unhandled Rejection", reasonStr);
 });
 
 const app = express();
