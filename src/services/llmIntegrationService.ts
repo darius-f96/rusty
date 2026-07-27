@@ -67,6 +67,12 @@ export const llmIntegrationService = {
     });
   },
 
+  async logoutCopilot(): Promise<CopilotConnectionStatus> {
+    return request<CopilotConnectionStatus>("/llm/copilot/logout", {
+      method: "POST",
+    });
+  },
+
   async getCodexStatus(): Promise<CodexConnectionStatus> {
     return request<CodexConnectionStatus>("/llm/codex/status");
   },
@@ -77,11 +83,21 @@ export const llmIntegrationService = {
     });
   },
 
+  async logoutCodex(): Promise<CodexConnectionStatus> {
+    return request<CodexConnectionStatus>("/llm/codex/logout", {
+      method: "POST",
+    });
+  },
+
   async getClaudeCodeStatus(): Promise<ClaudeCodeConnectionStatus> {
     return request<ClaudeCodeConnectionStatus>("/llm/claude-code/status");
   },
 
   async startClaudeCodeLogin(): Promise<ClaudeCodeConnectionStatus> {
     return request<ClaudeCodeConnectionStatus>("/llm/claude-code/login", { method: "POST" });
+  },
+
+  async logoutClaudeCode(): Promise<ClaudeCodeConnectionStatus> {
+    return request<ClaudeCodeConnectionStatus>("/llm/claude-code/logout", { method: "POST" });
   },
 };
