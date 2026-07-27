@@ -20,6 +20,7 @@ interface InlineChatPiOptions {
   history: Array<{ role: string; content: string }>;
   context: InlineChatContext;
   sendToken: (token: string) => void;
+  onUsage?: (sample: TokenUsageSample) => void;
 }
 
 /**
@@ -52,8 +53,10 @@ Answer only the user's focused question about this editor context. Prefer a shor
     history: options.history,
     maxTokens: 4096,
     cwd: options.workspaceRoot,
+    onUsage: options.onUsage,
   });
   options.sendToken(content);
   return content;
 }
 import { completeLlmText } from "./llmRuntime";
+import { TokenUsageSample } from "./usageTracking";

@@ -116,7 +116,7 @@ export interface GitStatusResult {
 
 export interface Tab {
   id: string;
-  type: "canvas" | "axiom" | "file" | "task" | "settings" | "llm-setup" | "git-diff" | "git-history" | "workspace" | "agent" | "skills" | "mcp-integration" | "onboarding";
+  type: "canvas" | "axiom" | "file" | "task" | "settings" | "llm-setup" | "git-diff" | "git-history" | "workspace" | "agent" | "skills" | "mcp-integration" | "onboarding" | "metrics";
   title: string;
   key: string;
   diffType?: "staged" | "unstaged" | "commit";
@@ -163,6 +163,30 @@ export interface Skill {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface UsageTotals {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  totalTokens: number;
+  calls: number;
+}
+
+export interface UsageDaySummary {
+  byModel: Record<string, UsageTotals>;
+  total: UsageTotals;
+}
+
+export interface UsageSummary {
+  byDay: Record<string, UsageDaySummary>;
+  allTime: { byModel: Record<string, UsageTotals>; total: UsageTotals };
+}
+
+export type MetricsTimeframe =
+  | { mode: "day"; day: string }
+  | { mode: "range"; from: string; to: string }
+  | { mode: "all-time" };
 
 export interface EditorGroup {
   id: string;
@@ -286,6 +310,14 @@ export interface WorkspaceState {
   deleteSkill: (id: string) => void;
   setActiveSkill: (id: string | null) => void;
   loadSkills: () => Promise<void>;
+
+  metricsSummary: UsageSummary | null;
+  metricsTimeframe: MetricsTimeframe;
+  metricsLoading: boolean;
+  metricsTodayTotal: number;
+  loadMetricsSummary: () => Promise<void>;
+  setMetricsTimeframe: (timeframe: MetricsTimeframe) => void;
+  applyUsageUpdate: (runKey: string, cumulativeTotal: number) => void;
 
   mcpServers: Record<string, McpServerConfig>;
   setMcpServers: (servers: Record<string, McpServerConfig>) => void;

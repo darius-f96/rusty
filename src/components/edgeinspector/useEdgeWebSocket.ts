@@ -13,6 +13,7 @@ import { notify } from "../../notificationStore";
 import { providerHasModelReference } from "../../store/providerHelpers";
 import { createAgentHarnessSocket } from "../../services/agentHarnessClient";
 import { SIDECAR_PORT } from "../../config/sidecar";
+import type { TokenUsageLike } from "../ui/TokenBadge/TokenBadge";
 
 export const useEdgeWebSocket = (
   edgeId: string | null,
@@ -26,6 +27,7 @@ export const useEdgeWebSocket = (
   const [chatMessages, setChatMessages] = useState<{ role: string; content: string }[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [isResolving, setIsResolving] = useState(false);
+  const [runUsage, setRunUsage] = useState<TokenUsageLike | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll chat
@@ -56,6 +58,7 @@ export const useEdgeWebSocket = (
     setChatMessages((prev) => [...prev, userMsg]);
     setChatInput("");
     setIsResolving(true);
+    setRunUsage(null);
 
     let socket: WebSocket;
     try {
@@ -163,6 +166,11 @@ export const useEdgeWebSocket = (
           return;
         }
 
+        if (msg.type === "usage_update" && msg.nodeId === edgeId) {
+          setRunUsage(msg.usage);
+          return;
+        }
+
         if (msg.type === "reconciliation_complete") {
           setChatMessages((prev) => [
             ...prev,
@@ -224,6 +232,7 @@ export const useEdgeWebSocket = (
     chatInput,
     setChatInput,
     isResolving,
+    runUsage,
     chatEndRef,
     handleSendChat
   };

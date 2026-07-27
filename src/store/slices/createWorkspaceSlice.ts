@@ -42,6 +42,7 @@ export const createWorkspaceSlice: WorkspaceSliceCreator = (set, get) => ({
     });
     void get().loadGitStatus();
     void get().loadSkills();
+    void get().loadMetricsSummary();
     setTimeout(() => void get().saveSecureConfig(), 0);
   },
 

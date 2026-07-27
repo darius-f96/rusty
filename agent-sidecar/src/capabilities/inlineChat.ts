@@ -1,6 +1,7 @@
 import { WebSocket } from "ws";
 import { safeSend } from "../services/websocket";
 import { runInlineChatWithModel } from "../services/inlineChatPi";
+import { createUsageReporter } from "../services/usageBroadcast";
 
 /** WebSocket capability for a single, non-agentic inline model call. */
 export async function inlineChat(ws: WebSocket, data: any): Promise<void> {
@@ -21,6 +22,13 @@ export async function inlineChat(ws: WebSocket, data: any): Promise<void> {
       history: Array.isArray(history) ? history : [],
       context,
       sendToken: (content) => safeSend(ws, { type: "inline_chat_token", sessionId, content }),
+      onUsage: createUsageReporter(ws, {
+        workspaceRoot,
+        surface: "inline_chat",
+        sessionId,
+        model,
+        provider: customProvider?.id,
+      }),
     });
     safeSend(ws, { type: "inline_chat_complete", sessionId, response });
   } catch (error: any) {

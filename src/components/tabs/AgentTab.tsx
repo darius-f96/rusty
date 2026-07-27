@@ -13,6 +13,7 @@ import { appendBoundedText } from "../../services/boundedTextBuffer";
 import { providerHasModelReference, selectableProviderModels } from "../../store/providerHelpers";
 import { createAgentHarnessSocket } from "../../services/agentHarnessClient";
 import { SIDECAR_PORT } from "../../config/sidecar";
+import { TokenBadge, TokenUsageLike } from "../ui/TokenBadge/TokenBadge";
 
 interface AgentTabProps {
   tab: any;
@@ -51,6 +52,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
   const [isStreaming, setIsStreaming] = useState(false);
   const [modifiedFiles, setModifiedFiles] = useState<string[]>([]);
   const [subagents, setSubagents] = useState<SubagentActivity[]>([]);
+  const [runUsage, setRunUsage] = useState<TokenUsageLike | null>(null);
   const [agentQuestions, setAgentQuestions] = useState<AgentQuestion[]>([]);
   const agentQuestion = agentQuestions[0] || null;
   const hasActiveSubagents = subagents.some((subagent) =>
@@ -336,6 +338,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
     streamingResponseBufferRef.current = "";
     setSubagents([]);
     setAgentQuestions([]);
+    setRunUsage(null);
     saveChatHistory();
     refreshHistoryAfterSave();
 
@@ -441,6 +444,11 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
           } else {
             scheduleStreamingResponseFlush();
           }
+          return;
+        }
+
+        if (msg.type === "usage_update" && msg.tabId === tab.id) {
+          setRunUsage(msg.usage);
           return;
         }
 
@@ -846,7 +854,8 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
               </span>
             )}
           </div>
-          <div className="flex items-center space-x-1.5 text-[var(--text-muted)] font-mono text-[10px]">
+          <div className="flex items-center space-x-2 text-[var(--text-muted)] font-mono text-[10px]">
+            {runUsage && <TokenBadge usage={runUsage} live={isStreaming} />}
             {isAgentBusy && <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-color)] animate-ping" />}
             <span>{isStreaming ? "Thinking" : hasActiveSubagents ? "Subagents working" : "Ready"}</span>
           </div>

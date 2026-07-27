@@ -5,6 +5,7 @@ import * as os from "node:os";
 import { promisify } from "node:util";
 import { importEsm } from "./esmImport";
 import type { DiscoveredProviderModel } from "./llmProviders";
+import type { TokenUsageSample } from "./usageTracking";
 
 export const ANTHROPIC_CLAUDE_CODE_PROVIDER_ID = "anthropic-claude-code";
 
@@ -262,11 +263,25 @@ function promptWithHistory(userMessage: string, history?: Array<{ role: string; 
   return previous ? `Previous conversation:\n${previous}\n\nCurrent request:\n${userMessage}` : userMessage;
 }
 
+function usageFromClaudeResult(usage: any): TokenUsageSample | undefined {
+  if (!usage) return undefined;
+  const input = Number(usage.input_tokens) || 0;
+  const output = Number(usage.output_tokens) || 0;
+  return {
+    input,
+    output,
+    cacheRead: Number(usage.cache_read_input_tokens) || 0,
+    cacheWrite: Number(usage.cache_creation_input_tokens) || 0,
+    totalTokens: input + output,
+  };
+}
+
 async function runClaudeCode(options: {
   modelId: string; systemPrompt: string; userMessage: string;
   history?: Array<{ role: string; content: string }>; tools?: ClaudeTool[];
   sendLog?: (message: string) => void; sendToken?: (token: string) => void;
   cwd?: string; reasoning?: string; maxTurns?: number; shouldAbort?: () => boolean; signal?: AbortSignal;
+  onUsage?: (sample: TokenUsageSample) => void;
 }): Promise<string> {
   const sdk = await importEsm<any>("@anthropic-ai/claude-agent-sdk");
   const { z } = await importEsm<any>("zod");
@@ -319,6 +334,8 @@ async function runClaudeCode(options: {
         }
       }
 if (message.type === "result") {
+        const sample = usageFromClaudeResult(message.usage);
+        if (sample) options.onUsage?.(sample);
         if (message.subtype !== "success") throw new Error(message.errors?.join("; ") || "Claude Code request failed.");
         text = message.result || text;
       }

@@ -21,6 +21,7 @@ import { VfsRegistry, VFS_CHANGED_EVENT } from "../../services/vfs";
 import { canvasFileService } from "../tabs/canvas/services/canvasFileService";
 import { notify } from "../../notificationStore";
 import { selectableProviderModels } from "../../store/providerHelpers";
+import { TokenBadge, TokenUsageLike } from "../ui/TokenBadge/TokenBadge";
 
 const EMPTY_ARRAY: any[] = [];
 
@@ -56,6 +57,18 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
 
   // Explorer WS hook
   const explorer = useExplorerWebSocket(selectedNode);
+
+  const [nodeUsage, setNodeUsage] = useState<TokenUsageLike | null>(null);
+  useEffect(() => {
+    setNodeUsage(null);
+    if (!selectedNodeId) return;
+    const handleNodeUsage = (event: Event) => {
+      const detail = (event as CustomEvent<{ nodeId: string; usage: TokenUsageLike }>).detail;
+      if (detail?.nodeId === selectedNodeId) setNodeUsage(detail.usage);
+    };
+    window.addEventListener("axiom-node-usage", handleNodeUsage);
+    return () => window.removeEventListener("axiom-node-usage", handleNodeUsage);
+  }, [selectedNodeId]);
 
   // The VFS tracker is the source of truth for files owned by a task. Chat tool
   // writes update that tracker directly, so keep the node's UI cache in sync.
@@ -329,8 +342,9 @@ export const SidePane: React.FC<SidePaneProps> = ({ onClose, onExecuteNode, onSt
       {/* Footer controls for executing node */}
       {selectedNode.type === "taskNode" && activeTab !== "chat" && (
         <div className="p-3 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/20 flex items-center justify-between gap-3">
-          <span className="text-[10px] uppercase font-mono text-[var(--text-muted)]">
+          <span className="flex items-center gap-2 text-[10px] uppercase font-mono text-[var(--text-muted)]">
             Status: <span className="font-bold text-[var(--text-normal)]">{nodeStatus}</span>
+            {nodeUsage && <TokenBadge usage={nodeUsage} live={nodeStatus === "running"} />}
           </span>
           <div className="flex items-center gap-2">
             <span className="text-[10px] uppercase font-mono text-[var(--text-muted)]">Model:</span>

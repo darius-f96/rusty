@@ -11,6 +11,7 @@ import {
   type Tool,
 } from "@github/copilot-sdk";
 import type { DiscoveredProviderModel } from "./llmProviders";
+import type { TokenUsageSample } from "./usageTracking";
 
 export const GITHUB_COPILOT_PROVIDER_ID = "github-copilot";
 
@@ -505,6 +506,18 @@ function copilotReasoningEffort(value?: string): CopilotReasoningEffort | undefi
     : undefined;
 }
 
+function usageFromCopilotEvent(data: { inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number }): TokenUsageSample {
+  const input = data.inputTokens || 0;
+  const output = data.outputTokens || 0;
+  return {
+    input,
+    output,
+    cacheRead: data.cacheReadTokens || 0,
+    cacheWrite: data.cacheWriteTokens || 0,
+    totalTokens: input + output,
+  };
+}
+
 async function disconnectSession(session: CopilotSession | undefined): Promise<void> {
   if (!session) return;
   try {
@@ -521,6 +534,7 @@ export async function completeCopilotText(options: {
   history?: Array<{ role: string; content: string }>;
   reasoning?: string;
   signal?: AbortSignal;
+  onUsage?: (sample: TokenUsageSample) => void;
 }): Promise<string> {
   const sdk = await getClient();
   let session: CopilotSession | undefined;
@@ -539,6 +553,9 @@ export async function completeCopilotText(options: {
       skipCustomInstructions: true,
       infiniteSessions: { enabled: false },
     });
+    if (options.onUsage) {
+      session.on("assistant.usage", (event) => options.onUsage?.(usageFromCopilotEvent(event.data)));
+    }
     abortHandler = () => void session?.abort();
     options.signal?.addEventListener("abort", abortHandler, { once: true });
     const response = await session.sendAndWait(historyPrompt(options.history, options.userMessage), 300_000);
@@ -561,6 +578,7 @@ export async function callCopilotWithToolsStreaming(options: {
   history?: Array<{ role: string; content: string }>;
   reasoning?: string;
   shouldAbort?: () => boolean;
+  onUsage?: (sample: TokenUsageSample) => void;
 }): Promise<string> {
   const sdk = await getClient();
   let session: CopilotSession | undefined;
@@ -598,6 +616,9 @@ export async function callCopilotWithToolsStreaming(options: {
     session.on("assistant.message_delta", (event) => {
       if (!event.agentId && event.data.deltaContent) options.sendToken(event.data.deltaContent);
     });
+    if (options.onUsage) {
+      session.on("assistant.usage", (event) => options.onUsage?.(usageFromCopilotEvent(event.data)));
+    }
     if (options.shouldAbort) {
       abortTimer = setInterval(() => {
         if (options.shouldAbort?.()) void session?.abort();

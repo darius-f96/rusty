@@ -8,6 +8,7 @@
 import { WebSocket } from "ws";
 import { safeSend } from "../services/websocket";
 import { completeLlmText } from "../services/llmRuntime";
+import { createUsageReporter } from "../services/usageBroadcast";
 
 const AVAILABLE_TOOLS = ["read_file", "write_file", "list_files", "search_codebase", "web_search", "run_command"];
 
@@ -54,6 +55,14 @@ For a question-heavy skill (like 'grind-me'), enable all tools but emphasize ask
       userMessage: `Generate a skill for: ${description}`,
       maxTokens: 4000,
       cwd: data.workspaceRoot,
+      onUsage: data.workspaceRoot
+        ? createUsageReporter(ws, {
+            workspaceRoot: data.workspaceRoot,
+            surface: "skill_generation",
+            model: modelReference,
+            provider: customProvider?.id,
+          })
+        : undefined,
     });
 
     let spec: any;

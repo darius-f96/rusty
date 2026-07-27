@@ -25,6 +25,7 @@ import {
   callClaudeCodeWithToolsStreaming,
   completeClaudeCodeText,
 } from "./claudeCodeService";
+import { TokenUsageSample } from "./usageTracking";
 
 export interface ResolvedLlmRuntime {
   providerId: string;
@@ -193,6 +194,7 @@ export async function completeLlmText(options: {
   reasoning?: ReasoningEffort;
   cwd?: string;
   signal?: AbortSignal;
+  onUsage?: (sample: TokenUsageSample) => void;
 }): Promise<string> {
   if (isGitHubCopilotProvider(options.customProvider)) {
     const providerId = options.customProvider!.id;
@@ -204,6 +206,7 @@ export async function completeLlmText(options: {
       history: options.history,
       reasoning: options.reasoning || selection.reasoningEffort,
       signal: options.signal,
+      onUsage: options.onUsage,
     });
   }
   if (isOpenAICodexProvider(options.customProvider)) {
@@ -217,6 +220,7 @@ export async function completeLlmText(options: {
       reasoning: options.reasoning || selection.reasoningEffort,
       cwd: options.cwd,
       signal: options.signal,
+      onUsage: options.onUsage,
     });
   }
   if (isClaudeCodeProvider(options.customProvider)) {
@@ -230,6 +234,7 @@ export async function completeLlmText(options: {
       reasoning: options.reasoning || selection.reasoningEffort,
       cwd: options.cwd,
       signal: options.signal,
+      onUsage: options.onUsage,
     });
   }
 
@@ -260,6 +265,7 @@ export async function completeLlmText(options: {
   if (result?.stopReason === "error" || result?.stopReason === "aborted") {
     throw new Error(result?.errorMessage || "The model request failed.");
   }
+  if (result?.usage) options.onUsage?.(result.usage);
   const text = textFromPiMessage(result);
   if (!text.trim()) throw new EmptyLlmResponseError(result);
   return text;
@@ -280,6 +286,7 @@ export async function callLlmWithToolsPiStreaming(options: {
   reasoning?: ReasoningEffort;
   cwd?: string;
   shouldAbort?: () => boolean;
+  onUsage?: (sample: TokenUsageSample) => void;
 }): Promise<string> {
   if (isGitHubCopilotProvider(options.customProvider)) {
     const providerId = options.customProvider!.id;
@@ -294,6 +301,7 @@ export async function callLlmWithToolsPiStreaming(options: {
       history: options.history,
       reasoning: options.reasoning || selection.reasoningEffort,
       shouldAbort: options.shouldAbort,
+      onUsage: options.onUsage,
     });
   }
   if (isOpenAICodexProvider(options.customProvider)) {
@@ -311,6 +319,7 @@ export async function callLlmWithToolsPiStreaming(options: {
       reasoning: options.reasoning || selection.reasoningEffort,
       cwd: options.cwd,
       shouldAbort: options.shouldAbort,
+      onUsage: options.onUsage,
     });
   }
   if (isClaudeCodeProvider(options.customProvider)) {
@@ -328,6 +337,7 @@ export async function callLlmWithToolsPiStreaming(options: {
       cwd: options.cwd,
       maxTurns: options.maxRounds,
       shouldAbort: options.shouldAbort,
+      onUsage: options.onUsage,
     });
   }
 
@@ -377,6 +387,7 @@ export async function callLlmWithToolsPiStreaming(options: {
       if (event.type === "done") result = event.message;
     }
     result ||= await stream.result();
+    if (result?.usage) options.onUsage?.(result.usage);
     messages.push(result);
     const toolCalls = (result?.content || []).filter((part: any) => part?.type === "toolCall");
     if (toolCalls.length === 0) {

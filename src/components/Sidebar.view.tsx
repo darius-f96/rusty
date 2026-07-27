@@ -57,6 +57,7 @@ export const SidebarView: React.FC<SidebarViewProps> = ({
             const Icon = item.icon;
             const active = isItemActive(item.id);
             const badge = item.badgeCount ? item.badgeCount(store) : 0;
+            const badgeText = item.badgeText?.(store);
             return (
               <button
                 key={item.id}
@@ -70,6 +71,11 @@ export const SidebarView: React.FC<SidebarViewProps> = ({
                 {badge > 0 && (
                   <span className={styles.badge}>
                     {badge}
+                  </span>
+                )}
+                {badgeText && (
+                  <span className={styles.badgeText}>
+                    {badgeText}
                   </span>
                 )}
                 <span className={styles.tooltip}>

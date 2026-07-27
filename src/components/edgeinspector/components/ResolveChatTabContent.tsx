@@ -9,12 +9,14 @@
 import React from "react";
 import { Loader2, Send } from "lucide-react";
 import { processResponse } from "../../../services/responseProcessingService";
+import { TokenBadge, TokenUsageLike } from "../../ui/TokenBadge/TokenBadge";
 
 interface ResolveChatTabContentProps {
   chatMessages: { role: string; content: string }[];
   chatInput: string;
   setChatInput: (val: string) => void;
   isResolving: boolean;
+  runUsage?: TokenUsageLike | null;
   chatEndRef: React.RefObject<HTMLDivElement | null>;
   handleSendChat: () => void;
 }
@@ -24,6 +26,7 @@ export const ResolveChatTabContent: React.FC<ResolveChatTabContentProps> = ({
   chatInput,
   setChatInput,
   isResolving,
+  runUsage,
   chatEndRef,
   handleSendChat
 }) => {
@@ -52,7 +55,12 @@ export const ResolveChatTabContent: React.FC<ResolveChatTabContentProps> = ({
         <div ref={chatEndRef} />
       </div>
 
-      <div className="p-3 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/20">
+      <div className="p-3 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/20 space-y-2">
+        {runUsage && (
+          <div className="flex justify-end">
+            <TokenBadge usage={runUsage} live={isResolving} />
+          </div>
+        )}
         <form
           onSubmit={(e) => {
             e.preventDefault();
