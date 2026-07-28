@@ -1,8 +1,7 @@
 # Axiom IDE
 
 An AI-assisted coding IDE built with Tauri, React, and TypeScript. Axiom runs a
-local agent sidecar that talks to multiple coding-agent backends (Anthropic's
-Claude Agent SDK, GitHub Copilot, OpenAI Codex, and the Pi agent stack) and
+local agent sidecar that talks to multiple coding-agent backends and
 gives them a structured task/reconciliation workflow instead of a single chat
 window: delegate work to subagents, watch a live task graph, review generated
 diffs, and reconcile results back into your working tree.
