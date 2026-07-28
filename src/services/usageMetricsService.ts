@@ -85,6 +85,8 @@ export function byModelForTimeframe(summary: UsageSummary | null, timeframe: Met
   }
   return [...byModel.entries()]
     .map(([model, totals]) => ({ model, totals }))
+    // Entries with 0 total tokens are false positives (e.g. calls that never consumed tokens) and must never be displayed.
+    .filter((entry) => entry.totals.totalTokens > 0)
     .sort((a, b) => b.totals.totalTokens - a.totals.totalTokens);
 }
 
@@ -93,6 +95,6 @@ export function byDayForTimeframe(summary: UsageSummary | null, timeframe: Metri
   const days = timeframe.mode === "day" ? [timeframe.day] : dayKeysForTimeframe(summary, timeframe);
   return days
     .map((day) => ({ day, totals: summary.byDay[day]?.total || emptyTotals() }))
-    .filter((entry) => entry.totals.calls > 0)
+    .filter((entry) => entry.totals.calls > 0 && entry.totals.totalTokens > 0)
     .sort((a, b) => a.day.localeCompare(b.day));
 }
