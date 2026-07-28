@@ -180,7 +180,7 @@ function useAutoRefreshEffect(
 function useDismissEffect(
   open: boolean,
   setOpen: React.Dispatch<React.SetStateAction<boolean>>,
-  rootRef: React.RefObject<HTMLDivElement>,
+  rootRef: React.RefObject<HTMLDivElement | null>,
 ) {
   useEffect(() => {
     if (!open) return;

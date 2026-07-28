@@ -34,7 +34,7 @@ interface UseDebouncedSearchReturn {
   /** Index of the currently highlighted result item. */
   selectedIndex: number;
   /** Sets the selected result index (for keyboard navigation). */
-  setSelectedIndex: (index: number) => void;
+  setSelectedIndex: React.Dispatch<React.SetStateAction<number>>;
   /** Ref to attach to the search input element for auto-focus. */
   searchInputRef: React.RefObject<HTMLInputElement | null>;
 }

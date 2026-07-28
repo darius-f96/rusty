@@ -42,7 +42,6 @@ interface SectionHeaderProps {
 interface SourceControlChangeListProps {
   gitStatus: GitStatusResult;
   activeRepo: string;
-  unstagedList: GitFileStatus[];
   modifiedList: GitFileStatus[];
   untrackedList: GitFileStatus[];
   totalChanges: number;
@@ -242,7 +241,6 @@ const FileRow: React.FC<FileRowProps> = ({
 const SourceControlChangeList: React.FC<SourceControlChangeListProps> = ({
   gitStatus,
   activeRepo,
-  unstagedList,
   modifiedList,
   untrackedList,
   totalChanges,

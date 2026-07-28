@@ -8,7 +8,7 @@
 
 import React from "react";
 import { useForm, FormProvider } from "react-hook-form";
-import type { McpServerConfig, McpFormValues, McpIntegrationModalProps } from "./types";
+import type { McpFormValues, McpIntegrationModalProps } from "./types";
 import { Plug } from "lucide-react";
 import { Modal } from "../ui/Modal/Modal";
 import { Button } from "../ui/Button/Button";

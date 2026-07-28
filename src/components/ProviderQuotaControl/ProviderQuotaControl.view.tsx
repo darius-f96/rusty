@@ -27,7 +27,7 @@ interface ProviderQuotaControlViewProps {
   /** Options list for the provider dropdown. */
   providerOptions: Option[];
   /** Ref attached to the root element for outside-click detection. */
-  rootRef: React.RefObject<HTMLDivElement>;
+  rootRef: React.RefObject<HTMLDivElement | null>;
   /* ── Callbacks ──────────────────────────────────────────── */
   onToggleOpen: () => void;
   onProviderChange: (providerId: string) => void;
