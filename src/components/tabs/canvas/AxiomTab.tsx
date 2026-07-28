@@ -23,7 +23,7 @@ import { SidePane } from "../../sidepane/SidePane";
 import { ReconciliationGraphPane } from "../../sidepane/ReconciliationGraphPane";
 import { ContextNode } from "../../nodes/ContextNode";
 import { TaskNode } from "../../nodes/TaskNode";
-import { GlobalChatNode } from "../../nodes/GlobalChatNode";
+import { GlobalChatNode } from "../../nodes/globalChat/GlobalChatNode";
 import { McpNode } from "../../nodes/McpNode";
 import { StickyNode } from "../../nodes/sticky";
 import { BoundaryNode } from "../../nodes/boundary";
