@@ -10,22 +10,21 @@ import {
   resolveProviderModelSelection,
   resolveProviderApiKey,
 } from "./llmProviders";
-import {
-  callCopilotWithToolsStreaming,
-  completeCopilotText,
-  GITHUB_COPILOT_PROVIDER_ID,
-} from "./copilotService";
-import {
-  callCodexWithToolsStreaming,
-  completeCodexText,
-  OPENAI_CODEX_PROVIDER_ID,
-} from "./codexService";
-import {
-  ANTHROPIC_CLAUDE_CODE_PROVIDER_ID,
-  callClaudeCodeWithToolsStreaming,
-  completeClaudeCodeText,
-} from "./claudeCodeService";
 import { TokenUsageSample } from "./usageTracking";
+
+/**
+ * Pi's native provider-compatible completion/tool-loop runtime.
+ *
+ * This module is used directly only by the Pi harness adapter
+ * (services/harness/adapters/piAdapter.ts), which is reached exclusively for
+ * Pi's own runtime and generic HTTP providers (opencode, openai, anthropic,
+ * github-models, and custom OpenAI/Anthropic-shaped endpoints). The registry
+ * in services/harness/ already routes GitHub Copilot, OpenAI Codex, and
+ * Claude Code to their own dedicated adapters before any code in this file
+ * runs, so this file intentionally contains no provider.transport or
+ * provider.id branching. Add a new adapter under services/harness/adapters/
+ * for any new managed-runtime provider instead of branching here.
+ */
 
 export interface ResolvedLlmRuntime {
   providerId: string;
@@ -68,18 +67,6 @@ export class EmptyLlmResponseError extends Error {
 function providerIdFromReference(modelReference: string): string {
   const separator = modelReference.indexOf("/");
   return separator === -1 ? "" : modelReference.slice(0, separator);
-}
-
-function isGitHubCopilotProvider(provider?: LlmProviderConfig | null): boolean {
-  return provider?.transport === "github-copilot-sdk" || provider?.id === GITHUB_COPILOT_PROVIDER_ID;
-}
-
-function isOpenAICodexProvider(provider?: LlmProviderConfig | null): boolean {
-  return provider?.transport === "openai-codex-app-server" || provider?.id === OPENAI_CODEX_PROVIDER_ID;
-}
-
-function isClaudeCodeProvider(provider?: LlmProviderConfig | null): boolean {
-  return provider?.transport === "anthropic-claude-agent-sdk" || provider?.id === ANTHROPIC_CLAUDE_CODE_PROVIDER_ID;
 }
 
 function syntheticModel(provider: LlmProviderConfig, configuredModel: ProviderModelConfig | undefined, modelId: string): any {
@@ -196,48 +183,6 @@ export async function completeLlmText(options: {
   signal?: AbortSignal;
   onUsage?: (sample: TokenUsageSample) => void;
 }): Promise<string> {
-  if (isGitHubCopilotProvider(options.customProvider)) {
-    const providerId = options.customProvider!.id;
-    const selection = resolveProviderModelSelection(options.customProvider!, options.modelReference);
-    return completeCopilotText({
-      modelId: selection.modelId || remoteModelId(options.modelReference, providerId),
-      systemPrompt: options.systemPrompt,
-      userMessage: options.userMessage,
-      history: options.history,
-      reasoning: options.reasoning || selection.reasoningEffort,
-      signal: options.signal,
-      onUsage: options.onUsage,
-    });
-  }
-  if (isOpenAICodexProvider(options.customProvider)) {
-    const providerId = options.customProvider!.id;
-    const selection = resolveProviderModelSelection(options.customProvider!, options.modelReference);
-    return completeCodexText({
-      modelId: selection.modelId || remoteModelId(options.modelReference, providerId),
-      systemPrompt: options.systemPrompt,
-      userMessage: options.userMessage,
-      history: options.history,
-      reasoning: options.reasoning || selection.reasoningEffort,
-      cwd: options.cwd,
-      signal: options.signal,
-      onUsage: options.onUsage,
-    });
-  }
-  if (isClaudeCodeProvider(options.customProvider)) {
-    const providerId = options.customProvider!.id;
-    const selection = resolveProviderModelSelection(options.customProvider!, options.modelReference);
-    return completeClaudeCodeText({
-      modelId: selection.modelId || remoteModelId(options.modelReference, providerId),
-      systemPrompt: options.systemPrompt,
-      userMessage: options.userMessage,
-      history: options.history,
-      reasoning: options.reasoning || selection.reasoningEffort,
-      cwd: options.cwd,
-      signal: options.signal,
-      onUsage: options.onUsage,
-    });
-  }
-
   const runtime = await resolveLlmRuntime(options.modelReference, options.customProvider);
   const { completeSimple } = await importEsm<any>("@earendil-works/pi-ai/compat");
   const history = (options.history || [])
@@ -288,59 +233,6 @@ export async function callLlmWithToolsPiStreaming(options: {
   shouldAbort?: () => boolean;
   onUsage?: (sample: TokenUsageSample) => void;
 }): Promise<string> {
-  if (isGitHubCopilotProvider(options.customProvider)) {
-    const providerId = options.customProvider!.id;
-    const selection = resolveProviderModelSelection(options.customProvider!, options.modelReference);
-    return callCopilotWithToolsStreaming({
-      modelId: selection.modelId || remoteModelId(options.modelReference, providerId),
-      systemPrompt: options.systemPrompt,
-      userMessage: options.userMessage,
-      tools: options.tools,
-      sendLog: options.sendLog,
-      sendToken: options.sendToken,
-      history: options.history,
-      reasoning: options.reasoning || selection.reasoningEffort,
-      shouldAbort: options.shouldAbort,
-      onUsage: options.onUsage,
-    });
-  }
-  if (isOpenAICodexProvider(options.customProvider)) {
-    const providerId = options.customProvider!.id;
-    const selection = resolveProviderModelSelection(options.customProvider!, options.modelReference);
-    return callCodexWithToolsStreaming({
-      modelId: selection.modelId || remoteModelId(options.modelReference, providerId),
-      systemPrompt: options.systemPrompt,
-      userMessage: options.userMessage,
-      tools: options.tools,
-      sendLog: options.sendLog,
-      sendToken: options.sendToken,
-      history: options.history,
-      maxRounds: options.maxRounds,
-      reasoning: options.reasoning || selection.reasoningEffort,
-      cwd: options.cwd,
-      shouldAbort: options.shouldAbort,
-      onUsage: options.onUsage,
-    });
-  }
-  if (isClaudeCodeProvider(options.customProvider)) {
-    const providerId = options.customProvider!.id;
-    const selection = resolveProviderModelSelection(options.customProvider!, options.modelReference);
-    return callClaudeCodeWithToolsStreaming({
-      modelId: selection.modelId || remoteModelId(options.modelReference, providerId),
-      systemPrompt: options.systemPrompt,
-      userMessage: options.userMessage,
-      tools: options.tools,
-      sendLog: options.sendLog,
-      sendToken: options.sendToken,
-      history: options.history,
-      reasoning: options.reasoning || selection.reasoningEffort,
-      cwd: options.cwd,
-      maxTurns: options.maxRounds,
-      shouldAbort: options.shouldAbort,
-      onUsage: options.onUsage,
-    });
-  }
-
   const runtime = await resolveLlmRuntime(options.modelReference, options.customProvider);
   const { streamSimple } = await importEsm<any>("@earendil-works/pi-ai/compat");
   const history = (options.history || [])

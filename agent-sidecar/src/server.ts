@@ -3,36 +3,37 @@
  * 
  * Architectural Overview:
  * 
- *    ┌──────────────────────────────────────────────────────────┐
+ *    ┌────────────────────────────────────────────────────────────────────
  *    │                      Axiom Frontend                      │
- *    └────────────────────────────┬─────────────────────────────┘
+ *    └─────────────────────────────────┬───────────────────────────┘
  *                                 │ (WebSocket on Port 4000)
  *                                 ▼
- *    ┌──────────────────────────────────────────────────────────┐
+ *    ┌────────────────────────────────────────────────────────────────────
  *    │                   Agent Sidecar Server                   │
  *    │                                                          │
  *    │  - WebSocket connection accepts messages                 │
  *    │  - Routes message data.type to injected capability       │
  *    │                                                          │
- *    │       ┌───────────────┬────────────────────────┐         │
+ *    │       ┌─────────────┬──────────────────────────┬────────────────────────────┐         │
  *    │       │               │                        │         │
  *    │       ▼               ▼                        ▼         │
  *    │  execute_node   global_explore   reconciliate_edge       │
  *    │       │               │                        │         │
- *    │       └───────────────┼────────────────────────┘         │
+ *    │       └─────────────┴──────────────────────────┘         │
  *    │                       ▼                                  │
  *    │              Core Services Layer                         │
- *    │       ┌────────────────────────────────────────┐         │
+ *    │       ┌────────────────────────────────────┐         │
  *    │       │ - websocket (message queue & pairing)  │         │
  *    │       │ - tools (codebase search & VFS tools)  │         │
- *    │       │ - llm (chat round completion loops)    │         │
- *    │       └────────────────────────────────────────┘         │
- *    └──────────────────────────────────────────────────────────┘
+ *    │       │ - harness (one model/provider contract) │         │
+ *    │       └────────────────────────────────────┘         │
+ *    └──────────────────────────────────────────────────────────────────────
  * 
  * General Functionality:
  * Initializes Express endpoints and WebSocket Server. Upon connection, it maps 
  * incoming requests to modular capabilities injected into the WebSocket event loop, 
- * communicating with VFS tools and LLM providers.
+ * communicating with VFS tools and, for every provider, the single resolveHarness()
+ * contract in services/harness/ (see /llm/models, /llm/test, /llm/quota below).
  */
 
 import express from "express";
@@ -72,31 +73,27 @@ import { generateTaskNodes, stopTaskNodeGeneration } from "./capabilities/genera
 import { testBuild } from "./capabilities/testBuild";
 import { stopCommandsForSession } from "./services/commandExecution";
 import { clearCommandSession } from "./services/commandPermissions";
-import { discoverProviderModels, testProviderConnection } from "./services/llmProviders";
+import { resolveHarness } from "./services/harness";
 import {
-  discoverCopilotModels,
   getCopilotConnectionStatus,
   logoutCopilot,
   shutdownCopilotService,
   startCopilotLogin,
-  testCopilotConnection,
+  discoverCopilotModels,
 } from "./services/copilotService";
 import {
-  discoverCodexModels,
   getCodexConnectionStatus,
   logoutCodex,
   shutdownCodexService,
   startCodexLogin,
-  testCodexConnection,
+  discoverCodexModels,
 } from "./services/codexService";
 import {
   discoverClaudeCodeModels,
   getClaudeCodeConnectionStatus,
   logoutClaudeCode,
   startClaudeCodeLogin,
-  testClaudeCodeConnection,
 } from "./services/claudeCodeService";
-import { fetchProviderQuota } from "./services/providerQuota";
 import { harnessTelemetry } from "./services/observability";
 import { FileEventPersistence, replayRun } from "./services/eventPersistence";
 
@@ -107,7 +104,7 @@ import { LspManager } from "./services/lspManager";
 import { LspInstaller } from "./services/lspInstaller";
 import { getPackageSpec, listRegisteredLanguages } from "./services/lspRegistry";
 
-// ── Global Process Crash Prevention & Logging ──────────────────────
+// ── Global Process Crash Prevention & Logging ──────────────────────────
 // If stdout/stderr itself is broken (e.g. this process was orphaned when its
 // parent closed the pipe), console.error() below throws EPIPE - which is
 // itself an uncaught exception, which logs again, which EPIPEs again,
@@ -168,19 +165,13 @@ app.use(cors({
 app.use(express.json());
 
 // Provider-aware endpoints keep authentication, catalog URLs, headers, and
-// response normalization out of the WebView. The old generic proxy could only
-// handle OpenAI-shaped providers and silently produced unusable model IDs for
-// providers such as Anthropic and GitHub Models.
+// response normalization out of the WebView. Every provider's behavior is
+// resolved through the same harness contract (services/harness/); this route
+// layer never branches on provider.transport or provider.id itself.
 app.post("/llm/models", async (req, res) => {
   try {
     const provider = req.body?.provider || {};
-    const models = provider.transport === "github-copilot-sdk" || provider.id === "github-copilot"
-      ? await discoverCopilotModels()
-      : provider.transport === "openai-codex-app-server" || provider.id === "openai-codex"
-        ? await discoverCodexModels()
-        : provider.transport === "anthropic-claude-agent-sdk" || provider.id === "anthropic-claude-code"
-          ? await discoverClaudeCodeModels()
-        : await discoverProviderModels(provider);
+    const models = await resolveHarness(provider).discoverModels(provider);
     res.json({ models });
   } catch (err: any) {
     console.error("LLM model discovery error:", err?.message || err);
@@ -191,13 +182,7 @@ app.post("/llm/models", async (req, res) => {
 app.post("/llm/test", async (req, res) => {
   try {
     const provider = req.body?.provider || {};
-    const result = provider.transport === "github-copilot-sdk" || provider.id === "github-copilot"
-      ? await testCopilotConnection()
-      : provider.transport === "openai-codex-app-server" || provider.id === "openai-codex"
-        ? await testCodexConnection()
-        : provider.transport === "anthropic-claude-agent-sdk" || provider.id === "anthropic-claude-code"
-          ? await testClaudeCodeConnection()
-        : await testProviderConnection(provider);
+    const result = await resolveHarness(provider).testConnection(provider);
     res.json({ ok: true, ...result });
   } catch (err: any) {
     console.error("LLM connection test error:", err?.message || err);
@@ -207,7 +192,8 @@ app.post("/llm/test", async (req, res) => {
 
 app.post("/llm/quota", async (req, res) => {
   try {
-    res.json(await fetchProviderQuota(req.body?.provider || {}));
+    const provider = req.body?.provider || {};
+    res.json(await resolveHarness(provider).fetchQuota(provider));
   } catch (err: any) {
     console.error("LLM quota discovery error:", err?.message || err);
     res.status(502).json({ error: err?.message || "Failed to fetch provider quota." });

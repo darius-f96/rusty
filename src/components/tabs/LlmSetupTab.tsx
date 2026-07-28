@@ -7,6 +7,9 @@ import { notify } from "../../notificationStore";
 import { llmIntegrationService } from "../../services/llmIntegrationService";
 import type { ClaudeCodeConnectionStatus, CodexConnectionStatus, CopilotConnectionStatus } from "../../services/llmIntegrationService";
 import { providerModelVariants } from "../../store/providerHelpers";
+import { ProviderList, selectFirstSupportedModel } from "./llmSetup/ProviderList";
+import { providerHelpText } from "./llmSetup/providerHelp";
+import { useManagedProviderStatus } from "./llmSetup/useManagedProviderStatus";
 
 const API_PROTOCOL_OPTIONS = [
   { id: "openai-completions", name: "OpenAI Chat Completions" },
@@ -45,99 +48,32 @@ export const LlmSetupTab: React.FC = () => {
   const [fetchingModels, setFetchingModels] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<Record<string, "connected" | "failed">>({});
-  const [copilotStatus, setCopilotStatus] = useState<CopilotConnectionStatus | null>(null);
-  const [codexStatus, setCodexStatus] = useState<CodexConnectionStatus | null>(null);
-  const [claudeCodeStatus, setClaudeCodeStatus] = useState<ClaudeCodeConnectionStatus | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+  const copilotConnection = useManagedProviderStatus<CopilotConnectionStatus>({
+    providerId: "github-copilot",
+    loadStatus: llmIntegrationService.getCopilotStatus,
+    unavailableMessage: "Could not reach the Copilot service.",
+    updateConnectionStatus: setConnectionStatus,
+  });
+  const codexConnection = useManagedProviderStatus<CodexConnectionStatus>({
+    providerId: "openai-codex",
+    loadStatus: llmIntegrationService.getCodexStatus,
+    unavailableMessage: "Could not reach the Codex service.",
+    updateConnectionStatus: setConnectionStatus,
+  });
+  const claudeCodeConnection = useManagedProviderStatus<ClaudeCodeConnectionStatus>({
+    providerId: "anthropic-claude-code",
+    loadStatus: llmIntegrationService.getClaudeCodeStatus,
+    unavailableMessage: "Could not reach the Claude Code service.",
+    updateConnectionStatus: setConnectionStatus,
+  });
+  const { status: copilotStatus, setStatus: setCopilotStatus } = copilotConnection;
+  const { status: codexStatus, setStatus: setCodexStatus } = codexConnection;
+  const { status: claudeCodeStatus, setStatus: setClaudeCodeStatus } = claudeCodeConnection;
   const managedStatus = isCodex ? codexStatus : isClaudeCode ? claudeCodeStatus : copilotStatus;
   const managedVendor = isCodex ? "OpenAI" : isClaudeCode ? "Anthropic" : "GitHub";
   const managedProduct = isCodex ? "Codex" : isClaudeCode ? "Claude Code" : "Copilot";
   const managedAutoLoadRef = useRef("");
-
-  // Copilot status is polled unconditionally so the integrations list always reflects
-  // the real sign-in state, regardless of which provider is currently selected.
-  useEffect(() => {
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const poll = async () => {
-      try {
-        const status = await llmIntegrationService.getCopilotStatus();
-        if (cancelled) return;
-        setCopilotStatus(status);
-        if (status.authenticated) {
-          setConnectionStatus((current) => ({ ...current, "github-copilot": "connected" }));
-        } else if (status.state === "failed") {
-          setConnectionStatus((current) => ({ ...current, "github-copilot": "failed" }));
-        }
-        timer = setTimeout(poll, status.state === "connecting" ? 1_000 : 10_000);
-      } catch (error: any) {
-        if (cancelled) return;
-        setCopilotStatus({
-          state: "failed",
-          authenticated: false,
-          message: error?.message || "Could not reach the Copilot service.",
-        });
-        timer = setTimeout(poll, 10_000);
-      }
-    };
-    void poll();
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, []);
-
-  // Codex status is polled unconditionally (not just when Codex is the active provider)
-  // so the integrations list shows the correct connected/failed/sign-in state at all times.
-  useEffect(() => {
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const poll = async () => {
-      try {
-        const status = await llmIntegrationService.getCodexStatus();
-        if (cancelled) return;
-        setCodexStatus(status);
-        if (status.authenticated) {
-          setConnectionStatus((current) => ({ ...current, "openai-codex": "connected" }));
-        } else if (status.state === "failed") {
-          setConnectionStatus((current) => ({ ...current, "openai-codex": "failed" }));
-        }
-        timer = setTimeout(poll, status.state === "connecting" ? 1_000 : 10_000);
-      } catch (error: any) {
-        if (cancelled) return;
-        setCodexStatus({
-          state: "failed",
-          authenticated: false,
-          message: error?.message || "Could not reach the Codex service.",
-        });
-        timer = setTimeout(poll, 10_000);
-      }
-    };
-    void poll();
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, []);
-
-  // Claude Code status is polled unconditionally so the integrations list reflects the
-  // real sign-in state even when Claude Code is not the currently active provider.
-  useEffect(() => {
-    let cancelled = false;
-    const poll = async () => {
-      try {
-        const status = await llmIntegrationService.getClaudeCodeStatus();
-        if (cancelled) return;
-        setClaudeCodeStatus(status);
-        if (status.authenticated) setConnectionStatus((current) => ({ ...current, "anthropic-claude-code": "connected" }));
-      } catch (error: any) {
-        if (!cancelled) setClaudeCodeStatus({ state: "failed", authenticated: false, message: error?.message });
-      }
-    };
-    void poll();
-    const timer = setInterval(poll, 10_000);
-    return () => { cancelled = true; clearInterval(timer); };
-  }, []);
 
   // Sync inputs with selected provider
   useEffect(() => {
@@ -397,28 +333,6 @@ export const LlmSetupTab: React.FC = () => {
     setShowAddCustom(false);
   };
 
-  // Check integration helper text and placeholder keys
-  const getProviderHelpText = (id: string) => {
-    switch (id) {
-      case "openai":
-        return "Connects directly to OpenAI's completion servers. If API Key is left blank, it falls back to the OPENAI_API_KEY environment variable defined in the agent sidecar startup environment.";
-      case "openai-codex":
-        return "Uses your existing OpenAI Codex sign-in through the bundled official Codex app-server. Credentials are shared with the Codex CLI/Desktop via ~/.codex, available models come from your account, and Axiom keeps control of workspace tools and permissions.";
-      case "anthropic":
-        return "Connects directly to Anthropic's Claude API. If API Key is left blank, it falls back to the ANTHROPIC_API_KEY environment variable defined in the agent sidecar startup environment.";
-      case "anthropic-claude-code":
-        return "Uses Anthropic's official Claude Agent SDK and the local Claude Code authentication. Sign in with Claude Code using /login, or provide ANTHROPIC_API_KEY in the sidecar environment. Axiom supplies and controls the workspace tools.";
-      case "opencode":
-        return "Connects to OpenCode Zen. If the key is blank, the sidecar uses OPENCODE_API_KEY. Model discovery enriches the Zen catalog with the protocol required by each model. OpenCode Go should be registered separately with provider ID opencode-go and base URL https://opencode.ai/zen/go/v1.";
-      case "github-models":
-        return "Connects to GitHub Models via the official OpenAI-compatible inference API. Requires a GitHub Personal Access Token (PAT) with the 'models:read' scope; a blank field falls back to GITHUB_TOKEN in the sidecar environment. Use Fetch Models to load the official catalog.";
-      case "github-copilot":
-        return "Uses your GitHub Copilot subscription through GitHub's official Copilot SDK. Authentication is managed by the bundled Copilot CLI and the system credential store; model availability and premium-request usage depend on your Copilot plan and organization policy.";
-      default:
-        return "Custom OpenAI-compatible provider (e.g. Ollama, LM Studio, vLLM, or LiteLLM gateway). Configure the URL and models as needed.";
-    }
-  };
-
   return (
     <div className="w-full h-full p-8 max-w-5xl mx-auto flex flex-col space-y-6 font-sans text-[var(--text-normal)] overflow-y-auto">
       {/* Title */}
@@ -435,134 +349,19 @@ export const LlmSetupTab: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
         {/* Left Side: Providers Selection list & registration */}
         <div className="md:col-span-2 space-y-4">
-          <div className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-xl p-4 space-y-3">
-            <h3 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider font-mono">
-              Integrations
-            </h3>
-            
-            <div className="space-y-2">
-              {customProviders.map((p) => {
-                const isActive = p.id === activeCustomProviderId;
-                const isCopilotProvider = p.transport === "github-copilot-sdk" || p.id === "github-copilot";
-                const isCodexProvider = p.transport === "openai-codex-app-server" || p.id === "openai-codex";
-                const isClaudeCodeProvider = p.transport === "anthropic-claude-agent-sdk" || p.id === "anthropic-claude-code";
-                const isManagedProvider = isCopilotProvider || isCodexProvider || isClaudeCodeProvider;
-                const providerStatus = isCodexProvider ? codexStatus : isClaudeCodeProvider ? claudeCodeStatus : isCopilotProvider ? copilotStatus : null;
-                
-                // Connection indicator status text & color
-                const testedStatus = connectionStatus[p.id];
-                let statusLabel = p.authType === "none" ? "No Auth" : "Env / Key";
-                let statusColor = "bg-[var(--color-status-warning-bg)] text-[var(--color-status-warning)]";
-                if (isManagedProvider) {
-                  statusLabel = providerStatus?.state === "connecting"
-                    ? "Signing In"
-                    : providerStatus?.authenticated
-                      ? "Connected"
-                      : providerStatus?.state === "failed"
-                        ? "Failed"
-                        : "Sign In";
-                  statusColor = providerStatus?.authenticated
-                    ? "bg-[var(--color-status-success-solid)] text-[var(--color-status-success-solid-foreground)]"
-                    : providerStatus?.state === "failed"
-                      ? "bg-[var(--color-status-danger-bg)] text-[var(--color-status-danger)]"
-                      : "bg-[var(--color-status-warning-bg)] text-[var(--color-status-warning)]";
-                } else if (testedStatus === "connected") {
-                  statusLabel = "Connected";
-                  statusColor = "bg-[var(--color-status-success-solid)] text-[var(--color-status-success-solid-foreground)]";
-                } else if (testedStatus === "failed") {
-                  statusLabel = "Failed";
-                  statusColor = "bg-[var(--color-status-danger-bg)] text-[var(--color-status-danger)]";
-                } else if (p.apiKey) {
-                  statusLabel = "Configured";
-                  statusColor = "bg-[var(--color-status-success-solid)] text-[var(--color-status-success-solid-foreground)]";
-                } else if (
-                  p.authType !== "none"
-                  && !(["openai", "openai-codex", "anthropic", "opencode", "opencode-go", "github-models", "github-copilot"].includes(p.id))
-                ) {
-                  statusLabel = "Key Required";
-                  statusColor = "bg-[var(--color-status-danger-bg)] text-[var(--color-status-danger)]";
-                }
-
-                const isGithubProvider = p.id === "github-models" || isCopilotProvider;
-
-                const managedAccountLabel = isCodexProvider
-                  ? (codexStatus?.email ? ` as ${codexStatus.email}` : "")
-                  : isClaudeCodeProvider
-                    ? (claudeCodeStatus?.email ? ` as ${claudeCodeStatus.email}` : "")
-                    : (copilotStatus?.login ? ` as ${copilotStatus.login}` : "");
-                const managedVendorLabel = isCodexProvider ? "OpenAI" : isClaudeCodeProvider ? "Anthropic" : "GitHub";
-
-                return (
-                  <div
-                    key={p.id}
-                    onClick={() => {
-                      setActiveCustomProviderId(p.id);
-                      const firstSupportedModel = p.models.find((model) => model.supported !== false);
-                      if (firstSupportedModel) {
-                        setActiveModel(providerModelVariants(firstSupportedModel)[0].id);
-                      }
-                    }}
-                    className={`group flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${
-                      isActive
-                        ? "border-[var(--accent-color)] bg-[var(--accent-bg)]/20 shadow-[0_0_10px_var(--color-focus-ring)]"
-                        : "border-[var(--border-color)] bg-[var(--bg-app)]/50 hover:bg-[var(--bg-sidebar)] hover:border-[var(--border-active)]"
-                    }`}
-                  >
-                    <div className="flex flex-col min-w-0 pr-2">
-                      <span className="text-xs font-bold text-[var(--text-light)] group-hover:text-[var(--accent-color)] transition-colors flex items-center space-x-1.5">
-                        {isGithubProvider && <GitBranch size={11} className="text-[var(--text-muted)] flex-shrink-0" />}
-                        <span>{p.name}</span>
-                      </span>
-                      <span className="text-[10px] text-[var(--text-muted)] font-mono truncate mt-0.5 max-w-[180px]">
-                        {isCopilotProvider
-                          ? "Copilot subscription via GitHub"
-                          : isCodexProvider
-                            ? "Codex plan via OpenAI sign-in"
-                            : isClaudeCodeProvider
-                              ? "Claude Code via Anthropic sign-in"
-                            : p.baseUrl || "Built-in API endpoint"}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center space-x-2 flex-shrink-0">
-                      <div className="group/status relative">
-                        <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full cursor-default ${statusColor}`}>
-                          {statusLabel}
-                        </span>
-                        {isManagedProvider && (
-                          <div className="pointer-events-none absolute right-0 top-full z-20 mt-2 w-56 rounded-lg border border-[var(--border-color)] bg-[var(--bg-sidebar)] p-2.5 text-left opacity-0 shadow-xl transition-opacity duration-150 group-hover/status:opacity-100">
-                            <div className="flex items-center gap-1.5 text-[9px] font-bold text-[var(--text-light)] font-mono">
-                              <span
-                                className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${
-                                  providerStatus?.authenticated
-                                    ? "bg-[var(--color-status-success)]"
-                                    : providerStatus?.state === "connecting"
-                                      ? "bg-[var(--color-status-warning)] animate-pulse"
-                                      : providerStatus?.state === "failed"
-                                        ? "bg-[var(--color-status-danger)]"
-                                        : "bg-[var(--text-muted)]"
-                                }`}
-                              />
-                              <span>{statusLabel}</span>
-                            </div>
-                            <p className="mt-1.5 text-[9px] leading-relaxed text-[var(--text-muted)] font-mono">
-                              {providerStatus?.message
-                                || (providerStatus?.authenticated
-                                  ? `Signed in${managedAccountLabel}.`
-                                  : providerStatus?.state === "connecting"
-                                    ? `Waiting for ${managedVendorLabel} authorization to complete.`
-                                    : `Sign in with ${managedVendorLabel} to activate this integration.`)}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                      {isActive && <div className="w-1.5 h-1.5 rounded-full bg-[var(--accent-color)] animate-pulse" />}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          <ProviderList
+            providers={customProviders}
+            activeProviderId={activeCustomProviderId}
+            connectionStatuses={connectionStatus}
+            copilotStatus={copilotStatus}
+            codexStatus={codexStatus}
+            claudeCodeStatus={claudeCodeStatus}
+            onSelectProvider={(provider) => {
+              setActiveCustomProviderId(provider.id);
+              const modelId = selectFirstSupportedModel(provider);
+              if (modelId) setActiveModel(modelId);
+            }}
+          />
 
           {/* Create Custom Provider Drawer button */}
           {!showAddCustom ? (
@@ -1036,7 +835,7 @@ export const LlmSetupTab: React.FC = () => {
                 <div className="flex flex-col space-y-1">
                   <span className="text-xs font-bold text-[var(--text-light)]">Integration Guide</span>
                   <p className="text-[11px] text-[var(--text-muted)] leading-relaxed font-sans">
-                    {getProviderHelpText(selectedProvider.id)}
+                    {providerHelpText(selectedProvider.id)}
                   </p>
                 </div>
               </div>

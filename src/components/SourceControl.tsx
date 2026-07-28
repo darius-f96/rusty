@@ -1,20 +1,43 @@
-import React, { useState, useEffect, useRef } from "react";
-import { createPortal } from "react-dom";
-import { GitBranch, Plus, Minus, RotateCcw, Check, AlertCircle, ArrowUp, ArrowDown, GitCommit, ChevronDown, EyeOff } from "lucide-react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useWorkspaceStore } from "../store";
 import { invoke } from "@tauri-apps/api/core";
 import { gitPresenter } from "./git/GitPresenter";
-import { GitBranchManager } from "./git/GitBranchManager";
-import { GitFileStatus } from "./git/GitActions";
 import { notify } from "../notificationStore";
 import { useConfirm } from "./useConfirm";
+import { buildUnstagedList } from "./sourceControl/sourceControlHelpers";
+import SourceControlHeader from "./sourceControl/SourceControlHeader";
+import SourceControlCommitBox from "./sourceControl/SourceControlCommitBox";
+import SourceControlChangeList from "./sourceControl/SourceControlChangeList";
+import SourceControlHistory from "./sourceControl/SourceControlHistory";
+import { GitFileContextMenu } from "./sourceControl/SourceControlContextMenu";
+import {
+  NoFolderEmptyState,
+  NoGitRepoEmptyState,
+} from "./sourceControl/SourceControlEmptyState";
 
-export const SourceControl: React.FC = () => {
+// ─────────────────────────────────────────────────────────────
+// SourceControl — Main Orchestrator
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Sidebar panel that provides full Git source-control
+ * functionality: staging, committing, branching, pulling,
+ * pushing, diff viewing, and commit history.
+ *
+ * This component acts as the **smart container** — it owns all
+ * state and side-effect logic, and delegates rendering to
+ * presentational sub-components.
+ */
+const SourceControl: React.FC = () => {
+  // ── Store ──────────────────────────────────────────────────
   const rootPath = useWorkspaceStore((state) => state.rootPath);
   const gitStatus = useWorkspaceStore((state) => state.gitStatus);
   const loadGitStatus = useWorkspaceStore((state) => state.loadGitStatus);
   const openTab = useWorkspaceStore((state) => state.openTab);
+  const lastRename = useWorkspaceStore((state) => state.lastRename);
+  const setLastRename = useWorkspaceStore((state) => state.setLastRename);
 
+  // ── Local State ────────────────────────────────────────────
   const [activeRepo, setActiveRepo] = useState<string>("");
   const [subprojects, setSubprojects] = useState<string[]>([]);
   const [commitMsg, setCommitMsg] = useState("");
@@ -27,102 +50,137 @@ export const SourceControl: React.FC = () => {
   const [isHistoryExpanded, setIsHistoryExpanded] = useState(true);
   const [historyCommits, setHistoryCommits] = useState<any[]>([]);
   const [showBranchPopover, setShowBranchPopover] = useState(false);
-  const [fileContextMenu, setFileContextMenu] = useState<{ x: number; y: number; file: GitFileStatus } | null>(null);
-  const branchLoadIdRef = useRef(0);
+  const [fileContextMenu, setFileContextMenu] = useState<{
+    x: number;
+    y: number;
+    file: any;
+  } | null>(null);
 
-  const lastRename = useWorkspaceStore((state) => state.lastRename);
-  const setLastRename = useWorkspaceStore((state) => state.setLastRename);
+  /** Used to ignore stale fetch responses after a fast branch mutation. */
+  const branchLoadIdRef = useRef(0);
 
   const { confirm, ConfirmModalComponent } = useConfirm();
 
-  const handleOpenGraph = () => {
+  // ── Derived Data ───────────────────────────────────────────
+  const unstagedList = buildUnstagedList(gitStatus, lastRename);
+  const modifiedList = unstagedList.filter(
+    (file) => file.status_type !== "untracked",
+  );
+  const untrackedList = unstagedList.filter(
+    (file) => file.status_type === "untracked",
+  );
+  const totalChanges =
+    (gitStatus?.staged.length || 0) + unstagedList.length;
+
+  // ── Effects ────────────────────────────────────────────────
+
+  /** Scan for subproject Git repositories when rootPath changes. */
+  useEffect(() => {
+    if (!rootPath) return;
+
+    setActiveRepo(rootPath);
+    gitPresenter
+      .scanSubprojects(rootPath)
+      .then((repos) => {
+        const list = Array.from(new Set([rootPath, ...repos]));
+        setSubprojects(list);
+      })
+      .catch((err) => {
+        console.error("Failed to scan subprojects:", err);
+      });
+  }, [rootPath]);
+
+  /** Fetch local and remote branches from the Tauri backend. */
+  const loadBranches = useCallback(
+    async (rootDir: string, fetchRemote = true): Promise<void> => {
+      if (!rootDir) return;
+
+      const loadId = ++branchLoadIdRef.current;
+
+      try {
+        if (fetchRemote) {
+          try {
+            await invoke("git_fetch", { rootDir });
+          } catch (e) {
+            console.warn(
+              "Failed to refresh remote branches; using local refs:",
+              e,
+            );
+          }
+        }
+
+        const res: { local: string[]; remote: string[] } = await invoke(
+          "git_get_all_branches",
+          { rootDir },
+        );
+        if (loadId !== branchLoadIdRef.current) return;
+        setLocalBranches(res.local || []);
+        setRemoteBranches(res.remote || []);
+      } catch (e) {
+        console.warn("Failed to load branches for current repo:", e);
+      }
+    },
+    [],
+  );
+
+  /** Reload Git status, branches, and commit history when switching repos. */
+  const loadRepoData = useCallback(async (): Promise<void> => {
+    if (!activeRepo) return;
+
+    try {
+      await loadGitStatus(activeRepo);
+
+      try {
+        const history: any[] = await invoke("git_get_commit_history", {
+          rootDir: activeRepo,
+        });
+        setHistoryCommits(history.slice(0, 15));
+      } catch (e) {
+        console.warn("Failed to load history commits for current repo:", e);
+      }
+
+      await loadBranches(activeRepo);
+    } catch (err) {
+      console.error("Failed to load repo data:", err);
+    }
+  }, [activeRepo, loadGitStatus, loadBranches]);
+
+  /** React to activeRepo changes. */
+  useEffect(() => {
+    branchLoadIdRef.current += 1;
+    setLocalBranches([]);
+    setRemoteBranches([]);
+    loadRepoData();
+  }, [activeRepo, loadRepoData]);
+
+  /** Close file context menu when clicking outside. */
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent): void => {
+      const target = e.target as HTMLElement;
+      if (target.closest("[data-context-menu]")) return;
+      setFileContextMenu(null);
+    };
+
+    if (fileContextMenu) {
+      document.addEventListener("mousedown", handleOutsideClick);
+      return () => document.removeEventListener("mousedown", handleOutsideClick);
+    }
+  }, [fileContextMenu]);
+
+  // ── Event Handlers ────────────────────────────────────────
+
+  /** Open the full commit graph tab. */
+  const handleOpenGraph = useCallback((): void => {
     openTab({
       id: "git-history",
       type: "git-history",
       title: "Git Graph",
       key: "git-history",
     });
-  };
+  }, [openTab]);
 
-  // Scan subprojects and initialize activeRepo
-  useEffect(() => {
-    if (rootPath) {
-      setActiveRepo(rootPath);
-      gitPresenter.scanSubprojects(rootPath).then((repos) => {
-        // Add rootPath if not already present
-        const list = Array.from(new Set([rootPath, ...repos]));
-        setSubprojects(list);
-      }).catch((err) => {
-        console.error("Failed to scan subprojects:", err);
-      });
-    }
-  }, [rootPath]);
-
-  const loadBranches = async (rootDir: string, fetchRemote = true) => {
-    if (!rootDir) return;
-
-    // Only the newest branch read is allowed to update the IntelliJ-style
-    // popup model. A slower fetch started before a create/delete must never
-    // overwrite the post-operation branch list.
-    const loadId = ++branchLoadIdRef.current;
-    try {
-      if (fetchRemote) {
-        try {
-          await invoke("git_fetch", { rootDir });
-        } catch (e) {
-          console.warn("Failed to refresh remote branches; using local refs:", e);
-        }
-      }
-
-      const res: { local: string[]; remote: string[] } = await invoke("git_get_all_branches", { rootDir });
-      if (loadId !== branchLoadIdRef.current) return;
-      setLocalBranches(res.local || []);
-      setRemoteBranches(res.remote || []);
-    } catch (e) {
-      console.warn("Failed to load branches for current repo:", e);
-    }
-  };
-
-  // Load Git status, branches, and history on repository switch
-  const loadRepoData = async () => {
-    if (activeRepo) {
-      try {
-        await loadGitStatus(activeRepo);
-        
-        // Fetch commit history
-        try {
-          const history: any[] = await invoke("git_get_commit_history", { rootDir: activeRepo });
-          setHistoryCommits(history.slice(0, 15)); // Show last 15 commits
-        } catch (e) {
-          console.warn("Failed to load history commits for current repo:", e);
-        }
-
-        await loadBranches(activeRepo);
-      } catch (err) {
-        console.error("Failed to load repo data:", err);
-      }
-    }
-  };
-
-  useEffect(() => {
-    branchLoadIdRef.current += 1;
-    setLocalBranches([]);
-    setRemoteBranches([]);
-    loadRepoData();
-  }, [activeRepo]);
-
-  // If no folder is open, guide the user
-  if (!rootPath) {
-    return (
-      <div className="flex flex-col items-center justify-center p-6 h-full text-center text-[var(--text-muted)] font-mono text-xs select-none">
-        <AlertCircle size={20} className="text-[var(--color-status-warning)] mb-2" />
-        <span>Open a folder first to view Source Control</span>
-      </div>
-    );
-  }
-
-  // Handle git initialization
-  const handleInitializeRepo = async () => {
+  /** Initialise a Git repository in the current folder. */
+  const handleInitializeRepo = useCallback(async (): Promise<void> => {
     setInitLoading(true);
     try {
       console.log(`Git: Initializing repository at ${activeRepo}`);
@@ -134,52 +192,39 @@ export const SourceControl: React.FC = () => {
     } finally {
       setInitLoading(false);
     }
-  };
+  }, [activeRepo, loadRepoData]);
 
-  // If folder is open but not a git repo, prompt to initialize
-  if (gitStatus && !gitStatus.isRepo) {
-    return (
-      <div className="flex flex-col items-center justify-center p-6 h-full text-center space-y-4 select-none">
-        <div className="flex flex-col items-center text-[var(--text-muted)] font-mono text-xs space-y-2">
-          <GitBranch size={24} className="text-[var(--text-muted)] animate-pulse" />
-          <span className="font-semibold text-[var(--text-normal)]">No Git Repository Found</span>
-          <span className="text-[10px] max-w-[200px] leading-relaxed">
-            Initialize git source control to track modifications and commit code changes.
-          </span>
-        </div>
-        <button
-          onClick={handleInitializeRepo}
-          disabled={initLoading}
-          className="w-full bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/85 disabled:bg-[var(--border-color)] text-[var(--color-primary-foreground)] text-xs font-mono font-bold py-2 rounded-lg transition-all shadow-md cursor-pointer flex items-center justify-center"
-        >
-          {initLoading ? "Initializing..." : "Initialize Repository"}
-        </button>
-      </div>
-    );
-  }
+  /** Commit all staged changes. */
+  const handleCommit = useCallback(
+    async (e?: React.FormEvent): Promise<void> => {
+      if (e) e.preventDefault();
+      if (!commitMsg.trim() || isCommitting || !gitStatus) return;
 
-  const handleCommit = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!commitMsg.trim() || isCommitting || !gitStatus) return;
+      if (gitStatus.staged.length === 0) {
+        notify(
+          "Nothing to commit",
+          "Please stage your changes before committing.",
+          "info",
+        );
+        return;
+      }
 
-    if (gitStatus.staged.length === 0) {
-      notify("Nothing to commit", "Please stage your changes before committing.", "info");
-      return;
-    }
+      setIsCommitting(true);
+      try {
+        await gitPresenter.commit(activeRepo, commitMsg);
+        setCommitMsg("");
+        await loadRepoData();
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsCommitting(false);
+      }
+    },
+    [activeRepo, commitMsg, gitStatus, isCommitting, loadRepoData],
+  );
 
-    setIsCommitting(true);
-    try {
-      await gitPresenter.commit(activeRepo, commitMsg);
-      setCommitMsg("");
-      await loadRepoData();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsCommitting(false);
-    }
-  };
-
-  const handlePull = async () => {
+  /** Pull latest changes from the remote. */
+  const handlePull = useCallback(async (): Promise<void> => {
     if (!activeRepo || isPulling) return;
     setIsPulling(true);
     try {
@@ -190,9 +235,10 @@ export const SourceControl: React.FC = () => {
     } finally {
       setIsPulling(false);
     }
-  };
+  }, [activeRepo, isPulling, loadRepoData]);
 
-  const handlePush = async () => {
+  /** Push local commits to the remote. */
+  const handlePush = useCallback(async (): Promise<void> => {
     if (!activeRepo || !gitStatus || isPushing) return;
     setIsPushing(true);
     try {
@@ -203,633 +249,333 @@ export const SourceControl: React.FC = () => {
     } finally {
       setIsPushing(false);
     }
-  };
+  }, [activeRepo, gitStatus, isPushing, loadRepoData]);
 
-  const handleStageFile = async (e: React.MouseEvent, filePath: string) => {
-    e.stopPropagation();
-    try {
-      await gitPresenter.stageFile(activeRepo, filePath);
-      await loadRepoData();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleUnstageFile = async (e: React.MouseEvent, filePath: string) => {
-    e.stopPropagation();
-    try {
-      await gitPresenter.unstageFile(activeRepo, filePath);
-      await loadRepoData();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleAddToGitignore = async (filePath: string) => {
-    try {
-      await gitPresenter.addToGitignore(activeRepo, filePath);
-      await loadRepoData();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleFileContextMenu = (e: React.MouseEvent, file: GitFileStatus) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setFileContextMenu({ x: e.clientX, y: e.clientY, file });
-  };
-
-  useEffect(() => {
-    const handleOutsideClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (target.closest("[data-context-menu]")) return;
-      setFileContextMenu(null);
-    };
-    if (fileContextMenu) {
-      document.addEventListener("mousedown", handleOutsideClick);
-      return () => document.removeEventListener("mousedown", handleOutsideClick);
-    }
-  }, [fileContextMenu]);
-
-  const handleDiscardChanges = async (e: React.MouseEvent, filePath: string, fileName: string) => {
-    e.stopPropagation();
-    try {
-      await gitPresenter.discardChanges(activeRepo, filePath, fileName, async (title, msg) => {
-        return await confirm({
-          title,
-          message: msg,
-          kind: "warning"
-        });
-      });
-      await loadRepoData();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleDiscardAllChanges = async () => {
-    try {
-      await gitPresenter.discardAllChanges(activeRepo, async (title, msg) => {
-        return await confirm({
-          title,
-          message: msg,
-          kind: "danger"
-        });
-      });
-      await loadRepoData();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleCheckoutBranch = async (branchName: string) => {
-    try {
-      await gitPresenter.switchBranch(activeRepo, branchName);
-      await loadRepoData();
-      setShowBranchPopover(false);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleCreateBranch = async (branchName: string) => {
-    try {
-      await gitPresenter.createBranch(activeRepo, branchName, true);
-      await loadRepoData();
-      setShowBranchPopover(false);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleDeleteBranch = async (branchName: string, force: boolean) => {
-    try {
-      await gitPresenter.deleteBranch(activeRepo, branchName, force);
-
-      // Reflect the successful ref mutation synchronously. The subsequent
-      // authoritative read covers external Git changes without letting an
-      // older in-flight request put the deleted row back.
-      branchLoadIdRef.current += 1;
-      if (branchName.startsWith("origin/")) {
-        setRemoteBranches((branches) => branches.filter((branch) => branch !== branchName));
-      } else {
-        setLocalBranches((branches) => branches.filter((branch) => branch !== branchName));
+  /** Stage a single file. */
+  const handleStageFile = useCallback(
+    async (e: React.MouseEvent, filePath: string): Promise<void> => {
+      e.stopPropagation();
+      try {
+        await gitPresenter.stageFile(activeRepo, filePath);
+        await loadRepoData();
+      } catch (err) {
+        console.error(err);
       }
-      await loadBranches(activeRepo, false);
+    },
+    [activeRepo, loadRepoData],
+  );
+
+  /** Unstage a single file. */
+  const handleUnstageFile = useCallback(
+    async (e: React.MouseEvent, filePath: string): Promise<void> => {
+      e.stopPropagation();
+      try {
+        await gitPresenter.unstageFile(activeRepo, filePath);
+        await loadRepoData();
+      } catch (err) {
+        console.error(err);
+      }
+    },
+    [activeRepo, loadRepoData],
+  );
+
+  /** Add a file to .gitignore. */
+  const handleAddToGitignore = useCallback(
+    async (filePath: string): Promise<void> => {
+      try {
+        await gitPresenter.addToGitignore(activeRepo, filePath);
+        await loadRepoData();
+      } catch (err) {
+        console.error(err);
+      }
+    },
+    [activeRepo, loadRepoData],
+  );
+
+  /** Show the right-click context menu for a file. */
+  const handleFileContextMenu = useCallback(
+    (e: React.MouseEvent, file: any): void => {
+      e.preventDefault();
+      e.stopPropagation();
+      setFileContextMenu({ x: e.clientX, y: e.clientY, file });
+    },
+    [],
+  );
+
+  /** Discard all unstaged changes in a single file. */
+  const handleDiscardChanges = useCallback(
+    async (
+      e: React.MouseEvent,
+      filePath: string,
+      fileName: string,
+    ): Promise<void> => {
+      e.stopPropagation();
+      try {
+        await gitPresenter.discardChanges(
+          activeRepo,
+          filePath,
+          fileName,
+          async (title, msg) => {
+            return await confirm({
+              title,
+              message: msg,
+              kind: "warning",
+            });
+          },
+        );
+        await loadRepoData();
+      } catch (err) {
+        console.error(err);
+      }
+    },
+    [activeRepo, confirm, loadRepoData],
+  );
+
+  /** Discard all unstaged changes across the whole repo. */
+  const handleDiscardAllChanges = useCallback(async (): Promise<void> => {
+    try {
+      await gitPresenter.discardAllChanges(
+        activeRepo,
+        async (title, msg) => {
+          return await confirm({
+            title,
+            message: msg,
+            kind: "danger",
+          });
+        },
+      );
+      await loadRepoData();
     } catch (err) {
       console.error(err);
-      throw err;
     }
-  };
+  }, [activeRepo, confirm, loadRepoData]);
 
-  const handleBranchPopoverToggle = () => {
+  /** Checkout (switch to) a branch. */
+  const handleCheckoutBranch = useCallback(
+    async (branchName: string): Promise<void> => {
+      try {
+        await gitPresenter.switchBranch(activeRepo, branchName);
+        await loadRepoData();
+        setShowBranchPopover(false);
+      } catch (err) {
+        console.error(err);
+      }
+    },
+    [activeRepo, loadRepoData],
+  );
+
+  /** Create a new branch and optionally check it out. */
+  const handleCreateBranch = useCallback(
+    async (branchName: string): Promise<void> => {
+      try {
+        await gitPresenter.createBranch(activeRepo, branchName, true);
+        await loadRepoData();
+        setShowBranchPopover(false);
+      } catch (err) {
+        console.error(err);
+      }
+    },
+    [activeRepo, loadRepoData],
+  );
+
+  /** Delete a local or remote branch. */
+  const handleDeleteBranch = useCallback(
+    async (branchName: string, force: boolean): Promise<void> => {
+      try {
+        await gitPresenter.deleteBranch(activeRepo, branchName, force);
+
+        // Reflect the successful mutation synchronously so an older
+        // in-flight request cannot put the deleted row back.
+        branchLoadIdRef.current += 1;
+        if (branchName.startsWith("origin/")) {
+          setRemoteBranches((branches) =>
+            branches.filter((b) => b !== branchName),
+          );
+        } else {
+          setLocalBranches((branches) =>
+            branches.filter((b) => b !== branchName),
+          );
+        }
+        await loadBranches(activeRepo, false);
+      } catch (err) {
+        console.error(err);
+        throw err;
+      }
+    },
+    [activeRepo, loadBranches],
+  );
+
+  /** Toggle the branch manager popover. */
+  const handleBranchPopoverToggle = useCallback((): void => {
     const opening = !showBranchPopover;
     setShowBranchPopover(opening);
     if (opening) {
       void loadBranches(activeRepo);
     }
-  };
+  }, [showBranchPopover, activeRepo, loadBranches]);
 
-  const handleMergeBranch = async (branchName: string) => {
-    try {
-      await gitPresenter.mergeBranch(activeRepo, branchName);
-      await loadRepoData();
-      setShowBranchPopover(false);
-    } catch (err) {
-      console.error(err);
-    }
-  };
+  /** Close the branch manager popover. */
+  const handleCloseBranchPopover = useCallback((): void => {
+    setShowBranchPopover(false);
+  }, []);
 
-  const handleRebaseBranch = async (branchName: string) => {
-    try {
-      await gitPresenter.rebaseBranch(activeRepo, branchName);
-      await loadRepoData();
-      setShowBranchPopover(false);
-    } catch (err) {
-      console.error(err);
-    }
-  };
+  /** Merge a branch into the current branch. */
+  const handleMergeBranch = useCallback(
+    async (branchName: string): Promise<void> => {
+      try {
+        await gitPresenter.mergeBranch(activeRepo, branchName);
+        await loadRepoData();
+        setShowBranchPopover(false);
+      } catch (err) {
+        console.error(err);
+      }
+    },
+    [activeRepo, loadRepoData],
+  );
 
-  const handleAbortPending = async () => {
+  /** Rebase the current branch onto another branch. */
+  const handleRebaseBranch = useCallback(
+    async (branchName: string): Promise<void> => {
+      try {
+        await gitPresenter.rebaseBranch(activeRepo, branchName);
+        await loadRepoData();
+        setShowBranchPopover(false);
+      } catch (err) {
+        console.error(err);
+      }
+    },
+    [activeRepo, loadRepoData],
+  );
+
+  /** Abort a pending merge or rebase. */
+  const handleAbortPending = useCallback(async (): Promise<void> => {
     try {
       await gitPresenter.abortPending(activeRepo);
       await loadRepoData();
     } catch (err) {
       console.error(err);
     }
-  };
+  }, [activeRepo, loadRepoData]);
 
-  const handleUndoRename = async () => {
+  /** Undo the last file rename / move. */
+  const handleUndoRename = useCallback(async (): Promise<void> => {
     if (!lastRename) return;
     try {
-      await gitPresenter.undoLastRename(activeRepo, lastRename.originalPath, lastRename.newPath);
+      await gitPresenter.undoLastRename(
+        activeRepo,
+        lastRename.originalPath,
+        lastRename.newPath,
+      );
       setLastRename(null);
       await loadRepoData();
     } catch (err) {
       console.error(err);
     }
-  };
+  }, [activeRepo, lastRename, setLastRename, loadRepoData]);
 
-  const handleOpenFileDiff = (filePath: string, fileName: string, diffType: "staged" | "unstaged") => {
-    const titleSuffix = diffType === "staged" ? "Index" : "Workspace";
-    openTab({
-      id: `git-diff-${filePath}-${diffType}`,
-      type: "git-diff",
-      title: `${fileName} (${titleSuffix})`,
-      key: filePath,
-      diffType,
-    });
-  };
+  /** Open the diff tab for a file. */
+  const handleOpenFileDiff = useCallback(
+    (
+      filePath: string,
+      fileName: string,
+      diffType: "staged" | "unstaged",
+    ): void => {
+      const titleSuffix = diffType === "staged" ? "Index" : "Workspace";
+      openTab({
+        id: `git-diff-${filePath}-${diffType}`,
+        type: "git-diff",
+        title: `${fileName} (${titleSuffix})`,
+        key: filePath,
+        diffType,
+      });
+    },
+    [openTab],
+  );
 
-  const getStatusIndicator = (statusType: string) => {
-    switch (statusType) {
-      case "added":
-        return { char: "A", colorClass: "text-[var(--color-status-success)] font-bold" };
-      case "deleted":
-        return { char: "D", colorClass: "text-[var(--color-status-danger)] font-bold" };
-      case "untracked":
-        return { char: "U", colorClass: "text-[var(--color-status-success)] opacity-80" };
-      case "renamed":
-        return { char: "R", colorClass: "text-[var(--color-status-info)] font-bold" };
-      case "modified":
-      default:
-        return { char: "M", colorClass: "text-[var(--color-status-warning)] font-bold" };
-    }
-  };
+  /** Switch the active repository. */
+  const handleRepoChange = useCallback((repo: string): void => {
+    setActiveRepo(repo);
+  }, []);
 
-  const buildUnstagedList = () => {
-    if (!gitStatus) return [];
-    if (!lastRename) return gitStatus.unstaged;
+  // ── Early Returns (Empty / Non-Repo States) ───────────────
 
-    const { originalPath, newPath } = lastRename;
-    const hasDeleted = gitStatus.unstaged.some(f => f.path === originalPath);
-    const hasUntracked = gitStatus.unstaged.some(f => f.path === newPath);
+  if (!rootPath) {
+    return <NoFolderEmptyState />;
+  }
 
-    if (!hasDeleted || !hasUntracked) return gitStatus.unstaged;
-
-    const filtered = gitStatus.unstaged.filter(
-      (f) => f.path !== originalPath && f.path !== newPath
+  if (gitStatus && !gitStatus.isRepo) {
+    return (
+      <NoGitRepoEmptyState
+        initLoading={initLoading}
+        onInitialize={handleInitializeRepo}
+      />
     );
-    return [
-      ...filtered,
-      {
-        path: newPath,
-        name: `${originalPath.split("/").pop()} → ${newPath.split("/").pop()}`,
-        status_type: "renamed" as const,
-      },
-    ];
-  };
+  }
 
-  const unstagedList = buildUnstagedList();
-  const modifiedList = unstagedList.filter((file) => file.status_type !== "untracked");
-  const untrackedList = unstagedList.filter((file) => file.status_type === "untracked");
-  const totalChanges = (gitStatus?.staged.length || 0) + unstagedList.length;
+  // ── Main Render ───────────────────────────────────────────
 
   return (
     <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-[var(--bg-sidebar)] font-sans text-xs select-none relative">
-      {/* Subproject Selector (Only if nested repositories are present) */}
-      {subprojects.length > 1 && (
-        <div className="px-4 py-2 border-b border-[var(--border-color)]/60 bg-[var(--color-surface-sunken)] flex items-center justify-between flex-shrink-0">
-          <span className="text-[9px] font-mono text-[var(--text-muted)] uppercase font-semibold">Repository:</span>
-          <select
-            value={activeRepo}
-            onChange={(e) => setActiveRepo(e.target.value)}
-            className="bg-[var(--bg-app)] border border-[var(--border-color)] text-[var(--text-normal)] rounded px-2 py-0.5 max-w-[170px] truncate text-[10px] font-mono focus:outline-none focus:border-[var(--accent-color)]"
-          >
-            {subprojects.map((repo) => {
-              const name = repo === rootPath ? "[Workspace Root]" : repo.replace(`${rootPath}/`, "");
-              return (
-                <option key={repo} value={repo}>
-                  {name}
-                </option>
-              );
-            })}
-          </select>
-        </div>
+      <SourceControlHeader
+        subprojects={subprojects}
+        activeRepo={activeRepo}
+        rootPath={rootPath}
+        gitStatus={gitStatus}
+        localBranches={localBranches}
+        remoteBranches={remoteBranches}
+        showBranchPopover={showBranchPopover}
+        onRepoChange={handleRepoChange}
+        onOpenGraph={handleOpenGraph}
+        onAbortPending={handleAbortPending}
+        onToggleBranchPopover={handleBranchPopoverToggle}
+        onCheckoutBranch={handleCheckoutBranch}
+        onCreateBranch={handleCreateBranch}
+        onDeleteBranch={handleDeleteBranch}
+        onMergeBranch={handleMergeBranch}
+        onRebaseBranch={handleRebaseBranch}
+        onCloseBranchPopover={handleCloseBranchPopover}
+      />
+
+      {gitStatus && (
+        <SourceControlCommitBox
+          commitMsg={commitMsg}
+          isCommitting={isCommitting}
+          isPushing={isPushing}
+          isPulling={isPulling}
+          totalChanges={totalChanges}
+          onCommitMsgChange={setCommitMsg}
+          onCommit={handleCommit}
+          onPull={handlePull}
+          onPush={handlePush}
+        />
       )}
 
-      {/* Header Info */}
-      <div className="px-4 py-3 border-b border-[var(--border-color)] flex items-center justify-between flex-shrink-0 bg-[var(--color-surface-sunken)]">
-        <div className="flex items-center space-x-2">
-          <span className="font-bold text-[var(--text-light)] uppercase tracking-wider text-[10px] font-mono">Source Control</span>
-          <button
-            type="button"
-            onClick={handleOpenGraph}
-            className="p-1 rounded hover:bg-[var(--border-color)]/60 text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors cursor-pointer"
-            title="Open Commit Graph"
-          >
-            <GitCommit size={13} className="text-[var(--accent-color)]" />
-          </button>
-        </div>
-
-        {gitStatus && (
-          <div className="flex items-center space-x-1.5 relative">
-            <button
-              type="button"
-              onClick={handleAbortPending}
-              className="p-1 rounded hover:bg-[var(--color-status-danger-bg)] text-[var(--text-muted)] hover:text-[var(--color-status-danger)] transition-colors cursor-pointer"
-              title="Abort Merge/Rebase"
-            >
-              <RotateCcw size={12} />
-            </button>
-            <button
-              onClick={handleBranchPopoverToggle}
-              className="flex items-center space-x-1 bg-[var(--accent-bg)]/35 text-[var(--accent-color)] px-2 py-1 rounded font-mono text-[10px] border border-[var(--accent-color)]/25 hover:border-[var(--accent-color)]/50 transition-all cursor-pointer font-bold"
-            >
-              <GitBranch size={10} className="flex-shrink-0 mr-1" />
-              <span className="truncate max-w-[80px]">{gitStatus.currentBranch}</span>
-              <ChevronDown size={10} className="flex-shrink-0 opacity-60 ml-0.5" />
-            </button>
-
-            {/* IntelliJ Branch Manager Popover */}
-            {showBranchPopover && (
-              <GitBranchManager
-                currentBranch={gitStatus.currentBranch}
-                localBranches={localBranches}
-                remoteBranches={remoteBranches}
-                onCheckout={handleCheckoutBranch}
-                onCreateBranch={handleCreateBranch}
-                onDeleteBranch={handleDeleteBranch}
-                onMergeBranch={handleMergeBranch}
-                onRebaseBranch={handleRebaseBranch}
-                onClose={() => setShowBranchPopover(false)}
-              />
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Commit Box Form */}
-      <div className="p-3 border-b border-[var(--border-color)] flex-shrink-0 bg-[var(--color-surface-sunken)]">
-        <form onSubmit={handleCommit} className="space-y-2">
-          <textarea
-            placeholder={`Commit message (Cmd+Enter to commit)`}
-            value={commitMsg}
-            onChange={(e) => setCommitMsg(e.target.value)}
-            onKeyDown={(e) => {
-              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-                e.preventDefault();
-                handleCommit();
-              }
-            }}
-            className="w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded-lg p-2 text-xs font-sans text-[var(--text-light)] focus:outline-none focus:border-[var(--border-active)] resize-none h-16 leading-relaxed select-text placeholder:text-[var(--text-muted)]"
-            disabled={isCommitting || totalChanges === 0}
-          />
-          <button
-            type="submit"
-            disabled={isCommitting || !commitMsg.trim() || totalChanges === 0}
-            className="w-full bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/85 disabled:bg-[var(--border-color)] disabled:opacity-50 text-[var(--color-primary-foreground)] text-[11px] font-mono font-bold py-1.5 rounded-lg transition-all shadow-md flex items-center justify-center space-x-1.5 cursor-pointer glow-btn"
-          >
-            <Check size={12} />
-            <span>{isCommitting ? "Committing..." : "Commit"}</span>
-          </button>
-          
-          <div className="flex space-x-2">
-            <button
-              type="button"
-              onClick={handlePull}
-              disabled={isCommitting || isPushing || isPulling}
-              className="flex-1 bg-[var(--bg-app)] border border-[var(--border-color)] hover:border-[var(--border-active)] hover:bg-[var(--bg-sidebar)] text-[var(--text-light)] text-[10px] font-mono font-bold py-1.5 rounded-lg transition-all flex items-center justify-center space-x-1 cursor-pointer"
-              title="Pull changes from remote"
-            >
-              <ArrowDown size={11} className={isPulling ? "animate-bounce" : ""} />
-              <span>{isPulling ? "Pulling..." : "Pull"}</span>
-            </button>
-            <button
-              type="button"
-              onClick={handlePush}
-              disabled={isCommitting || isPushing || isPulling}
-              className="flex-1 bg-[var(--bg-app)] border border-[var(--border-color)] hover:border-[var(--border-active)] hover:bg-[var(--bg-sidebar)] text-[var(--text-light)] text-[10px] font-mono font-bold py-1.5 rounded-lg transition-all flex items-center justify-center space-x-1 cursor-pointer"
-              title="Push changes to remote"
-            >
-              <ArrowUp size={11} className={isPushing ? "animate-bounce" : ""} />
-              <span>{isPushing ? "Pushing..." : "Push"}</span>
-            </button>
-          </div>
-        </form>
-      </div>
-
-      {/* Scrollable Changes List */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-4">
-        
-        {/* 1. Staged Changes List */}
-        {gitStatus && gitStatus.staged.length > 0 && (
-          <div className="space-y-1">
-            <div className="px-2 py-1 flex items-center justify-between text-[10px] font-mono font-bold text-[var(--text-muted)] uppercase tracking-wider">
-              <span>Staged Changes</span>
-              <span className="bg-[var(--border-color)] px-1.5 py-0.2 rounded-full text-[9px] text-[var(--text-normal)]">
-                {gitStatus.staged.length}
-              </span>
-            </div>
-            
-            <div className="space-y-0.5">
-              {gitStatus.staged.map((file) => {
-                const indicator = getStatusIndicator(file.status_type);
-                const relativeDir = file.path.substring(activeRepo.length + 1, file.path.length - file.name.length - 1);
-                
-                return (
-                  <div
-                    key={`staged-${file.path}`}
-                    onClick={() => handleOpenFileDiff(file.path, file.name, "staged")}
-                    className="group flex items-center justify-between px-2.5 py-1.5 rounded hover:bg-[var(--accent-bg)]/20 cursor-pointer transition-colors"
-                  >
-                    <div className="flex flex-col min-w-0 flex-1">
-                      <span className="text-[var(--text-normal)] group-hover:text-[var(--text-light)] truncate font-mono text-[11px]">
-                        {file.name}
-                      </span>
-                      {relativeDir && (
-                        <span className="text-[9px] text-[var(--text-muted)] truncate select-none">
-                          {relativeDir}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center space-x-2.5">
-                      <button
-                        onClick={(e) => handleUnstageFile(e, file.path)}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-[var(--text-muted)] hover:text-[var(--color-status-danger)] hover:bg-[var(--color-surface-sunken)] rounded transition-all cursor-pointer"
-                        title="Unstage changes"
-                      >
-                        <Minus size={11} />
-                      </button>
-                      <span className={`w-4 text-center text-[10px] font-mono select-none ${indicator.colorClass}`}>
-                        {indicator.char}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* 2. Unstaged (modified/deleted/renamed) Changes List */}
-        {gitStatus && modifiedList.length > 0 && (
-          <div className="space-y-1">
-            <div className="px-2 py-1 flex items-center justify-between text-[10px] font-mono font-bold text-[var(--text-muted)] uppercase tracking-wider">
-              <div className="flex items-center space-x-1.5">
-                <span>Changes</span>
-                <span className="bg-[var(--border-color)] px-1.5 py-0.2 rounded-full text-[9px] text-[var(--text-normal)]">
-                  {modifiedList.length}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={handleDiscardAllChanges}
-                className="p-1 rounded hover:bg-[var(--color-status-danger-bg)] text-[var(--text-muted)] hover:text-[var(--color-status-danger)] transition-colors cursor-pointer"
-                title="Discard All Unstaged Changes"
-              >
-                <RotateCcw size={12} />
-              </button>
-            </div>
-
-            <div className="space-y-0.5">
-              {modifiedList.map((file) => {
-                const indicator = getStatusIndicator(file.status_type);
-                const isRenamed = file.status_type === "renamed";
-                const relativeDir = isRenamed
-                  ? ""
-                  : file.path.substring(activeRepo.length + 1, file.path.length - file.name.length - 1);
-
-                return (
-                  <div
-                    key={`unstaged-${file.path}`}
-                    onClick={() => !isRenamed && handleOpenFileDiff(file.path, file.name, "unstaged")}
-                    onContextMenu={(e) => !isRenamed && handleFileContextMenu(e, file)}
-                    className="group flex items-center justify-between px-2.5 py-1.5 rounded hover:bg-[var(--accent-bg)]/20 cursor-pointer transition-colors"
-                  >
-                    <div className="flex flex-col min-w-0 flex-1">
-                      <span className="text-[var(--text-normal)] group-hover:text-[var(--text-light)] truncate font-mono text-[11px]">
-                        {file.name}
-                      </span>
-                      {relativeDir && (
-                        <span className="text-[9px] text-[var(--text-muted)] truncate select-none">
-                          {relativeDir}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center space-x-1.5">
-                      {isRenamed && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleUndoRename(); }}
-                          className="opacity-0 group-hover:opacity-100 p-1 text-[var(--text-muted)] hover:text-[var(--color-status-info)] hover:bg-[var(--color-surface-sunken)] rounded transition-all cursor-pointer"
-                          title="Undo rename/move"
-                        >
-                          <RotateCcw size={11} />
-                        </button>
-                      )}
-
-                      {!isRenamed && (
-                        <button
-                          onClick={(e) => handleDiscardChanges(e, file.path, file.name)}
-                          className="opacity-0 group-hover:opacity-100 p-1 text-[var(--text-muted)] hover:text-[var(--color-status-warning)] hover:bg-[var(--color-surface-sunken)] rounded transition-all cursor-pointer"
-                          title="Discard changes"
-                        >
-                          <RotateCcw size={11} />
-                        </button>
-                      )}
-
-                      {!isRenamed && (
-                        <button
-                          onClick={(e) => handleStageFile(e, file.path)}
-                          className="opacity-0 group-hover:opacity-100 p-1 text-[var(--text-muted)] hover:text-[var(--color-status-success)] hover:bg-[var(--color-surface-sunken)] rounded transition-all cursor-pointer"
-                          title="Stage changes"
-                        >
-                          <Plus size={11} />
-                        </button>
-                      )}
-
-                      <span className={`w-4 text-center text-[10px] font-mono select-none ${indicator.colorClass}`}>
-                        {indicator.char}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* 2b. Untracked (new) Files List */}
-        {gitStatus && untrackedList.length > 0 && (
-          <div className="space-y-1">
-            <div className="px-2 py-1 flex items-center justify-between text-[10px] font-mono font-bold text-[var(--text-muted)] uppercase tracking-wider">
-              <div className="flex items-center space-x-1.5">
-                <span>Untracked</span>
-                <span className="bg-[var(--border-color)] px-1.5 py-0.2 rounded-full text-[9px] text-[var(--text-normal)]">
-                  {untrackedList.length}
-                </span>
-              </div>
-            </div>
-
-            <div className="space-y-0.5">
-              {untrackedList.map((file) => {
-                const indicator = getStatusIndicator(file.status_type);
-                const relativeDir = file.path.substring(activeRepo.length + 1, file.path.length - file.name.length - 1);
-
-                return (
-                  <div
-                    key={`untracked-${file.path}`}
-                    onClick={() => handleOpenFileDiff(file.path, file.name, "unstaged")}
-                    onContextMenu={(e) => handleFileContextMenu(e, file)}
-                    className="group flex items-center justify-between px-2.5 py-1.5 rounded hover:bg-[var(--accent-bg)]/20 cursor-pointer transition-colors"
-                  >
-                    <div className="flex flex-col min-w-0 flex-1">
-                      <span className="text-[var(--text-normal)] group-hover:text-[var(--text-light)] truncate font-mono text-[11px]">
-                        {file.name}
-                      </span>
-                      {relativeDir && (
-                        <span className="text-[9px] text-[var(--text-muted)] truncate select-none">
-                          {relativeDir}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center space-x-1.5">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleAddToGitignore(file.path); }}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-[var(--text-muted)] hover:text-[var(--color-status-info)] hover:bg-[var(--color-surface-sunken)] rounded transition-all cursor-pointer"
-                        title="Add to .gitignore"
-                      >
-                        <EyeOff size={11} />
-                      </button>
-
-                      <button
-                        onClick={(e) => handleStageFile(e, file.path)}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-[var(--text-muted)] hover:text-[var(--color-status-success)] hover:bg-[var(--color-surface-sunken)] rounded transition-all cursor-pointer"
-                        title="Add to Git"
-                      >
-                        <Plus size={11} />
-                      </button>
-
-                      <span className={`w-4 text-center text-[10px] font-mono select-none ${indicator.colorClass}`}>
-                        {indicator.char}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* 3. Empty Changes State */}
-        {gitStatus && totalChanges === 0 && (
-          <div className="flex flex-col items-center justify-center p-6 h-20 text-center text-[var(--text-muted)] font-mono text-[10px] space-y-1">
-            <span>// No modifications detected.</span>
-            <span>Working directory is clean.</span>
-          </div>
-        )}
-      </div>
-
-      {/* 4. Collapsible Git History Section */}
       {gitStatus && (
-        <div className="flex-shrink-0 border-t border-[var(--border-color)]/40">
-          <div
-            onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}
-            className="px-3 py-2 flex items-center justify-between text-[10px] font-mono font-bold text-[var(--text-muted)] uppercase tracking-wider cursor-pointer hover:text-[var(--text-light)] select-none bg-[var(--color-surface-sunken)]"
-          >
-            <div className="flex items-center space-x-1.5">
-              <ChevronDown size={11} className={`transform transition-transform duration-200 ${isHistoryExpanded ? "" : "-rotate-90"}`} />
-              <span>Git History</span>
-              <span className="bg-[var(--border-color)] px-1.5 py-0.2 rounded-full text-[9px] text-[var(--text-normal)]">
-                {historyCommits.length}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleOpenGraph();
-              }}
-              className="text-[9px] text-[var(--accent-color)] hover:underline cursor-pointer flex items-center space-x-1 font-bold font-mono"
-            >
-              <span>[ full graph ]</span>
-            </button>
-          </div>
+        <SourceControlChangeList
+          gitStatus={gitStatus}
+          activeRepo={activeRepo}
+          unstagedList={unstagedList}
+          modifiedList={modifiedList}
+          untrackedList={untrackedList}
+          totalChanges={totalChanges}
+          onStageFile={handleStageFile}
+          onUnstageFile={handleUnstageFile}
+          onDiscardChanges={handleDiscardChanges}
+          onDiscardAllChanges={handleDiscardAllChanges}
+          onAddToGitignore={handleAddToGitignore}
+          onUndoRename={handleUndoRename}
+          onOpenFileDiff={handleOpenFileDiff}
+          onFileContextMenu={handleFileContextMenu}
+        />
+      )}
 
-          <div className={`transition-all duration-200 ease-out ${isHistoryExpanded ? "max-h-64" : "max-h-0"} overflow-hidden`}>
-            <div className="flex flex-col-reverse p-2 pt-0 space-y-0.5 max-h-60 overflow-y-auto">
-              {historyCommits.length === 0 ? (
-                <div className="text-center py-4 text-[10px] text-[var(--text-muted)] font-mono">
-                  No commits yet.
-                </div>
-              ) : (
-                historyCommits.map((commit) => (
-                  <div
-                    key={commit.hash}
-                    onClick={handleOpenGraph}
-                    className="group flex items-center justify-between px-2 py-1 rounded hover:bg-[var(--accent-bg)]/20 cursor-pointer transition-colors"
-                    title="Click to open Git Graph"
-                  >
-                    <div className="flex flex-col min-w-0 flex-1 space-y-0.5">
-                      <div className="flex items-center space-x-1.5">
-                        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${commit.is_unpushed ? "bg-[var(--color-status-warning-solid)] animate-pulse" : "bg-[var(--accent-color)]"}`} />
-                        <span className="text-[var(--text-normal)] group-hover:text-[var(--text-light)] truncate font-mono text-[10.5px]">
-                          {commit.subject}
-                        </span>
-                      </div>
-                      <div className="flex items-center text-[9px] text-[var(--text-muted)] font-mono space-x-2 pl-3">
-                        <span className="truncate max-w-[80px]">{commit.author}</span>
-                        <span>•</span>
-                        <span>{commit.date}</span>
-                        <span>•</span>
-                        <span className="font-bold">{commit.short_hash}</span>
-                      </div>
-                    </div>
-                    {commit.is_unpushed && (
-                      <span title="Outgoing commit">
-                        <ArrowUp size={10} className="text-[var(--color-status-warning)] flex-shrink-0 ml-1.5" />
-                      </span>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
+      {gitStatus && (
+        <SourceControlHistory
+          historyCommits={historyCommits}
+          isExpanded={isHistoryExpanded}
+          onToggleExpand={() => setIsHistoryExpanded((v) => !v)}
+          onOpenGraph={handleOpenGraph}
+        />
       )}
 
       {ConfirmModalComponent}
@@ -842,7 +588,10 @@ export const SourceControl: React.FC = () => {
           onAddToGit={async () => {
             setFileContextMenu(null);
             try {
-              await gitPresenter.stageFile(activeRepo, fileContextMenu.file.path);
+              await gitPresenter.stageFile(
+                activeRepo,
+                fileContextMenu.file.path,
+              );
               await loadRepoData();
             } catch (err) {
               console.error(err);
@@ -858,51 +607,6 @@ export const SourceControl: React.FC = () => {
   );
 };
 
-const GitFileContextMenu: React.FC<{
-  x: number;
-  y: number;
-  file: GitFileStatus;
-  onAddToGit: () => void;
-  onAddToGitignore: () => void;
-}> = ({ x, y, onAddToGit, onAddToGitignore }) => {
-  const menuRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState({ x, y });
+// ─────────────────────────────────────────────────────────────
 
-  useEffect(() => {
-    if (menuRef.current) {
-      const rect = menuRef.current.getBoundingClientRect();
-      let adjX = x;
-      let adjY = y;
-      if (x + rect.width > window.innerWidth) adjX = window.innerWidth - rect.width - 8;
-      if (y + rect.height > window.innerHeight) adjY = window.innerHeight - rect.height - 8;
-      setPos({ x: adjX, y: adjY });
-    }
-  }, [x, y]);
-
-  const items = [
-    { icon: Plus, label: "Add to Git", action: onAddToGit },
-    { icon: EyeOff, label: "Add to .gitignore", action: onAddToGitignore },
-  ];
-
-  return createPortal(
-    <div
-      ref={menuRef}
-      data-context-menu="true"
-      style={{ left: pos.x, top: pos.y }}
-      className="fixed z-[9999] bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-lg shadow-2xl py-1 min-w-[180px] font-sans text-xs"
-      onClick={(e) => e.stopPropagation()}
-    >
-      {items.map((item, idx) => (
-        <button
-          key={idx}
-          onClick={item.action}
-          className="w-full flex items-center space-x-2.5 px-3 py-1.5 text-left text-[var(--text-normal)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)] transition-colors"
-        >
-          <item.icon size={13} className="flex-shrink-0" />
-          <span>{item.label}</span>
-        </button>
-      ))}
-    </div>,
-    document.body
-  );
-};
+export { SourceControl };

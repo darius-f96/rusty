@@ -1,6 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import {
   CopilotClient,
@@ -10,6 +9,13 @@ import {
   type ModelInfo,
   type Tool,
 } from "@github/copilot-sdk";
+import {
+  compactCopilotCliMessage,
+  copilotHome,
+  diagnosticCopilotMessage,
+  errorMessage,
+  sanitizeCopilotCliOutput,
+} from "./copilotDiagnostics";
 import type { DiscoveredProviderModel } from "./llmProviders";
 import type { TokenUsageSample } from "./usageTracking";
 
@@ -44,10 +50,6 @@ let loginAttempt: LoginAttempt | null = null;
 let loginOutputBuffer = "";
 let authDiagnostics: string[] = [];
 let lastAuthFingerprint = "";
-
-function copilotHome(): string {
-  return process.env.COPILOT_HOME || path.join(os.homedir(), ".copilot");
-}
 
 function candidateNodeModuleRoots(): string[] {
   return [
@@ -114,30 +116,8 @@ function keychainEnabledRuntimeConnection() {
   });
 }
 
-function sanitizedCliOutput(value: string): string {
-  return value
-    .replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "")
-    .replace(/(?:gh[oupsr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+)/g, "[redacted]")
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
-    .replace(/\^D/g, "");
-}
-
-function compactCliMessage(value: string): string {
-  return sanitizedCliOutput(value)
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 500);
-}
-
-function diagnosticMessage(value: string): string {
-  return compactCliMessage(value)
-    .replace(/\b[A-Z0-9]{4}-[A-Z0-9]{4}\b/gi, "[device-code]")
-    .replace(/(Signed in successfully as)\s+.+?(?:\.|$)/i, "$1 [account].")
-    .replace(copilotHome(), "$COPILOT_HOME");
-}
-
 function addAuthDiagnostic(message: string): void {
-  const entry = `${new Date().toISOString()} ${diagnosticMessage(message)}`;
+  const entry = `${new Date().toISOString()} ${diagnosticCopilotMessage(message)}`;
   authDiagnostics = [...authDiagnostics.slice(-49), entry];
   console.info(`[Copilot Auth] ${entry}`);
 }
@@ -176,7 +156,7 @@ function delay(milliseconds: number): Promise<void> {
 }
 
 export function parseCopilotLoginOutput(value: string): Pick<LoginAttempt, "verificationUri" | "userCode"> {
-  const output = sanitizedCliOutput(value);
+  const output = sanitizeCopilotCliOutput(value);
   const instruction = output.match(
     /(?:visit|open)\s+(https:\/\/[^\s]+?)\s+(?:and\s+)?(?:then\s+)?enter\s+(?:the\s+)?code\s+([A-Z0-9]{4}(?:-[A-Z0-9]{4})+)/i,
   );
@@ -220,7 +200,7 @@ async function stopClient(): Promise<void> {
       if (result.kind === "stopped" && result.errors.length) {
         addAuthDiagnostic(`SDK client stopped with ${result.errors.length} cleanup error(s).`);
       } else if (result.kind === "failed") {
-        addAuthDiagnostic(`SDK client stop failed: ${result.error instanceof Error ? result.error.message : String(result.error)}. Forcing shutdown.`);
+        addAuthDiagnostic(`SDK client stop failed: ${errorMessage(result.error, "Unknown SDK client stop error")}. Forcing shutdown.`);
         await target.forceStop().catch(() => {});
       } else if (result.kind === "timeout") {
         addAuthDiagnostic("SDK client stop exceeded three seconds; forcing shutdown.");
@@ -260,7 +240,7 @@ async function getClient(): Promise<CopilotClient> {
     return await clientPromise;
   } catch (error) {
     clientPromise = null;
-    addAuthDiagnostic(`SDK client failed to start: ${error instanceof Error ? error.message : String(error)}`);
+    addAuthDiagnostic(`SDK client failed to start: ${errorMessage(error, "Could not start GitHub Copilot SDK.")}`);
     throw error;
   }
 }
@@ -300,12 +280,13 @@ export async function getCopilotConnectionStatus(): Promise<CopilotConnectionSta
       });
     }
     return withDiagnostics(status);
-  } catch (error: any) {
-    addAuthDiagnostic(`SDK status check failed: ${error?.message || String(error)}`);
+  } catch (error) {
+    const message = errorMessage(error, "Could not query GitHub Copilot authentication.");
+    addAuthDiagnostic(`SDK status check failed: ${message}`);
     return withDiagnostics({
       state: "failed",
       authenticated: false,
-      message: error?.message || "Could not query GitHub Copilot authentication.",
+      message,
     });
   }
 }
@@ -332,13 +313,14 @@ export async function readCopilotQuota(): Promise<{
       plan: copilotUser?.copilot_plan || copilotUser?.access_type_sku,
       quotaSnapshots: quota.quotaSnapshots,
     };
-  } catch (error: any) {
-    addAuthDiagnostic(`SDK quota check failed: ${error?.message || String(error)}`);
+  } catch (error) {
+    const message = errorMessage(error, "Could not query GitHub Copilot quota.");
+    addAuthDiagnostic(`SDK quota check failed: ${message}`);
     return {
       status: {
         state: "failed",
         authenticated: false,
-        message: error?.message || "Could not query GitHub Copilot quota.",
+        message,
       },
     };
   }
@@ -363,8 +345,10 @@ async function finalizeSuccessfulLogin(): Promise<void> {
         addAuthDiagnostic("Authentication handoff completed successfully.");
         return;
       }
-    } catch (error: any) {
-      addAuthDiagnostic(`Post-login SDK verification ${attempt}/4 failed: ${error?.message || String(error)}`);
+    } catch (error) {
+      addAuthDiagnostic(
+        `Post-login SDK verification ${attempt}/4 failed: ${errorMessage(error, "Could not verify GitHub Copilot authentication.")}`,
+      );
     }
     if (attempt < 4) await stopClient();
   }
@@ -410,15 +394,15 @@ export async function startCopilotLogin(): Promise<CopilotConnectionStatus> {
   let reportedStorageFailure = false;
 
   const updateMessage = (chunk: Buffer) => {
-    const cleanChunk = sanitizedCliOutput(chunk.toString("utf8"));
+    const cleanChunk = sanitizeCopilotCliOutput(chunk.toString("utf8"));
     loginOutputBuffer = `${loginOutputBuffer}${cleanChunk}`.slice(-4_000);
-    const message = compactCliMessage(loginOutputBuffer);
+    const message = compactCopilotCliMessage(loginOutputBuffer);
     const deviceFlow = parseCopilotLoginOutput(loginOutputBuffer);
     const storageFailure = /Login succeeded, but the token was not saved/i.test(loginOutputBuffer);
     reportedSuccess ||= /Signed in successfully as/i.test(loginOutputBuffer);
     reportedStorageFailure ||= storageFailure;
 
-    const chunkDiagnostic = diagnosticMessage(cleanChunk);
+    const chunkDiagnostic = diagnosticCopilotMessage(cleanChunk);
     if (chunkDiagnostic) addAuthDiagnostic(`CLI output: ${chunkDiagnostic}`);
     if (deviceFlow.userCode && !loginAttempt?.userCode) {
       addAuthDiagnostic(`CLI emitted a device code for ${deviceFlow.verificationUri || "the GitHub verification page"}.`);
@@ -478,9 +462,10 @@ export async function logoutCopilot(): Promise<CopilotConnectionStatus> {
       await sdk.rpc.account.logout({ authInfo: currentAuth.authInfo });
       addAuthDiagnostic("Signed out of GitHub Copilot; credential removed from keychain and persisted state.");
     }
-  } catch (error: any) {
-    addAuthDiagnostic(`Sign-out failed: ${error?.message || String(error)}`);
-    throw new Error(error?.message || "Could not sign out of GitHub Copilot.");
+  } catch (error) {
+    const message = errorMessage(error, "Could not sign out of GitHub Copilot.");
+    addAuthDiagnostic(`Sign-out failed: ${message}`);
+    throw new Error(message);
   } finally {
     // The SDK client caches auth state in-process, so it must be restarted for
     // getAuthStatus() to stop reporting the now-removed credential.
