@@ -2,8 +2,8 @@
  * Execute Node Capability
  * 
  * Implements the "execute_node" operation. It gathers attached input context files,
- * builds a system prompt matching the instructions, and spawns the agent runtime
- * session using either the Pi coding agent SDK or a fallback LLM tool call wrapper.
+ * builds a system prompt matching the instructions, and runs the task through the
+ * resolved harness (Pi's native runtime, or the matching managed-runtime adapter).
  */
 
 import { WebSocket } from "ws";
@@ -12,8 +12,7 @@ import { safeSend, request, validateRpcResponse } from "../services/websocket";
 import { createListFilesTool, createSearchCodebaseTool } from "../services/tools";
 import { createMcpTools, McpServerConfig } from "../services/mcpClient";
 import { createLspTools } from "../services/lspTools";
-import { runPiAgentChat } from "../services/piAgentChat";
-import { callLlmWithToolsPiStreaming } from "../services/llmRuntime";
+import { resolveHarness } from "../services/harness";
 import { createUsageReporter } from "../services/usageBroadcast";
 import {
   acquireTaskExecutionSlot,
@@ -264,8 +263,6 @@ File writing rules:
       ? skill.systemPrompt.replace(/\$\{workspaceRoot\}/g, workspaceRoot || "unknown").replace(/\$\{instructions\}/g, instructions)
       : defaultSystemPrompt;
 
-    let runResult;
-
     (ws as any).__activeAgentTabId = nodeId;
     const piModel = model || customProvider?.models?.find((item: any) => item.supported !== false)?.id || "";
     if (!piModel) throw new Error("No model is selected. Configure one in LLM Setup.");
@@ -276,7 +273,8 @@ File writing rules:
       model: piModel,
       provider: customProvider?.id,
     });
-    const piResponse = await runPiAgentChat({
+
+    const responseText = await resolveHarness(customProvider).runAgentic({
       tabId: nodeId,
       model: piModel,
       workspaceRoot,
@@ -291,28 +289,7 @@ File writing rules:
       enableSubagents: false,
       onUsage: usageReporter,
     });
-    if (piResponse !== undefined) {
-      runResult = { status: "success", modified: Array.from(modifiedFiles), response: piResponse };
-    }
-
-    if (!runResult) {
-      sendLog("Using the provider-compatible Pi tool runtime.");
-      const responseText = await callLlmWithToolsPiStreaming({
-        modelReference: piModel,
-        customProvider,
-        systemPrompt,
-        userMessage: instructions,
-        tools,
-        sendLog,
-        sendToken: (token) => safeSend(ws, { type: "token", nodeId, content: token }),
-        maxRounds: 200,
-        cwd: workspaceRoot,
-        history: chatHistory || [],
-        shouldAbort: () => ws.readyState !== WebSocket.OPEN,
-        onUsage: usageReporter,
-      });
-      runResult = { status: "success", modified: Array.from(modifiedFiles), response: responseText };
-    }
+    const runResult = { status: "success", modified: Array.from(modifiedFiles), response: responseText };
 
     console.log(`WebSocket [Server] Task complete. Sending success payload...`);
     mcpDisposers.forEach((d) => d());

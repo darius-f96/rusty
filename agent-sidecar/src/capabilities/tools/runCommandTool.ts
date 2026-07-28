@@ -31,6 +31,7 @@ export function createRunCommandTool(options: RunCommandToolOptions) {
       },
       required: ["program"],
     },
+    
     execute: async (input: any) => {
       const command = await normalizeCommand(input, options.workspaceRoot);
       await authorizeCommand(options.ws, options.sessionId, command);

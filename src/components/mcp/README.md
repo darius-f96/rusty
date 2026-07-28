@@ -8,9 +8,19 @@ which manages the full collection and persists it to `localStorage` under
 ## Files
 
 - `types.ts` — `McpServerConfig`, `McpConfigFile`, and form helper types.
-- `McpIntegrationModal.tsx` — the configuration form (react-hook-form).
-- `McpIntegrationModal.module.css` — scoped styles.
-- `McpIntegrationTab.tsx` — host that lists servers and opens the modal.
+- `constants.ts` — Form-level constants (transport options, auth options,
+  grant options, default form values, probe timeout cap).
+- `form-utils.ts` — Pure data transformation functions (`isValidUrl`,
+  `toFormValues`, `toServerConfig`, `handleFormSubmit`).
+- `connection-test.ts` — Connection-test types, probe functions, the
+  `runConnectionTest` orchestrator, and the `useConnectionTest` hook.
+- `form-sections.tsx` — Six extracted sub-components (`IdentitySection`,
+  `TransportSection`, `AuthSection`, `EnvironmentSection`, `AdvancedSection`,
+  `TestConnectionSection`). Each reads form state via `useFormContext`.
+- `McpIntegrationModal.tsx` — The main component; a thin orchestrator that
+  sets up the form, wires the hook, and composes the sections.
+- `McpIntegrationModal.module.css` — Scoped styles.
+- `McpIntegrationTab.tsx` — Host that lists servers and opens the modal.
 
 ## Component interface
 

@@ -3,7 +3,7 @@
  * 
  * Implements the "global_explore" operation. It scans the repository files using
  * recursive explorers, runs search queries, and makes multi-round tool-calling
- * calls to the LLM to yield architectural codebase summaries.
+ * calls to the resolved harness to yield architectural codebase summaries.
  */
 
 import { WebSocket } from "ws";
@@ -11,7 +11,7 @@ import path from "path";
 import fs from "fs";
 import { safeSend, request, validateRpcResponse } from "../services/websocket";
 import { createListFilesTool, createSearchCodebaseTool, listFilesRecursive } from "../services/tools";
-import { callLlmWithToolsPiStreaming } from "../services/llmRuntime";
+import { resolveHarness } from "../services/harness";
 import { createMcpTools, McpServerConfig } from "../services/mcpClient";
 import { createUsageReporter } from "../services/usageBroadcast";
 
@@ -150,7 +150,7 @@ IMPORTANT: End your response with a section marked "--- SUMMARY ---" that contai
         safeSend(ws, { type: "token", content: token });
       };
 
-      const responseText = await callLlmWithToolsPiStreaming({
+      const responseText = await resolveHarness(customProvider).runToolLoop({
         modelReference,
         customProvider,
         systemPrompt,

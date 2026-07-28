@@ -1,6 +1,7 @@
 import { WebSocket } from "ws";
 import { safeSend } from "../services/websocket";
-import { completeLlmText, EmptyLlmResponseError } from "../services/llmRuntime";
+import { EmptyLlmResponseError } from "../services/llmRuntime";
+import { resolveHarness } from "../services/harness";
 import {
   buildTaskGenerationQuery,
   TASK_GENERATION_SYSTEM_PROMPT,
@@ -40,6 +41,7 @@ export async function generateTaskNodes(ws: WebSocket, data: any): Promise<void>
       ? data.additionalInstructions.trim().slice(0, 8000)
       : "";
     const userMessage = buildTaskGenerationQuery(history, additionalInstructions);
+    const harness = resolveHarness(customProvider);
 
     let previousFailure: "empty" | "invalid" | null = null;
     for (let attempt = 1; attempt <= 2; attempt++) {
@@ -47,7 +49,7 @@ export async function generateTaskNodes(ws: WebSocket, data: any): Promise<void>
         const retryInstruction = previousFailure === "empty"
           ? "Your previous response contained no visible text. This is the final retry. Use minimal reasoning and return the required JSON object immediately."
           : "Your previous response could not be parsed as the required task JSON. This is the final retry. Return exactly one JSON object that follows the schema, with no surrounding text.";
-        const content = await completeLlmText({
+        const content = await harness.completeText({
           modelReference,
           customProvider,
           systemPrompt: attempt === 1

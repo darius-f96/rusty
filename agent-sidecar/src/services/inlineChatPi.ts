@@ -1,3 +1,6 @@
+import { resolveHarness } from "./harness";
+import { TokenUsageSample } from "./usageTracking";
+
 export interface InlineChatContext {
   filePath: string;
   language: string;
@@ -24,8 +27,10 @@ interface InlineChatPiOptions {
 }
 
 /**
- * Pi Harness adapter for editor inline chat. Protocol concerns remain in the
- * capability and editor/UI concerns remain in the frontend.
+ * Editor inline chat, routed through the single harness contract
+ * (services/harness/) like every other model call in the sidecar. Protocol
+ * concerns remain in the capability and editor/UI concerns remain in the
+ * frontend; this function only builds the inline-chat-specific prompt.
  */
 export async function runInlineChatWithModel(options: InlineChatPiOptions): Promise<string> {
   const selected = options.context.selection;
@@ -45,7 +50,7 @@ ${options.context.fileContent.slice(0, 120_000)}
 
 Answer only the user's focused question about this editor context. Prefer a short explanation followed by a small code example when useful. Do not use tools, delegate work, inspect unrelated files, or claim that files were changed. If the user asks for a change, provide the exact replacement code for the selected region (or the smallest relevant snippet when there is no selection).`;
 
-  const content = await completeLlmText({
+  const content = await resolveHarness(options.customProvider).completeText({
     modelReference: options.model,
     customProvider: options.customProvider,
     systemPrompt,
@@ -58,5 +63,3 @@ Answer only the user's focused question about this editor context. Prefer a shor
   options.sendToken(content);
   return content;
 }
-import { completeLlmText } from "./llmRuntime";
-import { TokenUsageSample } from "./usageTracking";

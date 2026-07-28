@@ -2,12 +2,12 @@
  * Generate Skill Capability
  *
  * Generates a skill specification (systemPrompt, enabledTools, description)
- * based on a natural language description using an LLM.
+ * based on a natural language description using the resolved harness.
  */
 
 import { WebSocket } from "ws";
 import { safeSend } from "../services/websocket";
-import { completeLlmText } from "../services/llmRuntime";
+import { resolveHarness } from "../services/harness";
 import { createUsageReporter } from "../services/usageBroadcast";
 
 const AVAILABLE_TOOLS = ["read_file", "write_file", "list_files", "search_codebase", "web_search", "run_command"];
@@ -48,7 +48,7 @@ For a coding/building skill, enable all tools.
 For a read-only analysis/planning skill, only enable: read_file, list_files, search_codebase
 For a question-heavy skill (like 'grind-me'), enable all tools but emphasize asking questions in the systemPrompt.`;
 
-    const content = await completeLlmText({
+    const content = await resolveHarness(customProvider).completeText({
       modelReference,
       customProvider,
       systemPrompt: metaPrompt,

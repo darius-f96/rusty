@@ -10,11 +10,11 @@ import { WebSocket } from "ws";
 import path from "path";
 import { safeSend, getNextId, request, validateRpcResponse } from "../services/websocket";
 import { createListFilesTool, createSearchCodebaseTool } from "../services/tools";
-import { callLlmWithToolsPiStreaming } from "../services/llmRuntime";
+import { resolveHarness } from "../services/harness";
 import { createLspTools } from "../services/lspTools";
 import { createMcpTools, McpServerConfig } from "../services/mcpClient";
 import { createWebSearchTool } from "../services/webSearchTool";
-import { DeferredUserQuestion, SubagentUpdate, hasActiveBackgroundSubagents, runPiAgentChat } from "../services/piAgentChat";
+import { DeferredUserQuestion, SubagentUpdate, hasActiveBackgroundSubagents } from "../services/piAgentChat";
 import { createRunCommandTool } from "./tools/runCommandTool";
 import { FileEventPersistence, RunEventRecorder } from "../services/eventPersistence";
 import { DelegatedTask, DelegationManager } from "../services/delegationManager";
@@ -324,12 +324,12 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
     tools.push(progressTool);
     tools.push(askUserQuestionTool);
 
-    const providerUsesManagedRuntime = customProvider?.transport === "github-copilot-sdk"
-      || customProvider?.id === "github-copilot"
-      || customProvider?.transport === "openai-codex-app-server"
-      || customProvider?.id === "openai-codex"
-      || customProvider?.transport === "anthropic-claude-agent-sdk"
-      || customProvider?.id === "anthropic-claude-code";
+    const harness = resolveHarness(customProvider);
+    // Native Pi delegation ('Agent' tool) is unavailable for managed-runtime
+    // providers (Copilot/Codex/Claude), so those get the harness-owned
+    // delegate_task tool instead. This mirrors the resolved harness identity
+    // rather than re-deriving the same transport/id check locally.
+    const providerUsesManagedRuntime = harness.id !== "pi";
     const modelReference = model || customProvider?.models?.find((item: any) => item.supported !== false)?.id || "";
     if (!modelReference) throw new Error("No model is selected. Configure a provider and model in LLM Setup.");
     const usageReporter = createUsageReporter(ws, {
@@ -402,7 +402,7 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
                   return tool.execute(toolArgs);
                 },
               });
-              const findings = await callLlmWithToolsPiStreaming({
+              const findings = await harness.runToolLoop({
                 modelReference,
                 customProvider,
                 onUsage: (sample) => {
@@ -547,7 +547,7 @@ Questions:
       safeSend(ws, { type: "token", tabId, runId, conversationId, content: token });
     };
 
-    const piResponse = await runPiAgentChat({
+    const responseText = await harness.runAgentic({
       tabId,
       model: modelReference,
       workspaceRoot,
@@ -566,21 +566,6 @@ Questions:
         return question;
       },
       requestUserQuestion,
-      onUsage: usageReporter,
-    });
-
-    const responseText = piResponse ?? await callLlmWithToolsPiStreaming({
-      modelReference,
-      customProvider,
-      systemPrompt,
-      userMessage: message,
-      tools,
-      sendLog,
-      sendToken,
-      maxRounds: 30,
-      cwd: workspaceRoot,
-      history: chatHistory || [],
-      shouldAbort: () => ws.readyState !== WebSocket.OPEN,
       onUsage: usageReporter,
     });
 

@@ -385,14 +385,22 @@ class CodexAppServerClient {
   private handleExit(error: Error): void {
     if (!this.process) return;
     this.process = null;
+    this.rejectPendingRequests(error);
+    this.failActiveRuns(error);
+    addAuthDiagnostic(error.message);
+  }
+
+  private rejectPendingRequests(error: Error): void {
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer);
       pending.reject(error);
     }
     this.pending.clear();
+  }
+
+  private failActiveRuns(error: Error): void {
     for (const run of this.activeRuns.values()) failRun(run, error);
     this.activeRuns.clear();
-    addAuthDiagnostic(error.message);
   }
 
   async stop(): Promise<void> {
@@ -400,13 +408,8 @@ class CodexAppServerClient {
     this.process = null;
     if (!child) return;
     const error = new Error("Codex app-server stopped.");
-    for (const pending of this.pending.values()) {
-      clearTimeout(pending.timer);
-      pending.reject(error);
-    }
-    this.pending.clear();
-    for (const run of this.activeRuns.values()) failRun(run, error);
-    this.activeRuns.clear();
+    this.rejectPendingRequests(error);
+    this.failActiveRuns(error);
     child.kill();
   }
 }
@@ -552,97 +555,83 @@ export async function startCodexLogin(): Promise<CodexConnectionStatus> {
   }
 
   authDiagnostics = [];
-  loginAttempt = { state: "connecting", message: "Preparing OpenAI device authorization…" };
-  addAuthDiagnostic(`Login requested; reusing CODEX_HOME=${codexHome()} for shared Codex credentials.`);
-  try {
-    const result = await appServer.request("account/login/start", { type: "chatgptDeviceCode" }, 30_000);
-    if (result?.type !== "chatgptDeviceCode" || !result.userCode || !result.verificationUrl) {
-      throw new Error("Codex did not return an OpenAI device code.");
-    }
-    loginAttempt = {
-      state: "connecting",
-      loginId: result.loginId,
-      message: "Enter this device code on the OpenAI authorization page.",
-      verificationUri: result.verificationUrl,
-      userCode: result.userCode,
-    };
-    addAuthDiagnostic(`Device code issued for ${result.verificationUrl}.`);
-    return withDiagnostics({
-      state: "connecting",
-      authenticated: false,
-      message: loginAttempt.message,
-      verificationUri: loginAttempt.verificationUri,
-      userCode: loginAttempt.userCode,
-    });
-  } catch (error: any) {
-    loginAttempt = { state: "failed", message: error?.message || "Could not start OpenAI authorization." };
-    addAuthDiagnostic(`Login failed to start: ${loginAttempt.message}`);
-    throw error;
-  }
+  const result = await appServer.request(
+    "account/login/start",
+    { type: "chatgptDeviceCode" },
+    30_000,
+  );
+  loginAttempt = {
+    state: "connecting",
+    loginId: result?.loginId,
+    message: "Complete OpenAI authorization using the provided device code.",
+    verificationUri: result?.verificationUri,
+    userCode: result?.userCode,
+  };
+  addAuthDiagnostic("Started OpenAI device authorization.");
+  return withDiagnostics({
+    state: "connecting",
+    authenticated: false,
+    message: loginAttempt.message,
+    verificationUri: loginAttempt.verificationUri,
+    userCode: loginAttempt.userCode,
+  });
 }
 
 export async function logoutCodex(): Promise<CodexConnectionStatus> {
-  loginAttempt = null;
   try {
     await appServer.request("account/logout", {}, 20_000);
-    addAuthDiagnostic("Signed out of OpenAI Codex; credential removed from CODEX_HOME.");
   } catch (error: any) {
-    addAuthDiagnostic(`Sign-out failed: ${error?.message || String(error)}`);
+    addAuthDiagnostic(`Logout failed: ${error?.message || String(error)}`);
     throw new Error(error?.message || "Could not sign out of OpenAI Codex.");
   } finally {
-    // account/read caches auth on the app-server side, so restart the process
-    // to force a clean read of the now-empty CODEX_HOME auth file.
-    await appServer.stop();
+    loginAttempt = null;
   }
-  return withDiagnostics({ state: "disconnected", authenticated: false, message: "Signed out of OpenAI Codex." });
+  return withDiagnostics({
+    state: "disconnected",
+    authenticated: false,
+    message: "Signed out of OpenAI Codex.",
+  });
 }
 
 export function normalizeCodexModel(model: any): DiscoveredProviderModel {
-  const remoteId = String(model?.model || model?.id || "").trim();
-  if (!remoteId) throw new Error("Codex returned a model without an ID.");
-  const input = Array.isArray(model.inputModalities)
-    ? model.inputModalities.filter((item: string) => item === "text" || item === "image")
-    : ["text"];
-  const supportedReasoningEfforts = Array.isArray(model.supportedReasoningEfforts)
-    ? model.supportedReasoningEfforts
-      .map((item: any) => item?.reasoningEffort)
-      .filter((effort: string) => effort === "minimal" || effort === "low" || effort === "medium" || effort === "high" || effort === "xhigh")
-    : [];
-  const defaultReasoningEffort = supportedReasoningEfforts.includes(model.defaultReasoningEffort)
-    ? model.defaultReasoningEffort
-    : undefined;
+  const remoteId = model.id || model.model;
+  const reasoningEfforts = (model.supportedReasoningEfforts || [])
+    .map((effort: any) => typeof effort === "string" ? effort : effort.reasoningEffort)
+    .filter(Boolean);
+  const capabilities = ["reasoning"];
+  if ((model.inputModalities || []).includes("image")) capabilities.push("vision");
+
   return {
     id: `${OPENAI_CODEX_PROVIDER_ID}/${remoteId}`,
     remoteId,
-    name: String(model.displayName || model.description || remoteId),
+    name: model.displayName || remoteId,
     apiType: "codex-app-server",
-    supported: model.hidden !== true,
-    capabilities: ["reasoning", ...(input.includes("image") ? ["vision"] : [])],
+    supported: !model.hidden,
+    input: model.inputModalities,
+    capabilities,
     reasoning: true,
-    supportedReasoningEfforts,
-    defaultReasoningEffort,
-    input: input.length ? input : ["text"],
-    contextWindow: 200_000,
-    maxTokens: 32_000,
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    supportedReasoningEfforts: reasoningEfforts,
+    defaultReasoningEffort: model.defaultReasoningEffort,
     compat: {
       isDefault: Boolean(model.isDefault),
       defaultReasoningEffort: model.defaultReasoningEffort,
-      supportedReasoningEfforts,
+      supportedReasoningEfforts: reasoningEfforts,
     },
   };
 }
 
 export async function discoverCodexModels(): Promise<DiscoveredProviderModel[]> {
-  const status = await getCodexConnectionStatus();
-  if (!status.authenticated) throw new Error(status.message || "OpenAI Codex sign-in is required.");
   const models: DiscoveredProviderModel[] = [];
-  let cursor: string | null = null;
+  let cursor: string | undefined;
   do {
-    const result = await appServer.request("model/list", { cursor, limit: 100, includeHidden: false }, 30_000);
+    const result = await appServer.request(
+      "model/list",
+      { cursor, limit: 100, includeHidden: false },
+      30_000,
+    );
     for (const model of result?.data || []) models.push(normalizeCodexModel(model));
-    cursor = result?.nextCursor || null;
-  } while (cursor && models.length < 500);
+    cursor = result?.nextCursor || result?.next_cursor;
+  } while (cursor);
   return models;
 }
 
@@ -650,51 +639,33 @@ export async function testCodexConnection(): Promise<{ modelCount: number; suppo
   const models = await discoverCodexModels();
   return {
     modelCount: models.length,
-    supportedModelCount: models.filter((model) => model.supported !== false).length,
+    supportedModelCount: models.filter((model) => model.supported).length,
   };
-}
-
-function safeToolName(name: string, index: number, used: Set<string>): string {
-  const base = name.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 56) || `tool_${index + 1}`;
-  let candidate = base;
-  let suffix = 2;
-  while (used.has(candidate)) candidate = `${base.slice(0, 52)}_${suffix++}`;
-  used.add(candidate);
-  return candidate;
 }
 
 export function codexDynamicTools(tools: CodexTool[]): { specs: any[]; byName: Map<string, CodexTool> } {
-  if (!tools.length) return { specs: [], byName: new Map() };
-  const used = new Set<string>();
   const byName = new Map<string, CodexTool>();
-  const namespaceTools = tools.map((tool, index) => {
-    const name = safeToolName(tool.name, index, used);
+  const toolDefinitions = tools.map((tool) => {
+    const baseName = tool.name.replace(/[^A-Za-z0-9_]/g, "_");
+    let name = baseName || "tool";
+    let suffix = 2;
+    while (byName.has(name)) name = `${baseName || "tool"}_${suffix++}`;
     byName.set(name, tool);
     return {
-      type: "function",
       name,
-      description: tool.description || `Run the Axiom ${tool.name} tool.`,
-      inputSchema: tool.inputSchema || { type: "object", properties: {}, required: [] },
-      deferLoading: false,
+      description: tool.description,
+      inputSchema: tool.inputSchema || { type: "object", properties: {} },
     };
   });
   return {
-    specs: [{ type: "namespace", name: "axiom", description: "Tools provided by the Axiom workspace runtime.", tools: namespaceTools }],
+    specs: toolDefinitions.length ? [{
+      type: "namespace",
+      name: "axiom",
+      description: "Axiom tools",
+      tools: toolDefinitions,
+    }] : [],
     byName,
   };
-}
-
-function conversationText(userMessage: string, history?: Array<{ role: string; content: string }>): string {
-  const previous = (history || [])
-    .filter((entry) => entry?.role === "user" || entry?.role === "assistant")
-    .slice(-12)
-    .map((entry) => `${entry.role.toUpperCase()}: ${entry.content}`)
-    .join("\n\n");
-  return previous ? `Previous conversation:\n${previous}\n\nCurrent request:\n${userMessage}` : userMessage;
-}
-
-function usableCwd(cwd?: string): string {
-  return cwd && path.isAbsolute(cwd) && fs.existsSync(cwd) ? cwd : process.cwd();
 }
 
 async function runCodexTurn(options: {
@@ -705,136 +676,87 @@ async function runCodexTurn(options: {
   tools?: CodexTool[];
   sendLog?: (message: string) => void;
   sendToken?: (token: string) => void;
-  reasoning?: "minimal" | "low" | "medium" | "high" | "xhigh";
-  cwd?: string;
   maxToolCalls?: number;
+  maxRounds?: number;
+  reasoning?: string;
+  cwd?: string;
   shouldAbort?: () => boolean;
   signal?: AbortSignal;
   onUsage?: (sample: TokenUsageSample) => void;
 }): Promise<string> {
-  const status = await getCodexConnectionStatus();
-  if (!status.authenticated) throw new Error(status.message || "OpenAI Codex sign-in is required.");
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  options.signal?.addEventListener("abort", abort, { once: true });
+  const toolSet = codexDynamicTools(options.tools || []);
+  const prompt = (options.history || [])
+    .slice(-12)
+    .map((item) => `${item.role.toUpperCase()}: ${item.content}`)
+    .concat([`USER: ${options.userMessage}`])
+    .join("\n\n");
+  const threadResult = await appServer.request("thread/start", { cwd: options.cwd }, 30_000);
+  const threadId = threadResult?.thread?.id || threadResult?.id;
+  if (!threadId) throw new Error("OpenAI Codex did not return a thread id.");
 
-  // Each turn gets its own app-server process rather than sharing the module
-  // singleton. Concurrent turns (e.g. several delegated subagents) used to
-  // multiplex through one process/pipe, contending with each other and making
-  // them disproportionately likely to still be running when a delegation
-  // timeout fired. This mirrors how Claude Code subagent calls already spawn
-  // an isolated process per call.
-  const client = new CodexAppServerClient();
-
-  const tools = codexDynamicTools(options.tools || []);
-  const toolGuidance = tools.specs.length
-    ? "\n\nAxiom owns workspace state and permissions. Use only tools in the axiom namespace for workspace operations. Do not use Codex shell or file-editing tools."
-    : "\n\nReturn the requested answer directly. Do not inspect or change files and do not use tools.";
-  const threadResult = await client.request("thread/start", {
-    model: options.modelId,
-    cwd: usableCwd(options.cwd),
-    approvalPolicy: "never",
-    sandbox: "read-only",
-    ephemeral: true,
-    serviceName: "axiom",
-    baseInstructions: `${options.systemPrompt}${toolGuidance}`,
-    dynamicTools: tools.specs,
-  }, 60_000);
-  const threadId = threadResult?.thread?.id;
-  if (!threadId) throw new Error("Codex did not return a thread ID.");
-
-  const sendLog = options.sendLog || (() => {});
-  const sendToken = options.sendToken || (() => {});
-  let resolveRun!: (text: string) => void;
-  let rejectRun!: (error: Error) => void;
-  const completion = new Promise<string>((resolve, reject) => {
-    resolveRun = resolve;
-    rejectRun = reject;
-  });
-  void completion.catch(() => {});
-  const run: CodexRun = {
-    threadId,
-    text: "",
-    commentaryText: "",
-    messagePhases: new Map(),
-    tools: tools.byName,
-    toolCalls: 0,
-    maxToolCalls: options.maxToolCalls || 120,
-    sendLog,
-    sendToken,
-    onUsage: options.onUsage,
-    resolve: resolveRun,
-    reject: rejectRun,
-    settled: false,
-  };
-  client.activeRuns.set(threadId, run);
-
-  let abortRequested = false;
-  let interruptSent = false;
-  const interrupt = () => {
-    abortRequested = true;
-    if (interruptSent || run.settled || !run.turnId) return;
-    interruptSent = true;
-    void client.request("turn/interrupt", { threadId, turnId: run.turnId }, 10_000).catch(() => {});
-  };
-  const abortHandler = () => interrupt();
-  options.signal?.addEventListener("abort", abortHandler, { once: true });
-  const abortTimer = options.shouldAbort
-    ? setInterval(() => { if (options.shouldAbort?.()) interrupt(); }, 150)
-    : undefined;
-  abortTimer?.unref?.();
-
-  try {
-    sendLog(`Calling OpenAI Codex model ${options.modelId}.`);
-    const turnResult = await client.request("turn/start", {
+  return new Promise<string>((resolve, reject) => {
+    const run: CodexRun = {
       threadId,
-      input: [{ type: "text", text: conversationText(options.userMessage, options.history) }],
+      text: "",
+      commentaryText: "",
+      messagePhases: new Map(),
+      tools: toolSet.byName,
+      toolCalls: 0,
+      maxToolCalls: options.maxToolCalls ?? options.maxRounds ?? 20,
+      sendLog: options.sendLog || (() => {}),
+      sendToken: options.sendToken || (() => {}),
+      onUsage: options.onUsage,
+      resolve,
+      reject,
+      settled: false,
+    };
+    appServer.activeRuns.set(threadId, run);
+
+    void appServer.request("turn/start", {
+      threadId,
+      input: [{ type: "text", text: prompt }],
       model: options.modelId,
-      effort: options.reasoning === "minimal" ? "low" : options.reasoning,
-      approvalPolicy: "never",
-      sandboxPolicy: { type: "readOnly", networkAccess: false },
-    }, 60_000);
-    run.turnId = turnResult?.turn?.id;
-    if (!run.turnId) throw new Error("Codex did not return a turn ID.");
-    if (abortRequested || options.signal?.aborted || options.shouldAbort?.()) interrupt();
-    return await completion;
-  } finally {
-    if (abortTimer) clearInterval(abortTimer);
-    options.signal?.removeEventListener("abort", abortHandler);
-    client.activeRuns.delete(threadId);
-    // The whole process is dedicated to this turn, so stop it outright
-    // rather than unsubscribing from the thread on a shared process.
-    void client.stop();
-  }
+      systemPrompt: options.systemPrompt,
+      cwd: options.cwd,
+      effort: options.reasoning,
+      dynamicTools: toolSet.specs,
+    }, 30_000).catch((error) => failRun(run, error));
+
+    const timer = options.shouldAbort
+      ? setInterval(() => {
+          if (options.shouldAbort?.()) controller.abort();
+        }, 150)
+      : undefined;
+
+    const cleanup = () => {
+      if (timer) clearInterval(timer);
+      options.signal?.removeEventListener("abort", abort);
+      appServer.activeRuns.delete(threadId);
+    };
+    const originalResolve = run.resolve;
+    const originalReject = run.reject;
+    run.resolve = (text) => {
+      cleanup();
+      originalResolve(text);
+    };
+    run.reject = (error) => {
+      cleanup();
+      originalReject(error);
+    };
+  });
 }
 
-export async function completeCodexText(options: {
-  modelId: string;
-  systemPrompt: string;
-  userMessage: string;
-  history?: Array<{ role: string; content: string }>;
-  reasoning?: "minimal" | "low" | "medium" | "high" | "xhigh";
-  cwd?: string;
-  signal?: AbortSignal;
-  onUsage?: (sample: TokenUsageSample) => void;
-}): Promise<string> {
+export async function completeCodexText(options: Parameters<typeof runCodexTurn>[0]): Promise<string> {
   return runCodexTurn(options);
 }
 
-export async function callCodexWithToolsStreaming(options: {
-  modelId: string;
-  systemPrompt: string;
-  userMessage: string;
-  history?: Array<{ role: string; content: string }>;
-  tools: CodexTool[];
-  sendLog: (message: string) => void;
-  sendToken: (token: string) => void;
-  cwd?: string;
-  maxRounds?: number;
-  reasoning?: "minimal" | "low" | "medium" | "high" | "xhigh";
-  shouldAbort?: () => boolean;
-  onUsage?: (sample: TokenUsageSample) => void;
-}): Promise<string> {
+export async function callCodexWithToolsStreaming(options: Parameters<typeof runCodexTurn>[0]): Promise<string> {
   return runCodexTurn({
     ...options,
-    maxToolCalls: Math.max(1, options.maxRounds || 30) * 4,
+    maxToolCalls: options.maxToolCalls ?? options.maxRounds,
   });
 }
 
