@@ -78,7 +78,7 @@ export const AxiomTabToolbar: React.FC<AxiomTabToolbarProps> = ({
   // Close all dropdowns when a click occurs outside the toolbar
   useEffect(() => {
     const handleGlobalClick = (e: MouseEvent) => {
-      if (toolbarRef.current && !toolbarRef.current.contains(e.target as Node)) {
+      if (toolbarRef.current && e.target instanceof Node && !toolbarRef.current.contains(e.target)) {
         setBoundaryMenuOpen(false);
         setNodeMenuOpen(false);
         setActionMenuOpen(false);

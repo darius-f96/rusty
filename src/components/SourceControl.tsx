@@ -554,7 +554,6 @@ const SourceControl: React.FC = () => {
         <SourceControlChangeList
           gitStatus={gitStatus}
           activeRepo={activeRepo}
-          unstagedList={unstagedList}
           modifiedList={modifiedList}
           untrackedList={untrackedList}
           totalChanges={totalChanges}

@@ -30,7 +30,7 @@ import { GlobalChatNode } from "../../nodes/globalChat/GlobalChatNode";
 import { McpNode } from "../../nodes/McpNode";
 import { StickyNode } from "../../nodes/sticky";
 import { BoundaryNode } from "../../nodes/boundary";
-import { VfsRegistry, VFS_CHANGED_EVENT, type VfsChangedDetail } from "../../../services/vfs";
+import { VFS_CHANGED_EVENT, type VfsChangedDetail } from "../../../services/vfs";
 import { CanvasTabContext } from "./CanvasTabContext";
 import { canvasFileService } from "./services/canvasFileService";
 import { getNodeConfig } from "../../nodes/AxiomNodeConfig";

@@ -24,7 +24,7 @@ export interface SidePaneFooterProps {
   /** Custom providers from the store. */
   customProviders: any[];
   /** ID of the active custom provider. */
-  activeCustomProviderId: string;
+  activeCustomProviderId: string | null;
   /** Called when the user clicks the execute button. */
   onExecute: () => void;
   /** Called when the user clicks the stop button. */

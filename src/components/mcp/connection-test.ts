@@ -71,7 +71,7 @@ export async function probeStdioCommand(command: string): Promise<ProbeResult> {
  * Validates a WebSocket URL format. Live handshake is not possible
  * from the browser environment.
  */
-export function probeWebSocketUrl(url: string): ProbeResult {
+export function probeWebSocketUrl(_url: string): ProbeResult {
   return {
     status: "success",
     message:

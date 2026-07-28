@@ -21,7 +21,7 @@ export interface SidePaneState {
   /** Registered custom provider configurations. */
   customProviders: any[];
   /** ID of the active custom provider. */
-  activeCustomProviderId: string;
+  activeCustomProviderId: string | null;
   /** List of file paths modified by the selected node. */
   modifiedFiles: string[];
   /** Map of original file contents (path → content). */
