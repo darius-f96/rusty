@@ -259,9 +259,13 @@ File writing rules:
 - Once all required files are written, stop immediately and summarize what changed.
 `;
 
-    const systemPrompt = skill?.systemPrompt
-      ? skill.systemPrompt.replace(/\$\{workspaceRoot\}/g, workspaceRoot || "unknown").replace(/\$\{instructions\}/g, instructions)
-      : defaultSystemPrompt;
+    const skillGuidance = skill?.systemPrompt
+      ? `\n\nActive skill guidance (adds to, does not replace, the boundaries above):\n${skill.systemPrompt
+          .replace(/\$\{workspaceRoot\}/g, workspaceRoot || "unknown")
+          .replace(/\$\{instructions\}/g, instructions)}`
+      : "";
+
+    const systemPrompt = `${defaultSystemPrompt}${skillGuidance}`;
 
     (ws as any).__activeAgentTabId = nodeId;
     const piModel = model || customProvider?.models?.find((item: any) => item.supported !== false)?.id || "";

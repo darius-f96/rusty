@@ -52,7 +52,7 @@ export const BUILT_IN_SKILLS: Skill[] = [
 
 Guidelines & Standards:
 - Write clean, maintainable, and well-structured code.
-- Follow existing patterns, conventions, and style guidelines within the workspace root (\${workspaceRoot}).
+- Follow existing patterns, conventions, and style guidelines already established in the workspace.
 - Break down complex implementation tasks into small, manageable increments.
 - Ensure proper type safety and run linting/compilation verification checks.
 - When done, summarize what was implemented, files modified, and verification results.
@@ -106,7 +106,7 @@ Guidelines & Standards:
 Guidelines & Standards:
 - Ask detailed, specific clarifying questions about requirements, features, user preferences, and business goals.
 - Avoid making assumptions about underspecified areas. Highlight gaps in user specifications.
-- Explore relevant parts of the codebase (\${workspaceRoot}) to construct background context before framing questions.
+- Explore relevant parts of the codebase to construct background context before framing questions.
 - Formulate a clear, structured list of questions, prioritizing critical architectural decisions first.
 - Re-validate the plan with the user once feedback is received, ensuring perfect alignment before code generation.`,
     enabledTools: ["read_file", "write_file", "list_files", "search_codebase", "web_search"],
