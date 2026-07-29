@@ -517,17 +517,20 @@ async fn create_directory(path: String) -> Result<(), String> {
 
 #[tauri::command]
 async fn save_chat_history(
-    rootDir: String,
-    chatId: String,
+    root_dir: String,
+    chat_id: String,
     content: String,
 ) -> Result<String, String> {
-    println!("Rust [save_chat_history] saving chat {} to {}", chatId, rootDir);
-    let chats_dir = PathBuf::from(&rootDir).join(".rusty").join("chats");
+    println!(
+        "Rust [save_chat_history] saving chat {} to {}",
+        chat_id, root_dir
+    );
+    let chats_dir = PathBuf::from(&root_dir).join(".rusty").join("chats");
     std::fs::create_dir_all(&chats_dir).map_err(|e| e.to_string())?;
 
-    // One file per chat, identified by chatId. Overwrites so all requests/replies
+    // One file per chat, identified by chat_id. Overwrites so all requests/replies
     // in a conversation accumulate in the same file.
-    let file_name = format!("{}.json", chatId);
+    let file_name = format!("{}.json", chat_id);
     let file_path = chats_dir.join(&file_name);
 
     std::fs::write(&file_path, &content).map_err(|e| e.to_string())?;
