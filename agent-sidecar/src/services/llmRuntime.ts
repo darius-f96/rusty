@@ -249,7 +249,7 @@ export async function callLlmWithToolsPiStreaming(options: {
     description: tool.description,
     parameters: tool.inputSchema || { type: "object", properties: {}, required: [] },
   }));
-  const maxRounds = options.maxRounds || 30;
+  const maxRounds = options.maxRounds || Infinity;
   const shouldAbort = options.shouldAbort || (() => false);
 
   options.sendLog(`Calling ${runtime.providerId}/${runtime.modelId}.`);

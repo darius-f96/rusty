@@ -705,7 +705,7 @@ async function runCodexTurn(options: {
       messagePhases: new Map(),
       tools: toolSet.byName,
       toolCalls: 0,
-      maxToolCalls: options.maxToolCalls ?? options.maxRounds ?? 20,
+      maxToolCalls: options.maxToolCalls ?? options.maxRounds ?? Infinity,
       sendLog: options.sendLog || (() => {}),
       sendToken: options.sendToken || (() => {}),
       onUsage: options.onUsage,
