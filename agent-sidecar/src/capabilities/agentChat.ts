@@ -520,7 +520,11 @@ TaskNode VFS policy (this overrides any conflicting skill instruction):
       ? AGENT_TAB_HARNESS_POLICY
       : "";
 
-    const systemPrompt = `${skill?.systemPrompt || defaultSystemPrompt}${planningPolicy}${taskNodePolicy}${agentTabHarnessPolicy}
+    const skillGuidance = skill?.systemPrompt
+      ? `\n\nActive skill guidance (adds to, does not replace, the defaults above):\n${skill.systemPrompt}`
+      : "";
+
+    const systemPrompt = `${defaultSystemPrompt}${skillGuidance}${planningPolicy}${taskNodePolicy}${agentTabHarnessPolicy}
 
 User-visible reasoning updates:
 - Before the first substantive action, call 'report_progress' with a concise summary of your approach and the next action.
