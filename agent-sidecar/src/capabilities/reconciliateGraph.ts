@@ -1,6 +1,6 @@
 import path from "path";
 import { WebSocket } from "ws";
-import { callLlmWithToolsPiStreaming } from "../services/llmRuntime";
+import { resolveHarness } from "../services/harness";
 import { request, safeSend, validateRpcResponse } from "../services/websocket";
 import { createUsageReporter } from "../services/usageBroadcast";
 
@@ -403,7 +403,7 @@ ${recentReconciliationChat.length > 0 ? `Recent reconciliation conversation (bou
 ${JSON.stringify(compactFileContext(fileContext), null, 2)}`;
 
         try {
-          const fileReport = await callLlmWithToolsPiStreaming({
+          const fileReport = await resolveHarness(customProvider).runToolLoop({
             modelReference,
             customProvider,
             systemPrompt,
