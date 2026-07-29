@@ -652,6 +652,7 @@ export function codexDynamicTools(tools: CodexTool[]): { specs: any[]; byName: M
     while (byName.has(name)) name = `${baseName || "tool"}_${suffix++}`;
     byName.set(name, tool);
     return {
+      type: "function",
       name,
       description: tool.description,
       inputSchema: tool.inputSchema || { type: "object", properties: {} },
@@ -693,7 +694,12 @@ async function runCodexTurn(options: {
     .map((item) => `${item.role.toUpperCase()}: ${item.content}`)
     .concat([`USER: ${options.userMessage}`])
     .join("\n\n");
-  const threadResult = await appServer.request("thread/start", { cwd: options.cwd }, 30_000);
+  const threadResult = await appServer.request("thread/start", {
+    cwd: options.cwd,
+    developerInstructions: options.systemPrompt,
+    sandbox: "workspace-write",
+    dynamicTools: toolSet.specs,
+  }, 30_000);
   const threadId = threadResult?.thread?.id || threadResult?.id;
   if (!threadId) throw new Error("OpenAI Codex did not return a thread id.");
 
@@ -719,10 +725,8 @@ async function runCodexTurn(options: {
       threadId,
       input: [{ type: "text", text: prompt }],
       model: options.modelId,
-      systemPrompt: options.systemPrompt,
       cwd: options.cwd,
       effort: options.reasoning,
-      dynamicTools: toolSet.specs,
     }, 30_000).catch((error) => failRun(run, error));
 
     const timer = options.shouldAbort
