@@ -130,7 +130,7 @@ const defaultLspSettings: LspSettings = {
 
 function loadStoredMcpServers(): Record<string, McpServerConfig> {
   try {
-    const raw = localStorage.getItem("axiom_mcp_config");
+    const raw = localStorage.getItem("rusty_mcp_config");
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed?.mcpServers && typeof parsed.mcpServers === "object") return parsed.mcpServers;
@@ -245,7 +245,7 @@ export const createIntegrationSlice: WorkspaceSliceCreator = (set, get) => ({
   saveSecureConfig: async () => {
     const state = get();
     const { SecureStorageService } = await import("../../services/secureStorageService");
-    await SecureStorageService.saveSecureData("axiom_secure_config", {
+    await SecureStorageService.saveSecureData("rusty_secure_config", {
       configVersion: PROVIDER_CONFIG_VERSION,
       customProviders: state.customProviders,
       activeCustomProviderId: state.activeCustomProviderId,
@@ -267,7 +267,7 @@ export const createIntegrationSlice: WorkspaceSliceCreator = (set, get) => ({
       lastWorkspacePath?: string;
       mcpServers?: Record<string, McpServerConfig>;
       lspSettings?: LspSettings;
-    }>("axiom_secure_config");
+    }>("rusty_secure_config");
     if (!config) return;
 
     const updates: Partial<WorkspaceState> = {};

@@ -37,7 +37,7 @@ export async function runInlineChatWithModel(options: InlineChatPiOptions): Prom
   const selectedContext = selected.text
     ? `Selected code (lines ${selected.startLine}-${selected.endLine}):\n\`\`\`${options.context.language}\n${selected.text}\n\`\`\``
     : `Cursor is at line ${selected.startLine}, column ${selected.startColumn}.`;
-  const systemPrompt = `You are Axiom Inline Chat, a concise coding assistant embedded directly in a code editor.
+  const systemPrompt = `You are Rusty Inline Chat, a concise coding assistant embedded directly in a code editor.
 
 Current file: ${options.context.filePath}
 Language: ${options.context.language}

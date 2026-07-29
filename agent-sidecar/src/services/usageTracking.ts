@@ -1,6 +1,6 @@
 /**
  * Token usage persistence. Records every completed LLM call into
- * `.axiom/metrics/` so the frontend can show per-model, per-day, and
+ * `.rusty/metrics/` so the frontend can show per-model, per-day, and
  * all-time token consumption. Writes are serialized per workspace root
  * with an in-process queue since the sidecar is a single long-lived
  * process handling every capability for a given workspace.
@@ -73,7 +73,7 @@ export class UsageTracker {
   private queue: Promise<void> = Promise.resolve();
 
   constructor(workspaceRoot: string) {
-    const metricsRoot = path.join(workspaceRoot, ".axiom", "metrics");
+    const metricsRoot = path.join(workspaceRoot, ".rusty", "metrics");
     this.eventsDir = path.join(metricsRoot, "events");
     this.summaryPath = path.join(metricsRoot, "summary.json");
   }

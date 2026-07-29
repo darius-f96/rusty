@@ -13,7 +13,7 @@ import {
 const temporaryWorkspaces: string[] = [];
 
 async function createWorkspace(): Promise<string> {
-  const workspace = await mkdtemp(path.join(tmpdir(), "axiom-reconciliation-verification-"));
+  const workspace = await mkdtemp(path.join(tmpdir(), "rusty-reconciliation-verification-"));
   temporaryWorkspaces.push(workspace);
   return workspace;
 }

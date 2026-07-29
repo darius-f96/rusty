@@ -5,7 +5,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { normalizeCommand } from "./commandExecution";
 
-const workspacePromise = mkdtemp(path.join(tmpdir(), "axiom-command-normalization-"));
+const workspacePromise = mkdtemp(path.join(tmpdir(), "rusty-command-normalization-"));
 
 after(async () => {
   await rm(await workspacePromise, { recursive: true, force: true });

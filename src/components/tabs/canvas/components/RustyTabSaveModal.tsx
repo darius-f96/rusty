@@ -1,24 +1,24 @@
 /**
- * AxiomTabSaveModal.tsx
+ * RustyTabSaveModal.tsx
  *
- * Modal dialog for saving an Axiom canvas to a named file under .axiom/canvas/.
+ * Modal dialog for saving a Rusty canvas to a named file under .rusty/canvas/.
  */
 
 import React from "react";
 import { Save, X } from "lucide-react";
 
-interface AxiomTabSaveModalProps {
+interface RustyTabSaveModalProps {
   /** Current title value in the input field. */
   saveTitle: string;
   /** Callback when the title input changes. */
   onTitleChange: (title: string) => void;
   /** Callback when "Cancel" or the X button is clicked. */
   onCancel: () => void;
-  /** Callback when "Save Axiom" is confirmed. */
+  /** Callback when "Save Rusty" is confirmed. */
   onConfirm: () => void;
 }
 
-export const AxiomTabSaveModal: React.FC<AxiomTabSaveModalProps> = ({
+export const RustyTabSaveModal: React.FC<RustyTabSaveModalProps> = ({
   saveTitle,
   onTitleChange,
   onCancel,
@@ -42,7 +42,7 @@ export const AxiomTabSaveModal: React.FC<AxiomTabSaveModalProps> = ({
         <div className="px-4 py-3 bg-[var(--bg-header)] border-b border-[var(--border-color)] flex items-center justify-between">
           <span className="text-[var(--text-light)] text-sm font-bold flex items-center space-x-2">
             <Save size={16} className="text-[var(--color-status-success)]" />
-            <span>Save Axiom Canvas</span>
+            <span>Save Rusty Canvas</span>
           </span>
           <button
             onClick={onCancel}
@@ -55,26 +55,26 @@ export const AxiomTabSaveModal: React.FC<AxiomTabSaveModalProps> = ({
         {/* Body */}
         <div className="p-4 flex flex-col space-y-3">
           <p className="text-xs text-[var(--text-normal)]">
-            Enter a filename/title for this Axiom. It will be serialized under{" "}
+            Enter a filename/title for this Rusty. It will be serialized under{" "}
             <code className="text-[var(--color-status-success)] font-bold">
-              .axiom/canvas/
+              .rusty/canvas/
             </code>
             .
           </p>
           <div className="flex flex-col space-y-1">
             <label
-              htmlFor="axiom-title-input"
+              htmlFor="rusty-title-input"
               className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider"
             >
-              Axiom Title
+              Rusty Title
             </label>
             <input
-              id="axiom-title-input"
+              id="rusty-title-input"
               type="text"
               value={saveTitle}
               onChange={(e) => onTitleChange(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="e.g. build_and_test_axiom"
+              placeholder="e.g. build_and_test_rusty"
               className="w-full bg-[var(--bg-canvas)] border border-[var(--border-color)] focus:border-[var(--accent-color)] text-[var(--text-light)] rounded-lg px-3 py-2 text-sm outline-none transition-colors"
               autoFocus
             />
@@ -93,7 +93,7 @@ export const AxiomTabSaveModal: React.FC<AxiomTabSaveModalProps> = ({
             onClick={onConfirm}
             className="px-4 py-1.5 bg-[var(--accent-color)] hover:bg-[var(--accent-color)]/90 text-[var(--color-primary-foreground)] rounded-lg text-xs font-semibold cursor-pointer transition-colors shadow-md hover:shadow-lg"
           >
-            Save Axiom
+            Save Rusty
           </button>
         </div>
       </div>

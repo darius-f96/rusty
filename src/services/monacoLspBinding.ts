@@ -21,7 +21,7 @@ import {
  *     were registered under the LSP key, which never matched the model's
  *     language id for .js/.jsx/.sh, so Monaco never invoked them).
  *   - The `openCodeEditor` override that turns definition/references jumps
- *     into Axiom tab opens (moved here from FileTab so it's installed once
+ *     into Rusty tab opens (moved here from FileTab so it's installed once
  *     globally and reusable).
  *   - Diagnostics -> Monaco marker mapping.
  *   - Indexing/progress status fan-out to attached editors.
@@ -190,7 +190,7 @@ export class MonacoLspBinding {
 
   /**
    * Override Monaco's code-editor opener so definition/references jumps open
-   * as Axiom tabs instead of in Monaco's built-in viewer. Installed once on
+   * as Rusty tabs instead of in Monaco's built-in viewer. Installed once on
    * the shared CodeEditorService.
    */
   private static installOpenCodeEditorOverride(editor: any) {

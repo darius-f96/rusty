@@ -67,7 +67,7 @@ export type BinResolution =
   | { kind: "launcher"; path: string };
 
 export interface PackageSpec {
-  /** Axiom language key (matches lspSettings.servers keys). */
+  /** Rusty language key (matches lspSettings.servers keys). */
   language: string;
   /** Canonical package name. */
   name: string;
@@ -435,7 +435,7 @@ export const LSP_REGISTRY: Record<string, PackageSpec> = {
   },
 };
 
-/** Look up a package spec by Axiom language key. */
+/** Look up a package spec by Rusty language key. */
 export function getPackageSpec(language: string): PackageSpec | null {
   return LSP_REGISTRY[language] || null;
 }

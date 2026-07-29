@@ -116,7 +116,7 @@ function platformCodexPackage(): { packageName: string; target: string; executab
 }
 
 export function resolveCodexExecutable(): string {
-  const explicit = process.env.AXIOM_CODEX_PATH || process.env.CODEX_PATH;
+  const explicit = process.env.RUSTY_CODEX_PATH || process.env.CODEX_PATH;
   if (explicit) {
     if (fs.existsSync(explicit)) return explicit;
     throw new Error(`The configured Codex executable does not exist: ${explicit}`);
@@ -199,7 +199,7 @@ function completeRun(run: CodexRun): void {
 
 /**
  * `thread/tokenUsage/updated` reports the thread's running total, matching one
- * "turn" in Axiom's model since each turn gets its own ephemeral thread — so
+ * "turn" in Rusty's model since each turn gets its own ephemeral thread — so
  * the latest notification value is stored and reported once, on completion,
  * rather than summed across multiple notifications.
  */
@@ -262,7 +262,7 @@ class CodexAppServerClient {
 
     try {
       await this.requestWithoutStart("initialize", {
-        clientInfo: { name: "axiom", title: "Axiom", version: "0.1.0" },
+        clientInfo: { name: "rusty", title: "Rusty", version: "0.1.0" },
         capabilities: { experimentalApi: true },
       }, 20_000);
       this.notify("initialized", {});
@@ -342,7 +342,7 @@ class CodexAppServerClient {
 
   private async handleServerRequest(message: any): Promise<void> {
     if (message.method !== "item/tool/call") {
-      this.respond(message.id, undefined, { code: -32601, message: `Axiom does not handle ${message.method}.` });
+      this.respond(message.id, undefined, { code: -32601, message: `Rusty does not handle ${message.method}.` });
       return;
     }
 
@@ -361,7 +361,7 @@ class CodexAppServerClient {
     if (run.toolCalls > run.maxToolCalls) {
       this.respond(message.id, {
         success: false,
-        contentItems: [{ type: "inputText", text: `Axiom stopped after ${run.maxToolCalls} tool calls.` }],
+        contentItems: [{ type: "inputText", text: `Rusty stopped after ${run.maxToolCalls} tool calls.` }],
       });
       return;
     }
@@ -660,8 +660,8 @@ export function codexDynamicTools(tools: CodexTool[]): { specs: any[]; byName: M
   return {
     specs: toolDefinitions.length ? [{
       type: "namespace",
-      name: "axiom",
-      description: "Axiom tools",
+      name: "rusty",
+      description: "Rusty tools",
       tools: toolDefinitions,
     }] : [],
     byName,

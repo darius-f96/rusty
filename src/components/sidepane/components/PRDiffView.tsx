@@ -31,11 +31,11 @@ function ensureAttributionCss() {
   const style = document.createElement("style");
   style.textContent = [
     ...TASK_PALETTE.map((p, i) => `
-      .axiom-attr-bg-${i} { background-color: ${p.bg} !important; }
-      .axiom-attr-stripe-${i} { background: ${p.stripe} !important; width: 3px !important; margin-left: 1px; border-radius: 1px; }
+      .rusty-attr-bg-${i} { background-color: ${p.bg} !important; }
+      .rusty-attr-stripe-${i} { background: ${p.stripe} !important; width: 3px !important; margin-left: 1px; border-radius: 1px; }
     `),
-    `.axiom-attr-bg-synth { background-color: ${SYNTHESIZED_PALETTE.bg} !important; }`,
-    `.axiom-attr-stripe-synth { background: ${SYNTHESIZED_PALETTE.stripe} !important; width: 3px !important; margin-left: 1px; border-radius: 1px; }`,
+    `.rusty-attr-bg-synth { background-color: ${SYNTHESIZED_PALETTE.bg} !important; }`,
+    `.rusty-attr-stripe-synth { background: ${SYNTHESIZED_PALETTE.stripe} !important; width: 3px !important; margin-left: 1px; border-radius: 1px; }`,
   ].join("\n");
   document.head.appendChild(style);
 }
@@ -125,8 +125,8 @@ function applyAttributionDecorations(
       range: new monacoInstance.Range(monacoLine, 1, monacoLine, 1),
       options: {
         isWholeLine: true,
-        className: `axiom-attr-bg-${suffix}`,
-        linesDecorationsClassName: `axiom-attr-stripe-${suffix}`,
+        className: `rusty-attr-bg-${suffix}`,
+        linesDecorationsClassName: `rusty-attr-stripe-${suffix}`,
         overviewRulerColor: palette.ruler,
         overviewRulerLane: 4, // right
         minimap: { color: palette.stripe, position: 1 },
@@ -302,7 +302,7 @@ const FileDiffCard: React.FC<FileDiffCardProps> = ({
             <DiffEditor
               height="100%"
               language={getMonacoLanguageId(file)}
-              theme="axiom-custom-theme"
+              theme="rusty-custom-theme"
               original={state.original}
               modified={state.edited}
               onMount={(editor, monaco) => {

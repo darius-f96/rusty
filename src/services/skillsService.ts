@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Skill } from "../store";
 
-const SKILLS_DIR = ".axiom/skills";
+const SKILLS_DIR = ".rusty/skills";
 
 export const skillsService = {
   async saveSkill(rootPath: string, skill: Skill): Promise<void> {

@@ -140,7 +140,7 @@ abstract class McpClient {
     const result = await this.rpc("initialize", {
       protocolVersion: "2024-11-05",
       capabilities: {},
-      clientInfo: { name: "axiom-sidecar", version: "1.0.0" },
+      clientInfo: { name: "rusty-sidecar", version: "1.0.0" },
     });
     // Best-effort capability negotiation.
     await this.notify("notifications/initialized", {}).catch(() => {});

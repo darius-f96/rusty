@@ -1,7 +1,7 @@
 /**
  * useNodeUsage.ts
  *
- * Listens for custom `axiom-node-usage` events dispatched by executor
+ * Listens for custom `rusty-node-usage` events dispatched by executor
  * processes and surfaces the latest token-usage payload for a given node.
  */
 
@@ -22,7 +22,7 @@ export interface TokenUsageLike {
  * Tracks the most recent token-usage payload for the given node.
  *
  * Resets to `null` whenever `selectedNodeId` changes and re-subscribes to the
- * custom DOM event `axiom-node-usage`.
+ * custom DOM event `rusty-node-usage`.
  *
  * @param selectedNodeId - The node whose usage data to follow.
  * @returns The latest usage snapshot, or `null`.
@@ -45,9 +45,9 @@ export function useNodeUsage(
       }
     };
 
-    window.addEventListener("axiom-node-usage", handleNodeUsage);
+    window.addEventListener("rusty-node-usage", handleNodeUsage);
     return () => {
-      window.removeEventListener("axiom-node-usage", handleNodeUsage);
+      window.removeEventListener("rusty-node-usage", handleNodeUsage);
     };
   }, [selectedNodeId]);
 

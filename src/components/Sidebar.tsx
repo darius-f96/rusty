@@ -38,7 +38,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const activeGroup = editorGroups.find((g) => g.id === activeGroupId);
   const activeTabId = activeGroup ? activeGroup.activeTabId : null;
   const activeTab = activeGroup && activeGroup.openTabs.find((t) => t.id === activeTabId);
-  const isActiveTabCanvas = activeTab?.type === "canvas" || activeTab?.type === "axiom";
+  const isActiveTabCanvas = activeTab?.type === "canvas" || activeTab?.type === "rusty";
   const toggleExplorerShortcut = useWorkspaceStore((state) => state.keyboardShortcuts.toggleExplorer);
 
   const helpers: SidebarHelpers = {
@@ -82,7 +82,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         return isExplorerOpen && sidebarView === "explorer";
       case "git":
         return isExplorerOpen && sidebarView === "git";
-      case "axiom":
+      case "rusty":
         return isActiveTabCanvas;
       case "agent":
         return activeTab?.type === "agent";

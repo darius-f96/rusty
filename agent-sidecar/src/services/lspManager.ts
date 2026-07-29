@@ -203,13 +203,13 @@ export class LspManager {
   private static javaWorkspaceDataDir(workspacePath: string): string {
     const hash = crypto.createHash("sha1").update(workspacePath).digest("hex").slice(0, 12);
     const base = path.basename(workspacePath).replace(/[^a-zA-Z0-9._-]/g, "_") || "workspace";
-    return path.join(os.homedir(), ".axiom", "lsp", "java-workspaces", `${base}-${hash}`);
+    return path.join(os.homedir(), ".rusty", "lsp", "java-workspaces", `${base}-${hash}`);
   }
 
   private static javaConfigurationDir(workspacePath: string): string {
     const hash = crypto.createHash("sha1").update(workspacePath).digest("hex").slice(0, 12);
     const base = path.basename(workspacePath).replace(/[^a-zA-Z0-9._-]/g, "_") || "workspace";
-    return path.join(os.homedir(), ".axiom", "lsp", "java-configurations", `${base}-${hash}`);
+    return path.join(os.homedir(), ".rusty", "lsp", "java-configurations", `${base}-${hash}`);
   }
 
   private static prepareServerArgs(language: string, workspacePath: string, args: string[]): string[] {

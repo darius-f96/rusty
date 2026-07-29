@@ -6,7 +6,7 @@ export interface TypographyPreferences {
 
 export type TypographyPreferenceKey = keyof TypographyPreferences;
 
-export const TYPOGRAPHY_STORAGE_KEY = "axiom_typography_preferences";
+export const TYPOGRAPHY_STORAGE_KEY = "rusty_typography_preferences";
 export const TYPOGRAPHY_STORAGE_VERSION = 1;
 
 export const TYPOGRAPHY_DEFAULTS: TypographyPreferences = {

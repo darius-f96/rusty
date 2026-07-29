@@ -4,7 +4,7 @@ import { resolveSkill, toSkillData, BUILT_IN_SKILL_IDS } from "../config/skillDe
 import { VfsRegistry, setExecutingNode } from "../services/vfs";
 import { notify } from "../notificationStore";
 import { TabBar } from "./TabBar";
-import { AxiomTab } from "./tabs/canvas/AxiomTab";
+import { RustyTab } from "./tabs/canvas/RustyTab";
 import { FileTab } from "./tabs/FileTab";
 import { TaskTab } from "./tabs/TaskTab";
 import { GitDiffTab } from "./tabs/GitDiffTab";
@@ -357,7 +357,7 @@ export const Workspace: React.FC = () => {
     }
 
     const consoleMessageId = `console_${nodeId}_${Date.now()}`;
-    window.dispatchEvent(new CustomEvent("axiom-subagents-reset", { detail: { nodeId } }));
+    window.dispatchEvent(new CustomEvent("rusty-subagents-reset", { detail: { nodeId } }));
     store.addGlobalChatMessage(nodeId, {
       id: consoleMessageId,
       role: "console",
@@ -454,12 +454,12 @@ export const Workspace: React.FC = () => {
         }
 
         if (data.type === "subagent_update" && (data.nodeId === nodeId || data.tabId === nodeId) && data.subagent) {
-          window.dispatchEvent(new CustomEvent("axiom-subagent-update", { detail: { nodeId, subagent: data.subagent } }));
+          window.dispatchEvent(new CustomEvent("rusty-subagent-update", { detail: { nodeId, subagent: data.subagent } }));
           return;
         }
 
         if (data.type === "usage_update" && data.nodeId === nodeId) {
-          window.dispatchEvent(new CustomEvent("axiom-node-usage", { detail: { nodeId, usage: data.usage } }));
+          window.dispatchEvent(new CustomEvent("rusty-node-usage", { detail: { nodeId, usage: data.usage } }));
           return;
         }
 
@@ -801,7 +801,7 @@ export const Workspace: React.FC = () => {
           className={`${isActive ? "w-full h-full" : "absolute -left-[99999px] top-0 w-full h-full"} ${bgClass} overflow-hidden`}
         >
           {tab.type === "canvas" && (
-            <AxiomTab tab={tab} onExecuteNode={executeNode} onStopExecution={stopExecution} />
+            <RustyTab tab={tab} onExecuteNode={executeNode} onStopExecution={stopExecution} />
           )}
           {tab.type === "file" && (
             <FileTab tab={tab} groupId={groupId} />
@@ -907,7 +907,7 @@ export const Workspace: React.FC = () => {
             </div>
             <div className="p-4 flex flex-col space-y-3">
               <p className="text-xs text-[var(--text-normal)] leading-relaxed">
-                The Axiom tab <code className="text-[var(--color-status-warning)] font-bold">"{closeIntercept.title}"</code> has active background processes running.
+                The Rusty tab <code className="text-[var(--color-status-warning)] font-bold">"{closeIntercept.title}"</code> has active background processes running.
               </p>
               <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
                 Closing this tab will stop all running agents and cancel ongoing operations. Are you sure you want to proceed?
@@ -959,7 +959,7 @@ const UnsavedChangesModal: React.FC<{
         <div className="px-4 py-3 bg-[var(--bg-header)] border-b border-[var(--border-color)] flex items-center justify-between">
           <span className="text-[var(--text-light)] text-sm font-bold flex items-center space-x-2">
             <HelpCircle size={16} className="text-[var(--color-status-info)]" />
-            <span>Unsaved Axiom Canvas</span>
+            <span>Unsaved Rusty Canvas</span>
           </span>
           <button
             onClick={onCancel}
@@ -973,9 +973,9 @@ const UnsavedChangesModal: React.FC<{
             You have unsaved changes in <code className="text-[var(--color-status-info)] font-bold">"{title}"</code>. Enter a title to save your canvas before closing:
           </p>
           <div className="flex flex-col space-y-1">
-            <label htmlFor="modal-axiom-title-input" className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-semibold font-sans">Axiom Title</label>
+            <label htmlFor="modal-rusty-title-input" className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-semibold font-sans">Rusty Title</label>
             <input
-              id="modal-axiom-title-input"
+              id="modal-rusty-title-input"
               type="text"
               value={saveTitle}
               onChange={(e) => setSaveTitle(e.target.value)}

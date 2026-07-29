@@ -4,7 +4,7 @@ type QueueEntry = {
   resolve: (release: () => void) => void;
 };
 
-const configuredLimit = Number(process.env.AXIOM_MAX_CONCURRENT_TASKS);
+const configuredLimit = Number(process.env.RUSTY_MAX_CONCURRENT_TASKS);
 const maxConcurrentTasks = Number.isFinite(configuredLimit) && configuredLimit > 0
   ? Math.floor(configuredLimit)
   : DEFAULT_MAX_CONCURRENT_TASKS;

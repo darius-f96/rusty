@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
 import { CURRENT_ONBOARDING_RELEASE } from "../../config/onboarding";
-import { AxiomIcon } from "../AxiomIcon";
+import { RustyIcon } from "../RustyIcon";
 
 type NodeKind = "global" | "task" | "context" | "mcp" | "sticky" | "boundary";
 
@@ -39,9 +39,9 @@ const nodeGuides: NodeGuide[] = [
   {
     kind: "global",
     title: "Global Explorer",
-    eyebrow: "Plan the Axiom",
+    eyebrow: "Plan the Rusty",
     description: "The reasoning center for this canvas. Give it your feature brief, explore the codebase, and generate an editable graph of tasks and supporting context.",
-    details: ["One per Axiom", "Generates task and context nodes", "Uses the model and skill you select"],
+    details: ["One per Rusty", "Generates task and context nodes", "Uses the model and skill you select"],
   },
   {
     kind: "task",
@@ -75,7 +75,7 @@ const nodeGuides: NodeGuide[] = [
     kind: "boundary",
     title: "Boundary",
     eyebrow: "Give a large graph structure",
-    description: "Group related work into a named visual area. Boundaries make large Axioms navigable without changing execution or forcing an artificial hierarchy.",
+    description: "Group related work into a named visual area. Boundaries make large Rustys navigable without changing execution or forcing an artificial hierarchy.",
     details: ["Group a concern or subsystem", "Jump between named regions", "Keep 100+ node canvases legible"],
   },
 ];
@@ -104,7 +104,7 @@ const workflow = [
     number: "03",
     phase: "Build",
     title: "Generate the graph",
-    text: "Open an Axiom, attach the brief, and ask the Global Explorer to propose an implementation graph. The proposal is a starting point, not an order to execute.",
+    text: "Open a Rusty, attach the brief, and ask the Global Explorer to propose an implementation graph. The proposal is a starting point, not an order to execute.",
     actions: ["Review task boundaries and connect the files or guidance each task needs.", "Add, remove, split, or reorder nodes until the graph matches your understanding."],
     ready: "Every task has a bounded purpose, relevant context, and sensible dependencies.",
   },
@@ -131,7 +131,7 @@ const workflow = [
     number: "06",
     phase: "Integrate",
     title: "Review and merge",
-    text: "Review the Axiom as a whole, apply its virtual changes to the real workspace, and use Git as the final integration boundary.",
+    text: "Review the Rusty as a whole, apply its virtual changes to the real workspace, and use Git as the final integration boundary.",
     actions: ["Inspect the combined diff and run the relevant tests and checks.", "Merge only when the implementation still matches the Markdown brief."],
     ready: "The code is coherent, verified, and understandable enough for you to maintain.",
   },
@@ -299,8 +299,8 @@ export const OnboardingTab: React.FC = () => {
       <div className="sticky top-0 z-30 border-b border-[var(--border-color)] bg-[var(--bg-editor)]/90 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-6 lg:px-10 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <AxiomIcon size={36} className="shadow-lg" />
-            <div><div className="text-[12px] font-mono font-bold tracking-[0.22em] text-[var(--text-light)]">AXIOM</div><div className="text-[8px] font-mono uppercase tracking-wider text-[var(--text-muted)]">{CURRENT_ONBOARDING_RELEASE.id} · v{appVersion}</div></div>
+            <RustyIcon size={36} className="shadow-lg" />
+            <div><div className="text-[12px] font-mono font-bold tracking-[0.22em] text-[var(--text-light)]">RUSTY</div><div className="text-[8px] font-mono uppercase tracking-wider text-[var(--text-muted)]">{CURRENT_ONBOARDING_RELEASE.id} · v{appVersion}</div></div>
           </div>
           <nav className="hidden md:flex items-center gap-1 text-[10px] font-mono">
             <button onClick={() => scrollTo("workflow")} className="px-3 py-2 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--accent-bg)] transition-colors cursor-pointer">Workflow</button>
@@ -318,24 +318,24 @@ export const OnboardingTab: React.FC = () => {
             <div>
               <div className="flex items-center gap-4 mb-7">
                 <div className="w-[72px] h-[72px] rounded-2xl border border-[var(--border-color)] bg-[var(--color-surface-elevated)] flex items-center justify-center shadow-2xl">
-                  <AxiomIcon size={56} />
+                  <RustyIcon size={56} />
                 </div>
                 <div>
                   <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border-color)] bg-[var(--color-surface-elevated)] px-3 py-1.5 text-[9px] font-mono uppercase tracking-[0.16em] text-[var(--accent-color)]">
                     <ShieldCheck size={12} /> {CURRENT_ONBOARDING_RELEASE.id}
                   </div>
-                  <div className="mt-2 pl-1 text-[8px] font-mono uppercase tracking-[0.16em] text-[var(--text-muted)]">Axiom version {appVersion}</div>
+                  <div className="mt-2 pl-1 text-[8px] font-mono uppercase tracking-[0.16em] text-[var(--text-muted)]">Rusty version {appVersion}</div>
                 </div>
               </div>
               <h1 className="max-w-3xl text-4xl sm:text-5xl xl:text-6xl font-semibold tracking-[-0.045em] leading-[1.04] text-[var(--text-light)]">
                 Understand the code<br />you <span className="text-[var(--accent-color)]">generate.</span>
               </h1>
               <p className="mt-7 max-w-xl text-sm sm:text-base leading-7 text-[var(--text-normal)]">
-                Axiom turns a feature brief into explicit context, bounded tasks, and inspectable changes. Use AI without surrendering architectural discipline—or paying a frontier model for every line.
+                Rusty turns a feature brief into explicit context, bounded tasks, and inspectable changes. Use AI without surrendering architectural discipline—or paying a frontier model for every line.
               </p>
               <div className="mt-9 flex flex-wrap gap-3">
                 <button onClick={handleStart} className="group inline-flex items-center gap-2 rounded-xl bg-[var(--accent-color)] px-5 py-3 text-xs font-mono font-bold text-[var(--color-primary-foreground)] shadow-lg hover:brightness-110 transition-all cursor-pointer">
-                  {rootPath ? "Create an Axiom" : "Choose a workspace"}<ArrowRight size={15} className="group-hover:translate-x-0.5 transition-transform" />
+                  {rootPath ? "Create a Rusty" : "Choose a workspace"}<ArrowRight size={15} className="group-hover:translate-x-0.5 transition-transform" />
                 </button>
                 <button onClick={() => scrollTo("workflow")} className="inline-flex items-center gap-2 rounded-xl border border-[var(--border-color)] bg-[var(--color-surface-elevated)] px-5 py-3 text-xs font-mono font-semibold text-[var(--text-light)] hover:border-[var(--border-active)] transition-colors cursor-pointer">
                   See the workflow<BookOpen size={14} />
@@ -347,7 +347,7 @@ export const OnboardingTab: React.FC = () => {
                 <div><div className="text-lg font-semibold text-[var(--text-light)]">Selective</div><div className="text-[9px] font-mono uppercase tracking-wider text-[var(--text-muted)] mt-1">model cost</div></div>
               </div>
               <p className="mt-5 max-w-lg text-[9px] font-mono leading-4 text-[var(--text-muted)]">
-                You are viewing the <span className="text-[var(--accent-color)]">{CURRENT_ONBOARDING_RELEASE.id}</span> guide. Onboarding content is versioned with Axiom and will evolve as the application does.
+                You are viewing the <span className="text-[var(--accent-color)]">{CURRENT_ONBOARDING_RELEASE.id}</span> guide. Onboarding content is versioned with Rusty and will evolve as the application does.
               </p>
             </div>
             <HeroGraph />
@@ -382,7 +382,7 @@ export const OnboardingTab: React.FC = () => {
           <div className="max-w-3xl">
             <div className="text-[9px] font-mono uppercase tracking-[0.2em] text-[var(--accent-color)] mb-4">A repeatable loop</div>
             <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight text-[var(--text-light)]">From conversation to understood code.</h2>
-            <p className="mt-5 text-sm leading-6 text-[var(--text-normal)]">An Axiom is the middle of the process—not the beginning and not the final authority. Start by deciding what should exist, use the canvas to implement it deliberately, and finish at a Git boundary.</p>
+            <p className="mt-5 text-sm leading-6 text-[var(--text-normal)]">A Rusty is the middle of the process—not the beginning and not the final authority. Start by deciding what should exist, use the canvas to implement it deliberately, and finish at a Git boundary.</p>
           </div>
 
           <div className="mt-10 grid md:grid-cols-3 gap-3">
@@ -502,7 +502,7 @@ export const OnboardingTab: React.FC = () => {
 
                 <div className="mt-8 space-y-3">
                   {[
-                    ["01", "Select the relevant code", "Axiom sends the open file and marks the exact lines you selected."],
+                    ["01", "Select the relevant code", "Rusty sends the open file and marks the exact lines you selected."],
                     ["02", "Press Ctrl/Cmd + Enter", "The conversation opens beneath the current line and remains anchored to that editor context."],
                     ["03", "Choose a model and ask", "Use a local model for ordinary explanation or a stronger one when the code requires deeper reasoning."],
                   ].map(([number, title, text]) => (
@@ -514,7 +514,7 @@ export const OnboardingTab: React.FC = () => {
                 </div>
 
                 <div className="mt-5 rounded-xl border border-[var(--border-active)] bg-[var(--accent-bg)] px-4 py-3 text-[10px] leading-5 text-[var(--text-normal)]">
-                  Use Inline Chat to understand local code. When the exploration becomes implementation work, capture the decision in the brief or turn it into an Axiom task.
+                  Use Inline Chat to understand local code. When the exploration becomes implementation work, capture the decision in the brief or turn it into a Rusty task.
                 </div>
               </div>
 
@@ -612,13 +612,13 @@ export const OnboardingTab: React.FC = () => {
 
         <section className="border-t border-[var(--border-color)] bg-[var(--color-surface-sunken)]">
           <div className="max-w-5xl mx-auto px-6 lg:px-10 py-20 text-center">
-            <AxiomIcon size={68} className="mx-auto shadow-2xl" />
+            <RustyIcon size={68} className="mx-auto shadow-2xl" />
             <h2 className="mt-7 text-3xl sm:text-4xl font-semibold tracking-tight text-[var(--text-light)]">Build with AI. Keep the architecture yours.</h2>
             <p className="mt-5 mx-auto max-w-xl text-sm leading-6 text-[var(--text-normal)]">Start from a written intent, iterate over inspectable work, and merge only the code you understand.</p>
             <button onClick={handleStart} className="group mt-8 inline-flex items-center gap-2 rounded-xl bg-[var(--accent-color)] px-5 py-3 text-xs font-mono font-bold text-[var(--color-primary-foreground)] shadow-lg hover:brightness-110 transition-all cursor-pointer">
-              {rootPath ? "Create an Axiom" : "Open your first workspace"}<ArrowRight size={15} className="group-hover:translate-x-0.5 transition-transform" />
+              {rootPath ? "Create a Rusty" : "Open your first workspace"}<ArrowRight size={15} className="group-hover:translate-x-0.5 transition-transform" />
             </button>
-            <div className="mt-8 text-[8px] font-mono uppercase tracking-[0.18em] text-[var(--text-muted)]">Guide: {CURRENT_ONBOARDING_RELEASE.id} · Axiom v{appVersion}</div>
+            <div className="mt-8 text-[8px] font-mono uppercase tracking-[0.18em] text-[var(--text-muted)]">Guide: {CURRENT_ONBOARDING_RELEASE.id} · Rusty v{appVersion}</div>
           </div>
         </section>
       </main>

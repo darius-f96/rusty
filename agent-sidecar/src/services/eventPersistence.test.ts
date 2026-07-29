@@ -10,7 +10,7 @@ import { FileEventPersistence, replayRun } from "./eventPersistence";
 let workspace = "";
 
 test.beforeEach(async () => {
-  workspace = await fs.mkdtemp(path.join(os.tmpdir(), "axiom-events-"));
+  workspace = await fs.mkdtemp(path.join(os.tmpdir(), "rusty-events-"));
 });
 
 test.afterEach(async () => {
@@ -55,7 +55,7 @@ test("redacts secrets and truncates large strings before persistence", async () 
 test("recovers from a truncated final JSONL line", async () => {
   const store = new FileEventPersistence(workspace);
   await store.append("run-truncated", event("run-truncated", "run.started", {}));
-  const runsRoot = path.join(workspace, ".axiom", "runs");
+  const runsRoot = path.join(workspace, ".rusty", "runs");
   const [directory] = await fs.readdir(runsRoot);
   await fs.appendFile(path.join(runsRoot, directory, "events.jsonl"), "{\"incomplete\":");
   const recovered = await store.query("run-truncated");

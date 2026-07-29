@@ -1,6 +1,6 @@
 /**
  * ContextNode — a React Flow node that attaches file/folder context and
- * free-form description notes to an Axiom pipeline.
+ * free-form description notes to a Rusty pipeline.
  *
  * Responsibilities:
  * - Display an attached file/folder (from sidebar drag-drop or search).

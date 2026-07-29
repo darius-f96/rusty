@@ -11,7 +11,7 @@ export const SettingsTab: React.FC = () => {
         {/* Title */}
         <div>
           <h2 className={styles.pageTitle}>General Settings</h2>
-          <p className={styles.pageDescription}>Personalize Axiom's appearance, text, and keyboard controls.</p>
+          <p className={styles.pageDescription}>Personalize Rusty's appearance, text, and keyboard controls.</p>
         </div>
 
         <div className={styles.panel}><AppearanceSettings /></div>

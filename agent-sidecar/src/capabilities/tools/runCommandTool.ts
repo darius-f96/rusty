@@ -20,7 +20,7 @@ export interface RunCommandToolOptions {
 export function createRunCommandTool(options: RunCommandToolOptions) {
   return {
     name: "run_command",
-    description: "Last-resort tool for an essential build, test, typecheck, lint, generator, or explicitly requested executable after user approval. Use Axiom's read_file, write_file, list_files, and search_codebase tools for workspace operations; never use this tool to inspect, search, create, edit, move, or delete files. Use separate program and args fields; do not wrap commands in sh or bash.",
+    description: "Last-resort tool for an essential build, test, typecheck, lint, generator, or explicitly requested executable after user approval. Use Rusty's read_file, write_file, list_files, and search_codebase tools for workspace operations; never use this tool to inspect, search, create, edit, move, or delete files. Use separate program and args fields; do not wrap commands in sh or bash.",
     inputSchema: {
       type: "object",
       properties: {

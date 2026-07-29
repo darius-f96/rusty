@@ -121,10 +121,10 @@ export const WorkspaceTab: React.FC = () => {
                 </div>
                 <div>
                   <div className="text-sm font-bold text-[var(--text-light)] flex items-center gap-1.5 group-hover:text-[var(--color-status-success)] transition-colors">
-                    New Axiom <ArrowRight size={14} className="opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
+                    New Rusty <ArrowRight size={14} className="opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
                   </div>
                   <p className="text-[11px] text-[var(--text-muted)] mt-1.5 leading-relaxed font-mono">
-                    Create a new Axiom canvas tab to build and run AI tasks.
+                    Create a new Rusty canvas tab to build and run AI tasks.
                   </p>
                 </div>
               </div>

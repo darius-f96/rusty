@@ -1,7 +1,7 @@
 import { FolderOpen, Files, GitBranch, Cpu, Settings, Bot, Wand2, Plug, BookOpen, Gauge } from "lucide-react";
 import React from "react";
 import type { WorkspaceState } from "../../store";
-import { AxiomIcon } from "../AxiomIcon";
+import { RustyIcon } from "../RustyIcon";
 import { formatCompactTokenCount } from "../../services/tokenFormat";
 
 export type SidebarStoreState = Pick<
@@ -83,9 +83,9 @@ export const SIDEBAR_ICONS: SidebarIconItem[] = [
     },
   },
   {
-    id: "axiom",
-    label: "Axiom Canvas",
-    icon: AxiomIcon,
+    id: "rusty",
+    label: "Rusty Canvas",
+    icon: RustyIcon,
     onClick: (store) => {
       store.createCanvasTab();
     },
@@ -139,13 +139,13 @@ export const SIDEBAR_ICONS: SidebarIconItem[] = [
   },
   {
     id: "onboarding",
-    label: "Axiom Guide",
+    label: "Rusty Guide",
     icon: BookOpen,
     onClick: (store) => {
       store.openTab({
         id: "welcome",
         type: "onboarding",
-        title: "Welcome to Axiom",
+        title: "Welcome to Rusty",
         key: "onboarding",
       });
     },

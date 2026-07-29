@@ -1,5 +1,5 @@
-const PASSWORD = "axiom-secure-storage-key-phrase-salt-987123";
-const SALT = new Uint8Array([83, 101, 99, 117, 114, 101, 65, 120, 105, 111, 109, 83, 97, 108, 116]); // "SecureAxiomSalt"
+const PASSWORD = "rusty-secure-storage-key-phrase-salt-987123";
+const SALT = new Uint8Array([83, 101, 99, 117, 114, 101, 65, 120, 105, 111, 109, 83, 97, 108, 116]); // "SecureRustySalt"
 
 async function getKey(): Promise<CryptoKey> {
   const enc = new TextEncoder();

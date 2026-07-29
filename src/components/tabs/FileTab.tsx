@@ -378,7 +378,7 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
     if (monaco) {
       inlineChatCommandRef.current?.dispose();
       inlineChatCommandRef.current = editor.addAction({
-        id: `axiom.inlineChat.${groupId}.${tab.id}`,
+        id: `rusty.inlineChat.${groupId}.${tab.id}`,
         label: "Open Inline Chat",
         keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
         run: () => {
@@ -422,7 +422,7 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
       // Attach LSP intelligence: registers Monaco providers for the file's
       // language, syncs the document with the language server, maps diagnostics
       // to markers, and installs the global openCodeEditor override that turns
-      // cmd+click / F12 definition jumps into Axiom tab opens. All of this used
+      // cmd+click / F12 definition jumps into Rusty tab opens. All of this used
       // to be inline here and in lspService.registerEditor.
       lspBindingRef.current = MonacoLspBinding.attach(editor, tab.key, {
         onStatus: setLspStatus,
@@ -613,7 +613,7 @@ export const FileTab: React.FC<FileTabProps> = ({ tab, groupId }) => {
           height="100%"
           path={`file://${tab.key}`}
           language={getEditorLanguage(tab.key)}
-          theme="axiom-custom-theme"
+          theme="rusty-custom-theme"
           value={fileContent}
           onChange={handleEditorChange}
           onMount={handleEditorMount}

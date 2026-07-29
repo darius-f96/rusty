@@ -1,17 +1,17 @@
 /**
- * AxiomTab.tsx
+ * RustyTab.tsx
  *
- * Main Axiom canvas tab component. Provides a React Flow canvas for building
- * and visualizing Axiom pipelines with nodes (task, context, MCP, sticky,
+ * Main Rusty canvas tab component. Provides a React Flow canvas for building
+ * and visualizing Rusty pipelines with nodes (task, context, MCP, sticky,
  * boundary, global chat) and edges.
  *
  * Architecture:
- * - `AxiomTab` is the entry point that wraps the content in a ReactFlowProvider.
- * - `AxiomTabContent` orchestrates store access, event handlers, effects, and
+ * - `RustyTab` is the entry point that wraps the content in a ReactFlowProvider.
+ * - `RustyTabContent` orchestrates store access, event handlers, effects, and
  *   rendering, delegating to extracted helper functions and sub-components.
  *
  * External consumers:
- * - `Workspace.tsx` imports `{ AxiomTab }` and renders it with `tab`,
+ * - `Workspace.tsx` imports `{ RustyTab }` and renders it with `tab`,
  *   `onExecuteNode`, and `onStopExecution` props.
  */
 
@@ -33,7 +33,7 @@ import { BoundaryNode } from "../../nodes/boundary";
 import { VFS_CHANGED_EVENT, type VfsChangedDetail } from "../../../services/vfs";
 import { CanvasTabContext } from "./CanvasTabContext";
 import { canvasFileService } from "./services/canvasFileService";
-import { getNodeConfig } from "../../nodes/AxiomNodeConfig";
+import { getNodeConfig } from "../../nodes/RustyNodeConfig";
 import { reconciliationService, withoutReconciliationFiles } from "../../../services/reconciliationService";
 import { buildReconciliationTaskFileRecords, normalizeReconciliationPath } from "../../../services/reconciliationPaths";
 import {
@@ -44,9 +44,9 @@ import {
 import { isValidConnection, getPossibleConnection } from "./helpers/connectionHelpers";
 import { buildFlowNodes } from "./helpers/canvasHelpers";
 import { reconcileAndApplyChanges, type TaskNodeRecord } from "./helpers/reconciliationHelpers";
-import { AxiomTabToolbar } from "./components/AxiomTabToolbar";
-import { AxiomTabContextMenu, type ContextMenuPosition } from "./components/AxiomTabContextMenu";
-import { AxiomTabSaveModal } from "./components/AxiomTabSaveModal";
+import { RustyTabToolbar } from "./components/RustyTabToolbar";
+import { RustyTabContextMenu, type ContextMenuPosition } from "./components/RustyTabContextMenu";
+import { RustyTabSaveModal } from "./components/RustyTabSaveModal";
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -67,7 +67,7 @@ const edgeTypes = {};
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-interface AxiomTabProps {
+interface RustyTabProps {
   tab: { id: string; title: string };
   onExecuteNode: (nodeId: string) => void;
   onStopExecution: (nodeId: string) => void;
@@ -78,13 +78,13 @@ interface AxiomTabProps {
 /* ------------------------------------------------------------------ */
 
 /**
- * Wraps the Axiom canvas content in a ReactFlowProvider so that
+ * Wraps the Rusty canvas content in a ReactFlowProvider so that
  * React Flow hooks (e.g., `useViewport`) are available to children.
  */
-export const AxiomTab: React.FC<AxiomTabProps> = (props) => {
+export const RustyTab: React.FC<RustyTabProps> = (props) => {
   return (
     <ReactFlowProvider>
-      <AxiomTabContent {...props} />
+      <RustyTabContent {...props} />
     </ReactFlowProvider>
   );
 };
@@ -94,10 +94,10 @@ export const AxiomTab: React.FC<AxiomTabProps> = (props) => {
 /* ------------------------------------------------------------------ */
 
 /**
- * Core canvas component. Handles all Axiom tab behaviour:
+ * Core canvas component. Handles all Rusty tab behaviour:
  * store integration, event handling, effects, and rendering.
  */
-const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopExecution }) => {
+const RustyTabContent: React.FC<RustyTabProps> = ({ tab, onExecuteNode, onStopExecution }) => {
   /* ---- Store state ---- */
   const rootPath = useWorkspaceStore((state) => state.rootPath);
   const context = useWorkspaceStore(
@@ -466,7 +466,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
         useWorkspaceStore.getState().setFileTree(tree);
         await useWorkspaceStore.getState().loadGitStatus();
       } catch (e: any) {
-        console.error("[AxiomTab] Failed to refresh file tree after apply:", e);
+        console.error("[RustyTab] Failed to refresh file tree after apply:", e);
       }
     }
   }, [tab.id, rootPath, isReconciliationRunning, context.reconciliationSnapshot, nodes, handleReconcileCode]);
@@ -560,7 +560,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
     if (!context.hasBeenSaved) return;
 
     const timer = setTimeout(() => {
-      console.log(`[AxiomTab] Auto-saving canvas tab: ${tab.id}`);
+      console.log(`[RustyTab] Auto-saving canvas tab: ${tab.id}`);
       canvasFileService.autoSaveCanvas(tab.id);
     }, 1500);
 
@@ -606,7 +606,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
           onDragOver={onDragOver}
         >
           {/* Toolbar */}
-          <AxiomTabToolbar
+          <RustyTabToolbar
             tabId={tab.id}
             boundaryNodes={boundaryNodes}
             globalChatNode={globalChatNode}
@@ -644,7 +644,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
 
           {/* Context Menu */}
           {contextMenu && (
-            <AxiomTabContextMenu
+            <RustyTabContextMenu
               position={contextMenu}
               rfInstance={rfInstance}
               tabId={tab.id}
@@ -731,7 +731,7 @@ const AxiomTabContent: React.FC<AxiomTabProps> = ({ tab, onExecuteNode, onStopEx
 
         {/* Save Modal */}
         {showSaveModal && (
-          <AxiomTabSaveModal
+          <RustyTabSaveModal
             saveTitle={saveTitle}
             onTitleChange={setSaveTitle}
             onCancel={() => setShowSaveModal(false)}
@@ -806,7 +806,7 @@ function registerVfsInvalidationEffect(
         });
       await canvasFileService.autoSaveCanvas(tabId);
     })().catch((err) =>
-      console.error("[AxiomTab] Failed to invalidate reconciled files:", err)
+      console.error("[RustyTab] Failed to invalidate reconciled files:", err)
     );
   };
 
@@ -866,7 +866,7 @@ function registerReconciliationAuditEffect(
       });
     await canvasFileService.autoSaveCanvas(tabId);
   })().catch((err) =>
-    console.error("[AxiomTab] Failed to audit reconciliation ledger:", err)
+    console.error("[RustyTab] Failed to audit reconciliation ledger:", err)
   );
 
   return () => {};

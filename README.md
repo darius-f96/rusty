@@ -1,6 +1,6 @@
-# Axiom IDE
+# Rusty IDE
 
-An AI-assisted coding IDE built with Tauri, React, and TypeScript. Axiom runs a
+An AI-assisted coding IDE built with Tauri, React, and TypeScript. Rusty runs a
 local agent sidecar that talks to multiple coding-agent backends and
 gives them a structured task/reconciliation workflow instead of a single chat
 window: delegate work to subagents, watch a live task graph, review generated
@@ -11,7 +11,7 @@ diffs, and reconcile results back into your working tree.
 Apple Silicon only, for now.
 
 ```bash
-brew install --cask traian18/axiom/axiom-ide
+brew install --cask traian18/rusty/rusty-ide
 ```
 
 The app is signed with a Developer ID certificate and notarized by Apple.

@@ -1,5 +1,5 @@
 /**
- * AxiomTabContextMenu.tsx
+ * RustyTabContextMenu.tsx
  *
  * Floating context menu displayed on right-click on the canvas pane
  * (or on a boundary node). Provides quick access to node creation.
@@ -20,7 +20,7 @@ export interface ContextMenuPosition {
   screenY: number;
 }
 
-interface AxiomTabContextMenuProps {
+interface RustyTabContextMenuProps {
   position: ContextMenuPosition;
   rfInstance: ReactFlowInstance | null;
   tabId: string;
@@ -31,7 +31,7 @@ interface AxiomTabContextMenuProps {
   onAddGlobalChatNode: (x: number, y: number) => void;
 }
 
-export const AxiomTabContextMenu: React.FC<AxiomTabContextMenuProps> = ({
+export const RustyTabContextMenu: React.FC<RustyTabContextMenuProps> = ({
   position,
   rfInstance,
   hasGlobalChatNode,
@@ -108,7 +108,7 @@ export const AxiomTabContextMenu: React.FC<AxiomTabContextMenuProps> = ({
         disabled={hasGlobalChatNode}
         title={
           hasGlobalChatNode
-            ? "Only one Global Explorer can be added to an Axiom"
+            ? "Only one Global Explorer can be added to a Rusty"
             : undefined
         }
         onClick={addGlobalAtPosition}

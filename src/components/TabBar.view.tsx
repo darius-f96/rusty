@@ -1,7 +1,7 @@
 import React, { RefObject } from "react";
 import { X, Cpu, Settings, GitCommit, ChevronDown, FolderOpen, Columns, Wand2, BookOpen } from "lucide-react";
 import { FileIcon } from "../services/fileTypeService";
-import { AxiomIcon } from "./AxiomIcon";
+import { RustyIcon } from "./RustyIcon";
 import styles from "./TabBar.module.css";
 
 interface TabBarViewProps {
@@ -83,7 +83,7 @@ export const TabBarView: React.FC<TabBarViewProps> = ({
               )}
 
               {tab.type === "canvas" && (
-                <AxiomIcon
+                <RustyIcon
                   size={11}
                   className={
                     isActive
@@ -241,7 +241,7 @@ export const TabBarView: React.FC<TabBarViewProps> = ({
                     className={`${styles.menuRow} ${isActive ? styles.menuRowActive : ""}`}
                   >
                     <div className={styles.menuIdentity}>
-                      {tab.type === "canvas" && <AxiomIcon size={11} />}
+                      {tab.type === "canvas" && <RustyIcon size={11} />}
                       {tab.type === "file" && (
                         <FileIcon fileName={tab.title} size={11} />
                       )}

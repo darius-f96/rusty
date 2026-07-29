@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { MetricsTimeframe, UsageSummary, UsageTotals } from "../store";
 
-const METRICS_SUMMARY_PATH = ".axiom/metrics/summary.json";
+const METRICS_SUMMARY_PATH = ".rusty/metrics/summary.json";
 
 function emptyTotals(): UsageTotals {
   return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, calls: 0 };

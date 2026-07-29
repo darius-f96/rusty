@@ -1,4 +1,4 @@
-# Axiom theming
+# Rusty theming
 
 The application uses semantic theme tokens. Components describe the role of a
 color (`surface`, `foreground`, `status`, `log`, or `editor`) instead of using a
@@ -8,7 +8,7 @@ palette color directly.
 
 Add one entry to `themeSeeds` in `src/theme.ts`. A theme seed contains its name,
 explicit light/dark appearance, workbench surfaces, foregrounds, accent, border,
-and syntax palette. Axiom derives the complete `AppTheme` contract—including
+and syntax palette. Rusty derives the complete `AppTheme` contract—including
 primary/secondary colors, control states, status colors, logs, terminal, diff,
 and accessible muted text—from that entry. The Settings list is generated from
 the same registry.
@@ -40,7 +40,7 @@ resizing width—may remain inline.
 ## Typography
 
 Typography preferences are independent of themes and are persisted under
-`axiom_typography_preferences`. The root runtime exposes these roles:
+`rusty_typography_preferences`. The root runtime exposes these roles:
 
 - `--font-size-ide` and `--font-size-ui-*` for application chrome.
 - `--font-size-chat` and `--font-size-chat-*` for chat and Markdown.

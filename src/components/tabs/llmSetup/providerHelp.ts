@@ -6,7 +6,7 @@ const PROVIDER_HELP_TEXT: Record<string, string[]> = {
   "openai-codex": [
     "Uses your existing OpenAI Codex sign-in through the bundled official Codex app-server.",
     "Credentials are shared with Codex CLI/Desktop via ~/.codex.",
-    "Available models come from your account, while Axiom controls workspace tools and permissions.",
+    "Available models come from your account, while Rusty controls workspace tools and permissions.",
   ],
   anthropic: [
     "Connects directly to Anthropic's Claude API.",
@@ -15,7 +15,7 @@ const PROVIDER_HELP_TEXT: Record<string, string[]> = {
   "anthropic-claude-code": [
     "Uses Anthropic's official Claude Agent SDK and local Claude Code authentication.",
     "Sign in with Claude Code using /login, or provide ANTHROPIC_API_KEY in the sidecar environment.",
-    "Axiom supplies and controls the workspace tools.",
+    "Rusty supplies and controls the workspace tools.",
   ],
   opencode: [
     "Connects to OpenCode Zen and uses OPENCODE_API_KEY when the key is blank.",

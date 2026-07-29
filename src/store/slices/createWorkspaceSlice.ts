@@ -25,7 +25,7 @@ export const createWorkspaceSlice: WorkspaceSliceCreator = (set, get) => ({
       rootPath: path,
       editorGroups: [{
         id: "group_0",
-        openTabs: [{ id: "canvas", type: "canvas", title: "Axiom", key: "canvas" }],
+        openTabs: [{ id: "canvas", type: "canvas", title: "Rusty", key: "canvas" }],
         activeTabId: "canvas",
       }],
       activeGroupId: "group_0",
@@ -51,10 +51,10 @@ export const createWorkspaceSlice: WorkspaceSliceCreator = (set, get) => ({
   resetForBranchChange: () => set((state) => {
     const canvasTab = state.editorGroups
       .flatMap((group) => group.openTabs)
-      .find((tab) => tab.type === "canvas" || tab.type === "axiom") || {
+      .find((tab) => tab.type === "canvas" || tab.type === "rusty") || {
         id: "canvas",
         type: "canvas" as const,
-        title: "Axiom",
+        title: "Rusty",
         key: "canvas",
       };
     return {

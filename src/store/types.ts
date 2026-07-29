@@ -116,7 +116,7 @@ export interface GitStatusResult {
 
 export interface Tab {
   id: string;
-  type: "canvas" | "axiom" | "file" | "task" | "settings" | "llm-setup" | "git-diff" | "git-history" | "workspace" | "agent" | "skills" | "mcp-integration" | "onboarding" | "metrics";
+  type: "canvas" | "rusty" | "file" | "task" | "settings" | "llm-setup" | "git-diff" | "git-history" | "workspace" | "agent" | "skills" | "mcp-integration" | "onboarding" | "metrics";
   title: string;
   key: string;
   diffType?: "staged" | "unstaged" | "commit";

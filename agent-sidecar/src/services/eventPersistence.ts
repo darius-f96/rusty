@@ -48,7 +48,7 @@ export class FileEventPersistence implements EventPersistence {
   private readonly nextSequences = new Map<string, number>();
 
   constructor(workspaceRoot: string, options: FileEventPersistenceOptions = {}) {
-    this.root = path.join(workspaceRoot, ".axiom", "runs");
+    this.root = path.join(workspaceRoot, ".rusty", "runs");
     this.maxPayloadStringLength = options.maxPayloadStringLength ?? 20_000;
     this.retentionMs = options.retentionMs;
   }

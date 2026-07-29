@@ -1,5 +1,5 @@
 /**
- * GlobalChatNode — a planning and analysis node for the Axiom canvas.
+ * GlobalChatNode — a planning and analysis node for the Rusty canvas.
  *
  * This node serves as a conversational entry point where users discuss tasks,
  * set context, and build plans for downstream TaskNodes. It includes:
@@ -17,7 +17,7 @@
  * - **Single-responsibility.** Each sub-component (Header, Content, Footer, ResizeHandle)
  *   is extracted into its own file with a focused, documented interface.
  * - **Custom hooks** encapsulate resize geometry and scroll-wheel prevention.
- * - **Idiomatic & boring.** Follows established patterns from other Axiom node components.
+ * - **Idiomatic & boring.** Follows established patterns from other Rusty node components.
  */
 
 import React, { useState, memo, useContext, useRef } from "react";

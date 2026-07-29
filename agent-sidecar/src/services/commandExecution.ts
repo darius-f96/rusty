@@ -1,7 +1,7 @@
 /**
  * Non-interactive process runner for Pi's run_command tool.
  *
- * Commands are spawned without an implicit shell, so Axiom passes each argument
+ * Commands are spawned without an implicit shell, so Rusty passes each argument
  * literally rather than interpreting pipes, substitutions, redirects, or
  * chains. Working directories are canonicalized and must remain inside the
  * active workspace. Active processes are tracked by Pi session so Stop cancels

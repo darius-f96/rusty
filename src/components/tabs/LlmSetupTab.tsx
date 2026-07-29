@@ -168,7 +168,7 @@ export const LlmSetupTab: React.FC = () => {
     try {
       const result = await llmIntegrationService.testConnection(provider);
       setConnectionStatus((current) => ({ ...current, [provider.id]: "connected" }));
-      notify("Connection successful", `${provider.name} returned ${result.modelCount} models; ${result.supportedModelCount} are supported by Axiom.`, "success");
+      notify("Connection successful", `${provider.name} returned ${result.modelCount} models; ${result.supportedModelCount} are supported by Rusty.`, "success");
     } catch (err: any) {
       setConnectionStatus((current) => ({ ...current, [provider.id]: "failed" }));
       notify("Connection failed", err.message || "Could not connect to the provider.", "error");
@@ -624,10 +624,10 @@ export const LlmSetupTab: React.FC = () => {
                     )}
                     <div className="border-t border-[var(--border-color)]/50 pt-3 text-[10px] leading-relaxed text-[var(--text-muted)]">
                       {isCodex
-                        ? "The official Codex app-server manages credentials in the same ~/.codex account used by Codex CLI/Desktop. Axiom never stores the OAuth token in provider settings."
+                        ? "The official Codex app-server manages credentials in the same ~/.codex account used by Codex CLI/Desktop. Rusty never stores the OAuth token in provider settings."
                         : isClaudeCode
-                          ? "The official Claude Agent SDK uses the local Claude Code account or sidecar API environment. Axiom never copies Claude OAuth credentials into provider settings."
-                        : "GitHub Copilot CLI manages credentials, using the system credential store when available. Axiom never stores the OAuth token in provider settings."}
+                          ? "The official Claude Agent SDK uses the local Claude Code account or sidecar API environment. Rusty never copies Claude OAuth credentials into provider settings."
+                        : "GitHub Copilot CLI manages credentials, using the system credential store when available. Rusty never stores the OAuth token in provider settings."}
                     </div>
                   </div>
                 ) : (

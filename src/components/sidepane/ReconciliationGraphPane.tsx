@@ -54,7 +54,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
   const [reconciliationRevision, setReconciliationRevision] = useState(0);
   const [chatFilePath, setChatFilePath] = useState("");
   const [isTesting, setIsTesting] = useState(false);
-  const [buildCommand, setBuildCommand] = useState(() => localStorage.getItem(`axiom_build_command_${tabId}`) || "");
+  const [buildCommand, setBuildCommand] = useState(() => localStorage.getItem(`rusty_build_command_${tabId}`) || "");
   const testSocketRef = useRef<WebSocket | null>(null);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -335,7 +335,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
     if (isReconciling || isResetting) return;
     const confirmed = await confirm({
       title: "Remove reconciliation result?",
-      message: `${filePath.split(/[\\/]/).pop() || filePath} will return to Pending and must be reconciled again before Apply Axiom. Its TaskNode-owned VFS versions remain available.`,
+      message: `${filePath.split(/[\\/]/).pop() || filePath} will return to Pending and must be reconciled again before Apply Rusty. Its TaskNode-owned VFS versions remain available.`,
       confirmLabel: "Remove",
       kind: "warning",
     });
@@ -850,7 +850,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
             if (msg.success) {
               notify(
                 "Test Build Passed",
-                `Build succeeded after ${msg.attempts} attempt${msg.attempts === 1 ? "" : "s"}. Disk restored. You can now Apply Axiom to permanently write the working code.`,
+                `Build succeeded after ${msg.attempts} attempt${msg.attempts === 1 ? "" : "s"}. Disk restored. You can now Apply Rusty to permanently write the working code.`,
                 "success",
               );
             } else {
@@ -925,7 +925,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
   const ordinaryChangedFiles = taskModifiedFiles.filter((filePath) => !duplicatePathSet.has(filePath));
   const pendingCount = Object.keys(pendingDuplicateFiles).length;
 
-  // AxiomTab keeps this component mounted after its first open. Hiding only
+  // RustyTab keeps this component mounted after its first open. Hiding only
   // removes the visual pane; the socket, per-file checkpoints, and ledger
   // updates continue exactly as they do for an open pane.
   if (!isOpen) {
@@ -1323,7 +1323,7 @@ export const ReconciliationGraphPane: React.FC<ReconciliationGraphPaneProps> = (
             value={buildCommand}
             onChange={(e) => {
               setBuildCommand(e.target.value);
-              localStorage.setItem(`axiom_build_command_${tabId}`, e.target.value);
+              localStorage.setItem(`rusty_build_command_${tabId}`, e.target.value);
             }}
             placeholder="Build command (e.g. npm run build)"
             disabled={isTesting}
