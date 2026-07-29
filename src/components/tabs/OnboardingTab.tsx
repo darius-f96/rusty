@@ -279,7 +279,7 @@ export const OnboardingTab: React.FC = () => {
   // bumped per release) — read the actual running app version from Tauri instead.
   const [appVersion, setAppVersion] = useState(CURRENT_ONBOARDING_RELEASE.appVersion);
   useEffect(() => {
-    getVersion().then(setAppVersion).catch(() => {});
+    getVersion().then(setAppVersion).catch(() => { });
   }, []);
 
   const handleStart = () => {
@@ -335,7 +335,7 @@ export const OnboardingTab: React.FC = () => {
               </p>
               <div className="mt-9 flex flex-wrap gap-3">
                 <button onClick={handleStart} className="group inline-flex items-center gap-2 rounded-xl bg-[var(--accent-color)] px-5 py-3 text-xs font-mono font-bold text-[var(--color-primary-foreground)] shadow-lg hover:brightness-110 transition-all cursor-pointer">
-                  {rootPath ? "Create a Rusty" : "Choose a workspace"}<ArrowRight size={15} className="group-hover:translate-x-0.5 transition-transform" />
+                  {rootPath ? "Create a Code Canvas" : "Choose a workspace"}<ArrowRight size={15} className="group-hover:translate-x-0.5 transition-transform" />
                 </button>
                 <button onClick={() => scrollTo("workflow")} className="inline-flex items-center gap-2 rounded-xl border border-[var(--border-color)] bg-[var(--color-surface-elevated)] px-5 py-3 text-xs font-mono font-semibold text-[var(--text-light)] hover:border-[var(--border-active)] transition-colors cursor-pointer">
                   See the workflow<BookOpen size={14} />
