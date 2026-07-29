@@ -1,7 +1,7 @@
 /**
  * SidePane.tsx
  *
- * Inspector / chat side pane displayed alongside the Axiom canvas when a node
+ * Inspector / chat side pane displayed alongside the Rusty canvas when a node
  * is selected. Provides tabs for describing the node, viewing diffs, chatting
  * with the agent, monitoring console output, and browsing the VFS.
  *
@@ -14,7 +14,7 @@
  * - The footer (execute/stop) is extracted to `SidePaneFooter`.
  *
  * External consumers:
- * - `AxiomTab.tsx` imports `{ SidePane }` and renders it when a node that
+ * - `RustyTab.tsx` imports `{ SidePane }` and renders it when a node that
  *   supports a side pane is selected.
  */
 

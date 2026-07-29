@@ -256,7 +256,7 @@
   border-radius: 12px;
 }
 
-/* Scoped styles for terminal-like tabs (AgentTab and AxiomTab/CanvasTab) */
+/* Scoped styles for terminal-like tabs (AgentTab and RustyTab/CanvasTab) */
 .terminal-theme-tab,
 .terminal-theme-tab * {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;

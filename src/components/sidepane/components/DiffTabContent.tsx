@@ -272,7 +272,7 @@ export const DiffTabContent: React.FC<DiffTabContentProps> = ({
             <DiffEditor
               height="100%"
               language={getMonacoLanguageId(activeDiffFile)}
-              theme="axiom-custom-theme"
+              theme="rusty-custom-theme"
               original={originalCode}
               modified={displayCode}
               onMount={handleEditorMount}

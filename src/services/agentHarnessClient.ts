@@ -337,7 +337,7 @@ export function createAgentHarnessSocket(): WebSocket {
     get readyState() { return readyState; },
     get bufferedAmount() { return 0; },
     get url() { return SIDECAR_WS_URL; },
-    get protocol() { return `axiom-agent-v${AGENT_PROTOCOL_VERSION}`; },
+    get protocol() { return `rusty-agent-v${AGENT_PROTOCOL_VERSION}`; },
     get extensions() { return ""; },
     get binaryType() { return "blob" as BinaryType; },
     set binaryType(_value: BinaryType) {},

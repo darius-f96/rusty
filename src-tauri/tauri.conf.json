@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Axiom-IDE",
+  "productName": "Rusty-IDE",
   "version": "0.1.12",
-  "identifier": "com.suciuvictortraian.axiom",
+  "identifier": "com.suciuvictortraian.rusty",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Axiom IDE",
+        "title": "Rusty IDE",
         "width": 800,
         "height": 600,
         "maximized": false,

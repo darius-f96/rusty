@@ -19,7 +19,7 @@ test("empty response errors retain stop-reason diagnostics", () => {
 
 test("provider-neutral tool loop executes calls and continues to final text", async () => {
   const pi = await importEsm<any>("@earendil-works/pi-ai/compat");
-  const registration = pi.registerFauxProvider({ api: "axiom-faux-test", provider: "faux-provider" });
+  const registration = pi.registerFauxProvider({ api: "rusty-faux-test", provider: "faux-provider" });
   const observedReasoning: string[] = [];
   registration.setResponses([
     (_context: any, options: any) => {
@@ -76,7 +76,7 @@ test("provider-neutral tool loop executes calls and continues to final text", as
 
 test("provider-neutral tool loop can finish after a terminal write without resending its large arguments", async () => {
   const pi = await importEsm<any>("@earendil-works/pi-ai/compat");
-  const registration = pi.registerFauxProvider({ api: "axiom-faux-terminal-test", provider: "faux-terminal-provider" });
+  const registration = pi.registerFauxProvider({ api: "rusty-faux-terminal-test", provider: "faux-terminal-provider" });
   registration.setResponses([
     pi.fauxAssistantMessage([
       pi.fauxToolCall("write_file", { path: "/workspace/large.ts", content: "complete file content" }),

@@ -160,7 +160,7 @@ export const ManualReconciliationEditor: React.FC<ManualReconciliationEditorProp
   const handleResultEditorMount = useCallback((editor: any, monaco: any) => {
     resultEditorRef.current = editor;
     editor.addAction({
-      id: `axiom.manualReconciliation.inlineChat.${tabId}.${filePath}`,
+      id: `rusty.manualReconciliation.inlineChat.${tabId}.${filePath}`,
       label: "Open Inline Chat",
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
       run: openInlineChat,
@@ -343,7 +343,7 @@ export const ManualReconciliationEditor: React.FC<ManualReconciliationEditorProp
               height="100%"
               path={`inmemory://manual-reconciliation/${encodeURIComponent(tabId)}/${encodeURIComponent(filePath)}/result`}
               language={getMonacoLanguageId(filePath)}
-              theme="axiom-custom-theme"
+              theme="rusty-custom-theme"
               value={draft}
               onChange={(value) => setDraft(value ?? "")}
               onMount={handleResultEditorMount}
@@ -455,7 +455,7 @@ export const ManualReconciliationEditor: React.FC<ManualReconciliationEditorProp
                 key={activeVariant.taskId}
                 height="100%"
                 language={getMonacoLanguageId(filePath)}
-                theme="axiom-custom-theme"
+                theme="rusty-custom-theme"
                 original={draft}
                 modified={activeVariant.content}
                 onMount={handleVariantEditorMount}

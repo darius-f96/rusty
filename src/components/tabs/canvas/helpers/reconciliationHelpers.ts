@@ -4,7 +4,7 @@
  * Pure business logic for reconciling and applying VFS changes from
  * TaskNode execution outputs to the physical file system.
  *
- * These functions encapsulate the "Apply Axiom" pipeline steps without
+ * These functions encapsulate the "Apply Rusty" pipeline steps without
  * depending on React state or store instances directly.
  */
 
@@ -37,7 +37,7 @@ export interface ApplyChangesResult {
 }
 
 /**
- * Orchestrates the full "Apply Axiom" flow:
+ * Orchestrates the full "Apply Rusty" flow:
  *
  * 1. Checks that reconciliation is not running.
  * 2. Queries the reconciliation service for currently tracked files.
@@ -61,7 +61,7 @@ export async function reconcileAndApplyChanges(
   if (isReconciliationRunning) {
     return {
       success: false,
-      message: "Wait for reconciliation to finish or stop it before applying Axiom.",
+      message: "Wait for reconciliation to finish or stop it before applying Rusty.",
       notificationType: "info",
     };
   }
@@ -110,7 +110,7 @@ export async function reconcileAndApplyChanges(
       success: false,
       message: `${unreconciledFiles.length} overlapping file${
         unreconciledFiles.length === 1 ? "" : "s"
-      } ${verb} reconciliation before Apply Axiom.`,
+      } ${verb} reconciliation before Apply Rusty.`,
       notificationType: "info",
     };
   }

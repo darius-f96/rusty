@@ -332,7 +332,7 @@ export async function reconciliateGraph(ws: WebSocket, data: any): Promise<void>
       return [readVfsTool, writeVfsTool];
     };
 
-    const systemPrompt = `You are a code reconciliation model inside a spatial development canvas called Axiom.
+    const systemPrompt = `You are a code reconciliation model inside a spatial development canvas called Rusty.
 
 WHAT HAPPENED:
 The user broke a larger plan into small, bounded task nodes. Each node executed independently with its own specific instructions and produced its own version of certain files. The file you are about to receive was touched by multiple task nodes — meaning each of them had a legitimate requirement for that file and produced their own implementation of it.
@@ -451,7 +451,7 @@ ${JSON.stringify(compactFileContext(fileContext), null, 2)}`;
       }
       response = truncateContextText(reports.join("\n\n---\n\n"), 24_000);
     } else {
-      response = "No unreconciled overlapping task files were supplied. Ordinary changed files remain TaskNode-owned for Apply Axiom.";
+      response = "No unreconciled overlapping task files were supplied. Ordinary changed files remain TaskNode-owned for Apply Rusty.";
       sendLog("No pending overlap cases require model review.");
     }
 

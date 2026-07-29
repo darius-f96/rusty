@@ -1,4 +1,4 @@
-export const CANVAS_NODE_FOCUS_EVENT = "axiom-canvas-node-focus";
+export const CANVAS_NODE_FOCUS_EVENT = "rusty-canvas-node-focus";
 
 export interface CanvasNodeFocusDetail {
   tabId: string;

@@ -26,7 +26,7 @@ pub struct GitStatusResult {
     pub unstaged: Vec<GitFileStatus>,
 }
 
-/// Details from an Axiom smart branch switch. `stashed` refers to the branch
+/// Details from a Rusty smart branch switch. `stashed` refers to the branch
 /// being left; `restored` refers to a previously saved state for the branch
 /// that was entered.
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -63,24 +63,24 @@ fn working_tree_is_dirty(root_dir: &str) -> Result<bool, String> {
     Ok(!output.stdout.is_empty())
 }
 
-fn axiom_stash_marker(branch: &str) -> String {
-    format!("axiom-smart-switch:{}", branch)
+fn rusty_stash_marker(branch: &str) -> String {
+    format!("rusty-smart-switch:{}", branch)
 }
 
 fn stash_current_branch(root_dir: &str, branch: &str) -> Result<bool, String> {
     if !working_tree_is_dirty(root_dir)? {
         return Ok(false);
     }
-    let marker = axiom_stash_marker(branch);
+    let marker = rusty_stash_marker(branch);
     let output = git_command(root_dir, &["stash", "push", "--include-untracked", "-m", &marker])?;
     command_error(&output)?;
     Ok(true)
 }
 
-fn axiom_stash_ref_for_branch(root_dir: &str, branch: &str) -> Result<Option<String>, String> {
+fn rusty_stash_ref_for_branch(root_dir: &str, branch: &str) -> Result<Option<String>, String> {
     let output = git_command(root_dir, &["stash", "list", "--format=%gd%x09%s"])?;
     command_error(&output)?;
-    let marker = axiom_stash_marker(branch);
+    let marker = rusty_stash_marker(branch);
     for line in String::from_utf8_lossy(&output.stdout).lines() {
         if let Some((stash_ref, subject)) = line.split_once('\t') {
             if subject.ends_with(&marker) {
@@ -91,8 +91,8 @@ fn axiom_stash_ref_for_branch(root_dir: &str, branch: &str) -> Result<Option<Str
     Ok(None)
 }
 
-fn restore_axiom_stash_for_branch(root_dir: &str, branch: &str) -> Result<bool, String> {
-    let Some(stash_ref) = axiom_stash_ref_for_branch(root_dir, branch)? else {
+fn restore_rusty_stash_for_branch(root_dir: &str, branch: &str) -> Result<bool, String> {
+    let Some(stash_ref) = rusty_stash_ref_for_branch(root_dir, branch)? else {
         return Ok(false);
     };
     let output = git_command(root_dir, &["stash", "pop", &stash_ref])?;
@@ -100,7 +100,7 @@ fn restore_axiom_stash_for_branch(root_dir: &str, branch: &str) -> Result<bool, 
         Ok(true)
     } else {
         Err(format!(
-            "Switched branches, but Axiom could not restore saved changes for '{}'. Resolve the conflict, then use the preserved stash {}. {}",
+            "Switched branches, but Rusty could not restore saved changes for '{}'. Resolve the conflict, then use the preserved stash {}. {}",
             branch,
             stash_ref,
             String::from_utf8_lossy(&output.stderr).trim()
@@ -616,7 +616,7 @@ pub async fn git_checkout_branch(root_dir: String, branch_name: String) -> Resul
 }
 
 /// IntelliJ-style branch switching for a single working directory. Dirty work
-/// is saved to an Axiom-tagged stash before checkout and is restored when the
+/// is saved to a Rusty-tagged stash before checkout and is restored when the
 /// user later returns to that same branch. The stash preserves staged state,
 /// unstaged changes, and untracked files.
 #[tauri::command]
@@ -628,7 +628,7 @@ pub async fn git_smart_checkout_branch(root_dir: String, branch_name: String) ->
     let stashed = stash_current_branch(&root_dir, &source_branch)?;
     checkout_branch(&root_dir, &branch_name)?;
     let destination_branch = current_branch_name(&root_dir)?;
-    let restored = restore_axiom_stash_for_branch(&root_dir, &destination_branch)?;
+    let restored = restore_rusty_stash_for_branch(&root_dir, &destination_branch)?;
     Ok(SmartBranchSwitchResult { stashed, restored })
 }
 

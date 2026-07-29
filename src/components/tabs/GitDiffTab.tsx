@@ -148,7 +148,7 @@ export const GitDiffTab: React.FC<GitDiffTabProps> = ({ tab, groupId }) => {
           <DiffEditor
             height="100%"
             language={getEditorLanguage(tab.key)}
-            theme="axiom-custom-theme"
+            theme="rusty-custom-theme"
             original={gitOriginalCode}
             modified={gitModifiedCode}
             onMount={handleEditorMount}

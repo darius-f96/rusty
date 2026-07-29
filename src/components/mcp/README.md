@@ -3,7 +3,7 @@
 `McpIntegrationModal` is a self-contained form for adding/editing a single MCP
 (Model Context Protocol) server entry. It is rendered inside `McpIntegrationTab`,
 which manages the full collection and persists it to `localStorage` under
-`axiom_mcp_config`.
+`rusty_mcp_config`.
 
 ## Files
 
@@ -79,7 +79,7 @@ the workspace:
 
 ```ts
 // saveSecureConfig
-await SecureStorageService.saveSecureData("axiom_secure_config", {
+await SecureStorageService.saveSecureData("rusty_secure_config", {
   ...,
   mcpServers: state.mcpServers,
 });

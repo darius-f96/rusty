@@ -110,7 +110,7 @@ You are a PLANNING AND ANALYSIS assistant. You MUST follow these rules strictly:
 <user prompt>
 `;
 
-    const systemPrompt = `You are a codebase exploration assistant inside a spatial development canvas called Axiom.
+    const systemPrompt = `You are a codebase exploration assistant inside a spatial development canvas called Rusty.
 Your job is to analyze the workspace and provide architectural summaries, patterns, and guidelines.
 
 Workspace root: ${workspaceRoot || "unknown"}

@@ -42,7 +42,7 @@ change what process is executed.
 ## Execution boundaries
 
 - Input is structured as `program`, `args`, `cwd`, and `timeoutMs`.
-- Processes use `shell: false`; Axiom passes arguments literally rather than
+- Processes use `shell: false`; Rusty passes arguments literally rather than
   interpreting pipes, substitutions, redirects, or command chains. An
   explicitly approved interpreter may still interpret its own input.
 - `cwd` is canonicalized and must resolve inside the current workspace. Symlink
@@ -61,7 +61,7 @@ change what process is executed.
   path. This prevents delegation from bypassing the dialog.
 
 `run_command` always targets physical workspace state. Task and Global Chat
-`write_file` operations still target their Axiom-tab VFS, so terminal commands
+`write_file` operations still target their Rusty-tab VFS, so terminal commands
 must never be described as VFS writes.
 
 Task Nodes structurally filter `run_command` from skill-provided tool lists.

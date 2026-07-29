@@ -14,7 +14,7 @@ export const createEditorSlice: WorkspaceSliceCreator = (set) => ({
   editorGroups: [{
     id: "group_0",
     openTabs: [
-      { id: "welcome", type: "onboarding", title: "Welcome to Axiom", key: "onboarding" },
+      { id: "welcome", type: "onboarding", title: "Welcome to Rusty", key: "onboarding" },
       { id: "workspace_select", type: "workspace", title: "Workspaces", key: "workspace" },
     ],
     activeTabId: "welcome",
@@ -25,13 +25,13 @@ export const createEditorSlice: WorkspaceSliceCreator = (set) => ({
   openTab: (tab, groupId) => set((state) => {
     const targetGroupId = groupId || state.activeGroupId;
     const isSingleton = ["llm-setup", "mcp-integration", "settings", "skills", "workspace", "onboarding"].includes(tab.type);
-    const isAxiomTab = tab.type === "canvas" || tab.type === "axiom";
+    const isRustyTab = tab.type === "canvas" || tab.type === "rusty";
 
     for (const group of state.editorGroups) {
       const existingTab = group.openTabs.find((candidate) => {
         if (isSingleton && candidate.type === tab.type) return true;
-        return isAxiomTab
-          && (candidate.type === "canvas" || candidate.type === "axiom")
+        return isRustyTab
+          && (candidate.type === "canvas" || candidate.type === "rusty")
           && candidate.key === tab.key;
       });
       if (existingTab) {
@@ -98,7 +98,7 @@ export const createEditorSlice: WorkspaceSliceCreator = (set) => ({
     } else if (state.editorGroups.length === 1) {
       const fallbackGroup = {
         id: targetGroup.id,
-        openTabs: [{ id: "welcome", type: "onboarding" as const, title: "Welcome to Axiom", key: "onboarding" }],
+        openTabs: [{ id: "welcome", type: "onboarding" as const, title: "Welcome to Rusty", key: "onboarding" }],
         activeTabId: "welcome",
       };
       updates = { editorGroups: [fallbackGroup], activeGroupId: fallbackGroup.id, groupSizes: [1] };

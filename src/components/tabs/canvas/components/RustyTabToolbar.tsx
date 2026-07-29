@@ -1,7 +1,7 @@
 /**
- * AxiomTabToolbar.tsx
+ * RustyTabToolbar.tsx
  *
- * Top-right toolbar for the Axiom canvas. Contains:
+ * Top-right toolbar for the Rusty canvas. Contains:
  * - Global Chat Node navigation button
  * - Boundary navigation dropdown
  * - Add Node dropdown (task, context, MCP, sticky, boundary, global chat)
@@ -30,7 +30,7 @@ import { focusCanvasNode } from "../../../../services/canvasNodeNavigation";
 import { getCanvasCenter } from "../helpers/canvasHelpers";
 
 /** Props for the main toolbar component. */
-interface AxiomTabToolbarProps {
+interface RustyTabToolbarProps {
   tabId: string;
   boundaryNodes: Node[];
   globalChatNode: Node | undefined;
@@ -50,7 +50,7 @@ interface AxiomTabToolbarProps {
   onApplyChanges: () => void;
 }
 
-export const AxiomTabToolbar: React.FC<AxiomTabToolbarProps> = ({
+export const RustyTabToolbar: React.FC<RustyTabToolbarProps> = ({
   tabId,
   boundaryNodes,
   globalChatNode,
@@ -169,7 +169,7 @@ const GlobalChatNavButton: React.FC<{
     title={
       hasGlobalChatNode
         ? `Jump to ${String(globalChatNode?.data?.name || "Global Chat")}`
-        : "No Global Chat Node in this Axiom"
+        : "No Global Chat Node in this Rusty"
     }
     className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] hover:bg-[var(--bg-header)] disabled:opacity-40 disabled:cursor-not-allowed text-[var(--text-light)] text-xs font-mono font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition-all shadow-md hover:border-[var(--border-active)] cursor-pointer nodrag"
   >
@@ -215,7 +215,7 @@ const BoundaryNavMenu: React.FC<BoundaryNavMenuProps> = ({
         title={
           boundaryNodes.length > 0
             ? "Jump to a boundary"
-            : "No boundaries in this Axiom"
+            : "No boundaries in this Rusty"
         }
         className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] hover:bg-[var(--bg-header)] disabled:opacity-40 disabled:cursor-not-allowed text-[var(--text-light)] text-xs font-mono font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition-all shadow-md hover:border-[var(--border-active)] cursor-pointer nodrag"
       >
@@ -348,7 +348,7 @@ const AddNodeMenu: React.FC<AddNodeMenuProps> = ({
             disabled={hasGlobalChatNode}
             title={
               hasGlobalChatNode
-                ? "Only one Global Explorer can be added to an Axiom"
+                ? "Only one Global Explorer can be added to a Rusty"
                 : undefined
             }
             onClick={() => {
@@ -443,11 +443,11 @@ const ActionMenu: React.FC<ActionMenuProps> = ({
           />
           <ActionMenuItem
             icon={<Save size={13} className="text-[var(--color-status-success)]" />}
-            label="Save Axiom"
+            label="Save Rusty"
             onClick={() => executeAction(onSavePipeline)}
           />
           <div className="border-t border-[var(--border-color)] my-1" />
-          <ApplyAxiomButton
+          <ApplyRustyButton
             isReconciliationRunning={isReconciliationRunning}
             isPipelineApplied={isPipelineApplied}
             onClick={() => {
@@ -477,8 +477,8 @@ const ActionMenuItem: React.FC<{
   </button>
 );
 
-/** The "Apply Axiom" button with context-dependent styling and text. */
-const ApplyAxiomButton: React.FC<{
+/** The "Apply Rusty" button with context-dependent styling and text. */
+const ApplyRustyButton: React.FC<{
   isReconciliationRunning: boolean;
   isPipelineApplied: boolean;
   onClick: () => void;
@@ -502,7 +502,7 @@ const ApplyAxiomButton: React.FC<{
         className="w-full text-left px-3 py-2 flex items-center space-x-2 hover:bg-[var(--accent-bg)] text-[var(--color-status-success)] cursor-pointer transition-colors"
       >
         <CheckSquare size={13} className="text-[var(--color-status-success)]" />
-        <span>Apply Axiom Again</span>
+        <span>Apply Rusty Again</span>
       </button>
     );
   }
@@ -513,7 +513,7 @@ const ApplyAxiomButton: React.FC<{
       className="w-full text-left px-3 py-2 flex items-center space-x-2 hover:bg-[var(--accent-bg)] hover:text-[var(--text-light)] text-[var(--text-normal)] cursor-pointer transition-colors"
     >
       <CheckSquare size={13} className="text-[var(--accent-color)]" />
-      <span>Apply Axiom</span>
+      <span>Apply Rusty</span>
     </button>
   );
 };

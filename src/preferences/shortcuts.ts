@@ -2,7 +2,7 @@ export type ShortcutAction = "closeActiveTab" | "openSearch" | "toggleExplorer";
 
 export type KeyboardShortcutPreferences = Record<ShortcutAction, string>;
 
-export const SHORTCUT_STORAGE_KEY = "axiom_keyboard_shortcuts";
+export const SHORTCUT_STORAGE_KEY = "rusty_keyboard_shortcuts";
 export const SHORTCUT_STORAGE_VERSION = 1;
 
 export const SHORTCUT_DEFAULTS: KeyboardShortcutPreferences = {

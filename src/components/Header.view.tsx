@@ -1,6 +1,6 @@
 import React from "react";
 import { Search } from "lucide-react";
-import { AxiomIcon } from "./AxiomIcon";
+import { RustyIcon } from "./RustyIcon";
 import styles from "./Header.module.css";
 
 interface HeaderViewProps {
@@ -14,9 +14,9 @@ export const HeaderView: React.FC<HeaderViewProps> = ({ onSearchOpen, searchShor
     <header className={styles.header}>
       {/* Left Area: Logo */}
       <div className={styles.brand}>
-        <AxiomIcon size={20} />
+        <RustyIcon size={20} />
         <span className={styles.brandName}>
-          Axiom
+          Rusty
         </span>
       </div>
 

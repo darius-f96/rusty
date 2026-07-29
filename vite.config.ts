@@ -28,8 +28,8 @@ export default defineConfig(async () => ({
     watch: {
       // 3. tell Vite to ignore watching `src-tauri` and `agent-sidecar`
       // Canvas autosaves are runtime data. Watching them can trigger needless
-      // dev-server work (or a full reload when Axiom is opened on its own repo).
-      ignored: ["**/src-tauri/**", "**/agent-sidecar/**", "**/.axiom/**", "**/node_modules/**"],
+      // dev-server work (or a full reload when Rusty is opened on its own repo).
+      ignored: ["**/src-tauri/**", "**/agent-sidecar/**", "**/.rusty/**", "**/node_modules/**"],
     },
   },
 }));

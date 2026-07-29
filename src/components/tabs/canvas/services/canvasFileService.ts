@@ -19,7 +19,7 @@ const autoSaveStates = new Map<string, AutoSaveState>();
 const sanitizedCanvasName = (title: string) =>
   title.replace(/[^a-zA-Z0-9_\-]/g, "_").toLowerCase() || "untitled_pipeline";
 
-const canvasDirectory = (rootPath: string) => `${rootPath}/.axiom/canvas`;
+const canvasDirectory = (rootPath: string) => `${rootPath}/.rusty/canvas`;
 
 const canvasPath = (rootPath: string, fileName: string) =>
   `${canvasDirectory(rootPath)}/${fileName}.json`;

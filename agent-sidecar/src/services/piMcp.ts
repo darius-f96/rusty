@@ -4,10 +4,10 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { importEsm } from "./esmImport";
 
-export async function writeMcpConfig(workspaceRoot: string, axiomServers: any[]): Promise<boolean> {
+export async function writeMcpConfig(workspaceRoot: string, rustyServers: any[]): Promise<boolean> {
   const mcpServers: Record<string, any> = {};
 
-  for (const server of axiomServers || []) {
+  for (const server of rustyServers || []) {
     if (server.enabled === false) continue;
 
     const transportType = server.transport?.type || "stdio";
@@ -88,7 +88,7 @@ function resolveInstalledPackageDir(packageName: string): string {
 }
 
 /**
- * Loads Pi packages that extend every Axiom agent session.
+ * Loads Pi packages that extend every Rusty agent session.
  *
  * `pi-web-access` is independent of MCP configuration, so this loader must be
  * created even when the canvas has no MCP nodes. The MCP extension still reads

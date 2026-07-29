@@ -129,7 +129,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ tab, groupId: _groupId }) =>
     if (!rootPath) return;
     setLoadingHistory(true);
     try {
-      const chatsDir = `${rootPath}/.axiom/chats`;
+      const chatsDir = `${rootPath}/.rusty/chats`;
       const tree = await invoke<any[]>("get_directory_structure", { rootDir: chatsDir });
       const chatFiles = (tree || []).filter((f: any) => f.name.endsWith(".json"));
 

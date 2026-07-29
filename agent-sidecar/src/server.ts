@@ -1,10 +1,10 @@
 /**
- * Axiom Agent Sidecar Server
+ * Rusty Agent Sidecar Server
  * 
  * Architectural Overview:
  * 
  *    ┌────────────────────────────────────────────────────────────────────
- *    │                      Axiom Frontend                      │
+ *    │                      Rusty Frontend                      │
  *    └─────────────────────────────────┬───────────────────────────┘
  *                                 │ (WebSocket on Port 4000)
  *                                 ▼
@@ -153,13 +153,13 @@ const allowedOrigins = new Set([
   "https://tauri.localhost",
   "http://localhost:1420",
   "http://127.0.0.1:1420",
-  ...(process.env.AXIOM_WEBVIEW_ORIGIN ? [process.env.AXIOM_WEBVIEW_ORIGIN] : []),
+  ...(process.env.RUSTY_WEBVIEW_ORIGIN ? [process.env.RUSTY_WEBVIEW_ORIGIN] : []),
 ]);
 const isAllowedOrigin = (origin: string | undefined) => !origin || allowedOrigins.has(origin);
 
 app.use(cors({
   origin(origin, callback) {
-    callback(isAllowedOrigin(origin) ? null : new Error("Origin is not allowed by the Axiom sidecar."), isAllowedOrigin(origin));
+    callback(isAllowedOrigin(origin) ? null : new Error("Origin is not allowed by the Rusty sidecar."), isAllowedOrigin(origin));
   },
 }));
 app.use(express.json());
@@ -290,7 +290,7 @@ const wss = new WebSocketServer({ server });
 
 wss.on("connection", (ws: WebSocket, req: http.IncomingMessage) => {
   if (!isAllowedOrigin(req.headers.origin)) {
-    ws.close(1008, "Origin is not allowed by the Axiom sidecar.");
+    ws.close(1008, "Origin is not allowed by the Rusty sidecar.");
     return;
   }
   const parsedUrl = new URL(req.url || "", "http://localhost");

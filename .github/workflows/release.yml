@@ -84,14 +84,14 @@ jobs:
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
-          APP="src-tauri/target/release/bundle/macos/Axiom-IDE.app"
+          APP="src-tauri/target/release/bundle/macos/Rusty-IDE.app"
           VERSION="$(node -p "require('./src-tauri/tauri.conf.json').version")"
-          OUT="Axiom-IDE_${VERSION}_aarch64.dmg"
+          OUT="Rusty-IDE_${VERSION}_aarch64.dmg"
           STAGING="$(mktemp -d)"
 
           cp -R "$APP" "$STAGING/"
           ln -s /Applications "$STAGING/Applications"
-          hdiutil create -volname "Axiom-IDE" -srcfolder "$STAGING" -ov -format UDZO "$OUT"
+          hdiutil create -volname "Rusty-IDE" -srcfolder "$STAGING" -ov -format UDZO "$OUT"
           codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$OUT"
 
           echo "DMG_PATH=$OUT" >> "$GITHUB_ENV"
@@ -100,8 +100,8 @@ jobs:
 
       - name: Verify notarization
         run: |
-          xcrun stapler validate "src-tauri/target/release/bundle/macos/Axiom-IDE.app"
-          spctl -a -vvv --type execute "src-tauri/target/release/bundle/macos/Axiom-IDE.app"
+          xcrun stapler validate "src-tauri/target/release/bundle/macos/Rusty-IDE.app"
+          spctl -a -vvv --type execute "src-tauri/target/release/bundle/macos/Rusty-IDE.app"
 
       - name: Create GitHub release
         env:
@@ -109,18 +109,18 @@ jobs:
         run: |
           gh release create "${{ github.ref_name }}" "$DMG_PATH" \
             --repo "${{ github.repository }}" \
-            --title "Axiom-IDE ${{ github.ref_name }}" \
+            --title "Rusty-IDE ${{ github.ref_name }}" \
             --notes "macOS build, signed with a Developer ID certificate and notarized by Apple. Apple Silicon (aarch64) only."
 
       - name: Update Homebrew tap
         env:
           TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
-          git clone "https://x-access-token:${TAP_TOKEN}@github.com/traian18/homebrew-axiom.git" tap
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/traian18/homebrew-rusty.git" tap
           cd tap
-          sed -i '' "s/version \".*\"/version \"$APP_VERSION\"/" Casks/axiom-ide.rb
-          sed -i '' "s/sha256 \".*\"/sha256 \"$DMG_SHA256\"/" Casks/axiom-ide.rb
-          git -c user.name="axiom-release-bot" -c user.email="actions@users.noreply.github.com" commit -am "axiom-ide ${APP_VERSION}"
+          sed -i '' "s/version \".*\"/version \"$APP_VERSION\"/" Casks/rusty-ide.rb
+          sed -i '' "s/sha256 \".*\"/sha256 \"$DMG_SHA256\"/" Casks/rusty-ide.rb
+          git -c user.name="rusty-release-bot" -c user.email="actions@users.noreply.github.com" commit -am "rusty-ide ${APP_VERSION}"
           git push
 
       - name: Clean up keychain

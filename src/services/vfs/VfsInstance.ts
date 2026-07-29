@@ -24,7 +24,7 @@ import * as trackerActions from "./actions/trackerActions";
 import * as bulkActions from "./actions/bulkActions";
 import * as lifecycleActions from "./actions/lifecycleActions";
 
-export const VFS_CHANGED_EVENT = "axiom-vfs-changed";
+export const VFS_CHANGED_EVENT = "rusty-vfs-changed";
 
 export interface VfsChangedDetail {
   tabId: string;

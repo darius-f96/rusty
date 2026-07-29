@@ -15,7 +15,7 @@
  *        +--+---------------------+-------------------+--+
  *           |                     |                   |
  *           v                     v                   v
- *      FileTabHooks         AxiomTabHooks       SettingsTabHooks
+ *      FileTabHooks         RustyTabHooks       SettingsTabHooks
  *   (onSave, canClose)     (getVfsMemory,     (saveSecureConfig)
  *                          onFocus, onSave)
  */
@@ -36,7 +36,7 @@ export interface TabTypeConfig {
 }
 
 export const TAB_CONFIGS: Record<string, TabTypeConfig> = {
-  canvas: { type: "canvas", label: "Axiom Canvas", allowDuplicates: true, isSingleton: false }, // Mapped for compatibility
+  canvas: { type: "canvas", label: "Rusty Canvas", allowDuplicates: true, isSingleton: false }, // Mapped for compatibility
   file: { type: "file", label: "File Editor", allowDuplicates: true, isSingleton: false },
   task: { type: "task", label: "Task Auditor", allowDuplicates: true, isSingleton: false },
   settings: { type: "settings", label: "Settings", allowDuplicates: false, isSingleton: true },
@@ -47,7 +47,7 @@ export const TAB_CONFIGS: Record<string, TabTypeConfig> = {
   agent: { type: "agent", label: "Agent Mode", allowDuplicates: true, isSingleton: false }, // different conversations
   skills: { type: "skills", label: "Skills", allowDuplicates: false, isSingleton: true },
   "mcp-integration": { type: "mcp-integration", label: "MCP Integration", allowDuplicates: false, isSingleton: true },
-  onboarding: { type: "onboarding", label: "Welcome to Axiom", allowDuplicates: false, isSingleton: true },
+  onboarding: { type: "onboarding", label: "Welcome to Rusty", allowDuplicates: false, isSingleton: true },
   metrics: { type: "metrics", label: "Token Metrics", allowDuplicates: false, isSingleton: true },
 };
 

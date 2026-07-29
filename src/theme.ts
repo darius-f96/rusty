@@ -782,14 +782,14 @@ export function applyThemeProperties(themeDefinition: AppTheme) {
 
   const favicon = document.querySelector("link[rel='icon']");
   if (favicon) {
-    favicon.setAttribute("href", themeDefinition.appearance === "light" ? "/axiom-light.png" : "/axiom-dark.png");
+    favicon.setAttribute("href", themeDefinition.appearance === "light" ? "/rusty-light.png" : "/rusty-dark.png");
     favicon.setAttribute("type", "image/png");
   }
 }
 
 /** Registers the active application theme with Monaco. */
 export function defineMonacoTheme(monaco: any, t: AppTheme) {
-  monaco.editor.defineTheme("axiom-custom-theme", {
+  monaco.editor.defineTheme("rusty-custom-theme", {
     base: t.appearance === "light" ? "vs" : "vs-dark",
     inherit: true,
     semanticHighlighting: true,

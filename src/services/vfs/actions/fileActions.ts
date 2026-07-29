@@ -24,7 +24,7 @@ export async function readFile(tabId: string, path: string): Promise<string> {
 
 /**
  * Write a file into the in-memory VFS cache.
- * The file is NOT written to disk — it remains in memory until Apply Axiom.
+ * The file is NOT written to disk — it remains in memory until Apply Rusty.
  * If a nodeId is provided, the file is tracked as belonging to that node.
  *
  * @param tabId   - The canvas tab this VFS belongs to

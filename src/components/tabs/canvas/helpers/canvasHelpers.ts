@@ -1,7 +1,7 @@
 /**
  * canvasHelpers.ts
  *
- * Pure utility functions used by the Axiom canvas components.
+ * Pure utility functions used by the Rusty canvas components.
  * These helpers have no React or store dependencies.
  */
 

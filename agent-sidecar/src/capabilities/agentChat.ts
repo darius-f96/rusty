@@ -409,7 +409,7 @@ export async function agentChat(ws: WebSocket, data: any): Promise<void> {
                   tokensUsed += sample.totalTokens || (sample.input || 0) + (sample.output || 0);
                   usageReporter(sample);
                 },
-                systemPrompt: `You are a read-only Axiom subagent. Investigate only the assigned task using the provided harness tools.
+                systemPrompt: `You are a read-only Rusty subagent. Investigate only the assigned task using the provided harness tools.
 - Do not create, edit, move, or delete files.
 - Do not run commands and do not delegate further.
 - Return a concise findings memo with relevant file paths, concrete evidence, risks, and a clear recommendation for the parent agent.
@@ -475,7 +475,7 @@ ${delegatedTask.excludedScope?.length ? `- Excluded scope: ${delegatedTask.exclu
         : []),
     ].join("\n");
 
-    const defaultSystemPrompt = `You are an AI coding agent operating inside the Axiom spatial development canvas.
+    const defaultSystemPrompt = `You are an AI coding agent operating inside the Rusty spatial development canvas.
 You help the user analyze, modify, and implement code in their workspace.
 
 Workspace root: ${workspaceRoot || "unknown"}

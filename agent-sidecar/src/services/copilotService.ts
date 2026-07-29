@@ -101,7 +101,7 @@ function runtimeEnvWithDistDir(): Record<string, string> {
 }
 
 function keychainEnabledRuntimeConnection() {
-  // Empty mode provides Axiom's required session isolation, but the SDK also sets
+  // Empty mode provides Rusty's required session isolation, but the SDK also sets
   // COPILOT_DISABLE_KEYTAR=1 in that mode. Launch through the bundled Node runtime
   // and remove only that flag so the CLI can read the credential it saved in the
   // current user's system keychain.
@@ -580,7 +580,7 @@ export async function completeCopilotText(options: {
   let abortHandler: (() => void) | undefined;
   try {
     session = await sdk.createSession({
-      clientName: "Axiom",
+      clientName: "Rusty",
       model: options.modelId,
       reasoningEffort: copilotReasoningEffort(options.reasoning),
       streaming: false,
@@ -638,7 +638,7 @@ export async function callCopilotWithToolsStreaming(options: {
 
   try {
     session = await sdk.createSession({
-      clientName: "Axiom",
+      clientName: "Rusty",
       model: options.modelId,
       reasoningEffort: copilotReasoningEffort(options.reasoning),
       streaming: true,

@@ -14,7 +14,7 @@ export function ThemeRuntime() {
 
     loader.init().then((monaco) => {
       defineMonacoTheme(monaco, theme);
-      monaco.editor.setTheme("axiom-custom-theme");
+      monaco.editor.setTheme("rusty-custom-theme");
       // No real LSP is attached yet (LSP_EDITOR_ENABLED is off), so Monaco's
       // built-in TS worker would otherwise flag false-positive module/JSX
       // errors with no awareness of this project's actual tsconfig.

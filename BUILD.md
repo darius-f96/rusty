@@ -1,4 +1,4 @@
-# Building Axiom-IDE
+# Building Rusty-IDE
 
 ## Prerequisites
 
@@ -89,23 +89,23 @@ npm run tauri build -- --bundles msi
 
 | Bundle | Path |
 |--------|------|
-| App bundle | `src-tauri/target/release/bundle/macos/Axiom-IDE.app` |
-| DMG | `src-tauri/target/release/bundle/dmg/Axiom-IDE_0.1.0_<arch>.dmg` |
+| App bundle | `src-tauri/target/release/bundle/macos/Rusty-IDE.app` |
+| DMG | `src-tauri/target/release/bundle/dmg/Rusty-IDE_0.1.0_<arch>.dmg` |
 
 ### Windows
 
 | Bundle | Path |
 |--------|------|
-| NSIS installer | `src-tauri/target/release/bundle/nsis/Axiom-IDE_0.1.0_<arch>-setup.exe` |
-| MSI | `src-tauri/target/release/bundle/msi/Axiom-IDE_0.1.0_<arch>.msi` |
+| NSIS installer | `src-tauri/target/release/bundle/nsis/Rusty-IDE_0.1.0_<arch>-setup.exe` |
+| MSI | `src-tauri/target/release/bundle/msi/Rusty-IDE_0.1.0_<arch>.msi` |
 
 ### Linux
 
 | Bundle | Path |
 |--------|------|
-| AppImage | `src-tauri/target/release/bundle/appimage/Axiom-IDE_0.1.0_<arch>.AppImage` |
-| Debian | `src-tauri/target/release/bundle/deb/Axiom-IDE_0.1.0_<arch>.deb` |
-| RPM | `src-tauri/target/release/bundle/rpm/Axiom-IDE_0.1.0-1.<arch>.rpm` |
+| AppImage | `src-tauri/target/release/bundle/appimage/Rusty-IDE_0.1.0_<arch>.AppImage` |
+| Debian | `src-tauri/target/release/bundle/deb/Rusty-IDE_0.1.0_<arch>.deb` |
+| RPM | `src-tauri/target/release/bundle/rpm/Rusty-IDE_0.1.0-1.<arch>.rpm` |
 
 > **AppImage** is the most portable single-file option across distributions. **deb** targets Debian/Ubuntu/Mint, **rpm** targets Fedora/RHEL/openSUSE.
 
@@ -249,7 +249,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Axiom-IDE-${{ matrix.target }}
+          name: Rusty-IDE-${{ matrix.target }}
           path: |
             src-tauri/target/release/bundle/**/*
 ```

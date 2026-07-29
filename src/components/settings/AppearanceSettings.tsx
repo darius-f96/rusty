@@ -12,7 +12,7 @@ export function AppearanceSettings() {
     <section className={styles.section} aria-labelledby="appearance-settings-title">
       <div>
         <h3 className={styles.title} id="appearance-settings-title">Appearance</h3>
-        <p className={styles.description}>Choose the color theme used throughout Axiom.</p>
+        <p className={styles.description}>Choose the color theme used throughout Rusty.</p>
       </div>
       <Field id="appearance-theme-select" label="Theme">
         <CustomSelect

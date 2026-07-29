@@ -75,8 +75,8 @@ interface Receipt {
   envOverrides?: Record<string, string>;
 }
 
-const CACHE_ROOT = path.join(os.homedir(), ".axiom", "lsp");
-const SHARE_ROOT = path.join(os.homedir(), ".axiom", "lsp", "share");
+const CACHE_ROOT = path.join(os.homedir(), ".rusty", "lsp");
+const SHARE_ROOT = path.join(os.homedir(), ".rusty", "lsp", "share");
 
 export class LspInstaller {
   /** Re-entrancy guard: language -> in-flight install promise. */

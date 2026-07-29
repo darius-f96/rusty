@@ -145,7 +145,7 @@ export const EdgeDiffTabContent: React.FC<EdgeDiffTabContentProps> = ({
             <DiffEditor
               height="100%"
               language={getMonacoLanguageId(diffFile)}
-              theme="axiom-custom-theme"
+              theme="rusty-custom-theme"
               original={originalCode}
               modified={displayCode}
               onMount={handleEditorMount}

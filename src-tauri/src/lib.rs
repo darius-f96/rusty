@@ -153,7 +153,7 @@ async fn apply_vfs_to_disk(
 ) -> Result<(), String> {
     let tid = get_tab_id(tab_id);
     if paths.is_empty() {
-        return Err("No reconciled VFS files were provided to Apply Axiom.".to_string());
+        return Err("No reconciled VFS files were provided to Apply Rusty.".to_string());
     }
     println!("Rust [apply_vfs_to_disk] applying {} reconciled VFS files for tab: {} without clearing them...", paths.len(), tid);
     let files = {
@@ -522,7 +522,7 @@ async fn save_chat_history(
     content: String,
 ) -> Result<String, String> {
     println!("Rust [save_chat_history] saving chat {} to {}", chatId, rootDir);
-    let chats_dir = PathBuf::from(&rootDir).join(".axiom").join("chats");
+    let chats_dir = PathBuf::from(&rootDir).join(".rusty").join("chats");
     std::fs::create_dir_all(&chats_dir).map_err(|e| e.to_string())?;
 
     // One file per chat, identified by chatId. Overwrites so all requests/replies
@@ -591,7 +591,7 @@ async fn create_terminal_session(
     // login shell is also interactive (the same model used by native terminals).
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
-    cmd.env("TERM_PROGRAM", "Axiom");
+    cmd.env("TERM_PROGRAM", "Rusty");
     cmd.env("SHELL", &shell);
     if let Some(ref cwd_dir) = cwd {
         if !cwd_dir.is_empty() {

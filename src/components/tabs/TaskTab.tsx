@@ -375,7 +375,7 @@ export const TaskTab: React.FC<TaskTabProps> = ({ tab, onExecuteNode, onStopExec
                   <DiffEditor
                     height="100%"
                     language={getEditorLanguage(activeDiffFile)}
-                    theme="axiom-custom-theme"
+                    theme="rusty-custom-theme"
                     original={originalCode}
                     modified={displayCode}
                     onMount={handleEditorMount}

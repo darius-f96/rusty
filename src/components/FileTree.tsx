@@ -136,7 +136,7 @@ export const FileTree: React.FC<FileTreeProps> = ({ entries }) => {
   }, [entries]);
 
   const openFile = async (node: FileEntry) => {
-    if (node.path.includes("/.axiom/canvas/") && node.path.endsWith(".json")) {
+    if (node.path.includes("/.rusty/canvas/") && node.path.endsWith(".json")) {
       try {
         const { canvasFileService } = await import("./tabs/canvas/services/canvasFileService");
         const parsedData = await canvasFileService.loadCanvasFromFile(node.path);
@@ -604,7 +604,7 @@ const FileTreeNode: React.FC<{
     const payload = { path: node.path, paths, name: node.name, isDir: !!node.is_dir };
     e.dataTransfer.setData("text/plain", JSON.stringify(payload));
     e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("application/x-axiom-files", JSON.stringify(payload));
+    e.dataTransfer.setData("application/x-rusty-files", JSON.stringify(payload));
   };
 
   const handleRename = async () => {

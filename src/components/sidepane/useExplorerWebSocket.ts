@@ -56,7 +56,7 @@ interface TaskGenerationViewState {
   contextDraft: GeneratedContextDraft[];
 }
 
-const TASK_GENERATION_CHANGED_EVENT = "axiom-task-generation-changed";
+const TASK_GENERATION_CHANGED_EVENT = "rusty-task-generation-changed";
 const activeTaskGenerations = new Map<string, ActiveTaskGeneration>();
 const taskGenerationViewStates = new Map<string, TaskGenerationViewState>();
 
@@ -248,14 +248,14 @@ export const useExplorerWebSocket = (selectedNode: any) => {
       if (detail?.nodeId !== selectedNodeId || !detail.subagent?.id) return;
       setSubagents(mergeSubagentUpdate(selectedNodeId, detail.subagent as IncomingSubagent));
     };
-    window.addEventListener("axiom-subagent-update", handleSubagentUpdate);
+    window.addEventListener("rusty-subagent-update", handleSubagentUpdate);
     const handleExplorerSubagentsChanged = (event: Event) => {
       const detail = (event as CustomEvent<{ nodeId: string }>).detail;
       if (detail?.nodeId === selectedNodeId) {
         setSubagents(activeExplorerSubagents.get(selectedNodeId) || []);
       }
     };
-    window.addEventListener("axiom-explorer-subagents-changed", handleExplorerSubagentsChanged);
+    window.addEventListener("rusty-explorer-subagents-changed", handleExplorerSubagentsChanged);
     const handleSubagentsReset = (event: Event) => {
       const detail = (event as CustomEvent<{ nodeId: string }>).detail;
       if (detail?.nodeId === selectedNodeId) {
@@ -263,11 +263,11 @@ export const useExplorerWebSocket = (selectedNode: any) => {
         setSubagents([]);
       }
     };
-    window.addEventListener("axiom-subagents-reset", handleSubagentsReset);
+    window.addEventListener("rusty-subagents-reset", handleSubagentsReset);
     return () => {
-      window.removeEventListener("axiom-subagent-update", handleSubagentUpdate);
-      window.removeEventListener("axiom-explorer-subagents-changed", handleExplorerSubagentsChanged);
-      window.removeEventListener("axiom-subagents-reset", handleSubagentsReset);
+      window.removeEventListener("rusty-subagent-update", handleSubagentUpdate);
+      window.removeEventListener("rusty-explorer-subagents-changed", handleExplorerSubagentsChanged);
+      window.removeEventListener("rusty-subagents-reset", handleSubagentsReset);
     };
   }, [selectedNodeId]);
 
@@ -428,7 +428,7 @@ export const useExplorerWebSocket = (selectedNode: any) => {
 
         if (msg.type === "subagent_update" && msg.tabId === selectedNodeId && msg.subagent?.id) {
           setSubagents(mergeSubagentUpdate(selectedNodeId, msg.subagent as IncomingSubagent));
-          window.dispatchEvent(new CustomEvent("axiom-explorer-subagents-changed", { detail: { nodeId: selectedNodeId } }));
+          window.dispatchEvent(new CustomEvent("rusty-explorer-subagents-changed", { detail: { nodeId: selectedNodeId } }));
           return;
         }
 

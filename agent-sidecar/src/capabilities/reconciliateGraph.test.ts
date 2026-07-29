@@ -63,7 +63,7 @@ test("rejects overlap paths outside the workspace", async () => {
 
 test("writes an overlap fix while leaving ordinary changed files TaskNode-owned", async () => {
   const pi = await importEsm<any>("@earendil-works/pi-ai/compat");
-  const registration = pi.registerFauxProvider({ api: "axiom-reconciliation-test", provider: "faux-reconciliation" });
+  const registration = pi.registerFauxProvider({ api: "rusty-reconciliation-test", provider: "faux-reconciliation" });
   const mergedContent = "export const a = true;\nexport const b = true;\n";
   const workspaceRoot = path.resolve("/workspace/project");
   const filePath = path.join(workspaceRoot, "src/shared.ts");
@@ -152,7 +152,7 @@ test("writes an overlap fix while leaving ordinary changed files TaskNode-owned"
 
 test("reviews multiple overlaps as independent single-file model calls", async () => {
   const pi = await importEsm<any>("@earendil-works/pi-ai/compat");
-  const registration = pi.registerFauxProvider({ api: "axiom-reconciliation-case-test", provider: "faux-reconciliation-cases" });
+  const registration = pi.registerFauxProvider({ api: "rusty-reconciliation-case-test", provider: "faux-reconciliation-cases" });
   const workspaceRoot = path.resolve("/workspace/project");
   const firstPath = path.join(workspaceRoot, "src/first.ts");
   const secondPath = path.join(workspaceRoot, "src/second.ts");
@@ -237,7 +237,7 @@ test("reviews multiple overlaps as independent single-file model calls", async (
 
 test("records completed cases and identifies the exact file when a later case fails", async () => {
   const pi = await importEsm<any>("@earendil-works/pi-ai/compat");
-  const registration = pi.registerFauxProvider({ api: "axiom-reconciliation-error-test", provider: "faux-reconciliation-error" });
+  const registration = pi.registerFauxProvider({ api: "rusty-reconciliation-error-test", provider: "faux-reconciliation-error" });
   const workspaceRoot = path.resolve("/workspace/project");
   const firstPath = path.join(workspaceRoot, "src/complete.ts");
   const failingPath = path.join(workspaceRoot, "src/failing.ts");

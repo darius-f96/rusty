@@ -2,7 +2,7 @@
  * Transactional build verification for reconciled VFS changes.
  *
  * Reconciliation keeps its edits in the frontend-owned VFS until the user
- * chooses Apply Axiom. To verify those edits without applying them, this
+ * chooses Apply Rusty. To verify those edits without applying them, this
  * service snapshots the corresponding physical files, overlays the VFS
  * contents just long enough to run a detected build command, and restores the
  * physical workspace in a finally block.

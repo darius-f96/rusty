@@ -33,7 +33,7 @@ async function getSearchImplementation(): Promise<Search> {
 }
 
 /**
- * Adapts pi-web-access for Axiom's OpenAI-compatible Agent Tab loop.
+ * Adapts pi-web-access for Rusty's OpenAI-compatible Agent Tab loop.
  *
  * Canvas tasks load the package as a native Pi extension. Agent Tab runs its
  * own tool loop, so it needs the same search implementation exposed as a

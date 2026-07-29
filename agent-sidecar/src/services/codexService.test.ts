@@ -39,7 +39,7 @@ test("Codex dynamic tools are namespaced, sanitized, and collision-safe", () => 
 
   assert.equal(result.specs.length, 1);
   assert.equal(result.specs[0].type, "namespace");
-  assert.equal(result.specs[0].name, "axiom");
+  assert.equal(result.specs[0].name, "rusty");
   assert.deepEqual(result.specs[0].tools.map((tool: any) => tool.name), ["read_file", "read_file_2"]);
   assert.equal(result.byName.get("read_file")?.name, "read/file");
   assert.equal(result.byName.get("read_file_2")?.name, "read.file");

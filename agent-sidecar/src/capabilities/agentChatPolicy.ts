@@ -13,7 +13,7 @@ export const GLOBAL_CHAT_TASK_DEPENDENCY_POLICY = `
 `;
 
 /**
- * Agent Tab should use Axiom's structured workspace tools for normal coding
+ * Agent Tab should use Rusty's structured workspace tools for normal coding
  * work. Keep command execution available for operations that genuinely need a
  * process (for example, a focused test), but do not let it become a substitute
  * for the harness.
@@ -21,7 +21,7 @@ export const GLOBAL_CHAT_TASK_DEPENDENCY_POLICY = `
 export const AGENT_TAB_HARNESS_POLICY = `
 
 Agent Tab harness policy (this overrides any conflicting skill instruction):
-- Use the Axiom harness for workspace operations whenever a dedicated tool exists: use 'search_codebase' for code search, 'list_files' for workspace discovery, 'read_file' for file inspection, and 'write_file' for every file creation or edit.
+- Use the Rusty harness for workspace operations whenever a dedicated tool exists: use 'search_codebase' for code search, 'list_files' for workspace discovery, 'read_file' for file inspection, and 'write_file' for every file creation or edit.
 - Never use 'run_command' to read, search, list, create, edit, move, or delete files, or to work around a harness tool. In particular, do not use shell utilities, scripts, interpreters, or package scripts to modify files.
 - Treat 'run_command' as a last resort. Use it only for an essential operation that the harness cannot perform, normally one focused build, test, typecheck, lint, generator, or user-requested executable.
 - Do not run speculative, redundant, or broad verification commands. After editing, run only the smallest relevant check when its result materially improves confidence; otherwise finish without executing a command.
@@ -40,7 +40,7 @@ export function agentDelegationPolicy(toolName: "Agent" | "delegate_task"): stri
   return `- Delegate at least one bounded investigation or review for every non-trivial request that spans multiple files, requires both discovery and implementation, combines diagnosis with a fix, or benefits from an independent verification pass.
 - Skip delegation only for a genuinely small, obvious, single-file change where a subagent would add no useful evidence.
 - When two or more investigations or reviews are independent, ${invocation} so they run concurrently. Use no more than three subagents unless the user explicitly asks for broader research.
-- Keep delegated work read-only and narrowly scoped. The parent agent owns all file edits through the Axiom harness; subagents return concise findings with relevant paths and evidence.
+- Keep delegated work read-only and narrowly scoped. The parent agent owns all file edits through the Rusty harness; subagents return concise findings with relevant paths and evidence.
 - ${collection}
 - Do not ask the user a refining question or present a final recommendation while delegated work is active.`;
 }

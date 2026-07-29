@@ -1,5 +1,5 @@
 /**
- * Single source of truth for language identity in Axiom.
+ * Single source of truth for language identity in Rusty.
  *
  * Two distinct "language" identifiers are in play:
  *

@@ -125,7 +125,7 @@ async function readClaudeCodeSdkUsage(): Promise<any> {
 }
 
 function claudeExecutable(): string {
-  const explicit = process.env.AXIOM_CLAUDE_CODE_PATH || process.env.CLAUDE_CODE_PATH;
+  const explicit = process.env.RUSTY_CLAUDE_CODE_PATH || process.env.CLAUDE_CODE_PATH;
   if (explicit && fs.existsSync(explicit)) return explicit;
 
   const packageByPlatform: Record<string, string> = {
@@ -411,8 +411,8 @@ function createClaudeSdkTools(
 function createClaudeMcpServers(sdk: ClaudeSdk, serverTools: any[]) {
   if (!serverTools.length) return undefined;
   return {
-    axiom: sdk.createSdkMcpServer({
-      name: "axiom",
+    rusty: sdk.createSdkMcpServer({
+      name: "rusty",
       version: "0.1.0",
       tools: serverTools,
       alwaysLoad: true,
@@ -423,7 +423,7 @@ function createClaudeMcpServers(sdk: ClaudeSdk, serverTools: any[]) {
 function createClaudeSession(options: ClaudeRunOptions, sdk: ClaudeSdk, controller: AbortController, z: any) {
   const serverTools = createClaudeSdkTools(options.tools || [], sdk, z, options.sendLog);
   const mcpServers = createClaudeMcpServers(sdk, serverTools);
-  const allowedTools = serverTools.map((entry: any) => `mcp__axiom__${entry.name}`);
+  const allowedTools = serverTools.map((entry: any) => `mcp__rusty__${entry.name}`);
 
   return sdk.query({
     prompt: promptWithHistory(options.userMessage, options.history),
@@ -440,7 +440,7 @@ function createClaudeSession(options: ClaudeRunOptions, sdk: ClaudeSdk, controll
       includePartialMessages: true,
       maxTurns: options.maxTurns,
       effort: options.reasoning === "minimal" ? "low" : options.reasoning,
-      env: { ...process.env, CLAUDE_AGENT_SDK_CLIENT_APP: "axiom/0.1.0" },
+      env: { ...process.env, CLAUDE_AGENT_SDK_CLIENT_APP: "rusty/0.1.0" },
     },
   });
 }
