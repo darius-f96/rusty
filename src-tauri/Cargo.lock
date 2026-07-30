@@ -3600,7 +3600,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-app"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "fuzzy-matcher",
  "ignore",
