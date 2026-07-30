@@ -19,7 +19,7 @@ export function sanitizeCopilotCliOutput(value: string): string {
 }
 
 export function compactCopilotCliMessage(value: string): string {
-  return sanitizeCopilotCliOutput(value).replace(/\s+/g, " ").trim().slice(0, 500);
+  return sanitizeCopilotCliOutput(value).replace(/\s+/g, " ").trim().slice(0, 900);
 }
 
 export function diagnosticCopilotMessage(value: string, home = copilotHome()): string {

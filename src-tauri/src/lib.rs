@@ -959,7 +959,77 @@ fn chrono_now_iso8601() -> String {
     )
 }
 
+/// The sidecar always binds this fixed port (see agent-sidecar/src/server.ts and
+/// src/config/sidecar.ts) regardless of dev vs release, so a stale process left
+/// over from a prior launch - a crashed debug build, an orphaned copy from
+/// before a rebrand, another checkout of this repo - can squat on it forever.
+/// When that happens this launch's own sidecar fails to bind and silently
+/// exits, and the UI ends up talking to whichever stale process got there
+/// first instead of the sidecar this app just spawned.
+const SIDECAR_PORT: u16 = 4000;
+
+/// Best-effort reclaim of `SIDECAR_PORT` before spawning. Only kills processes
+/// whose command line matches our own sidecar's resource layout - never an
+/// unrelated process that happens to be using the same port.
+fn reclaim_sidecar_port(port: u16) {
+    if std::net::TcpListener::bind(("127.0.0.1", port)).is_ok() {
+        return;
+    }
+
+    #[cfg(unix)]
+    {
+        let find_pids = || -> Vec<i32> {
+            std::process::Command::new("lsof")
+                .args(["-nP", "-ti", &format!("tcp:{port}")])
+                .output()
+                .map(|output| {
+                    String::from_utf8_lossy(&output.stdout)
+                        .lines()
+                        .filter_map(|line| line.trim().parse().ok())
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+
+        for pid in find_pids() {
+            let cmdline = std::process::Command::new("ps")
+                .args(["-o", "command=", "-p", &pid.to_string()])
+                .output()
+                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+                .unwrap_or_default();
+
+            if !cmdline.contains("resources/sidecar/server.js") {
+                eprintln!(
+                    "[sidecar] port {} is held by pid {} ({}), which doesn't look like a sidecar process; leaving it alone",
+                    port, pid, cmdline
+                );
+                continue;
+            }
+
+            eprintln!("[sidecar] reclaiming port {} from stale sidecar pid {} ({})", port, pid, cmdline);
+            let _ = std::process::Command::new("kill").args(["-TERM", &pid.to_string()]).status();
+        }
+
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        for pid in find_pids() {
+            eprintln!("[sidecar] pid {} ignored SIGTERM; sending SIGKILL", pid);
+            let _ = std::process::Command::new("kill").args(["-KILL", &pid.to_string()]).status();
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        eprintln!(
+            "[sidecar] port {} is already in use and automatic reclaim is only implemented on Unix; \
+             stop whatever is using it and relaunch.",
+            port
+        );
+    }
+}
+
 fn spawn_sidecar(app: &tauri::App) {
+    reclaim_sidecar_port(SIDECAR_PORT);
+
     // Resolve the bundled server.js from the app resources.
     // In dev, resources are copied to target/debug/resources/; in release they're
     // bundled into the app bundle. resource_dir() handles both cases.
