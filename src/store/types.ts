@@ -235,6 +235,10 @@ export interface CanvasContext {
   isPipelineApplied?: boolean;
   lastStickyColor?: string;
   hasBeenSaved?: boolean;
+  /** When true, context nodes are hidden from the canvas unless they are connected to a task in `contextRevealedTasks`. */
+  contextNodesHidden?: boolean;
+  /** Task IDs whose connected context nodes should remain visible even when `contextNodesHidden` is true. */
+  contextRevealedTasks?: string[];
 }
 
 export interface CanvasHistorySnapshot {

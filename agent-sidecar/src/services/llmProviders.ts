@@ -273,6 +273,9 @@ function openAiModelSupported(remoteId: string, hasPiMetadata: boolean): boolean
   return /^(gpt-|o\d(?:-|$)|codex-)/.test(id);
 }
 
+/** Providers whose catalog serves only models usable through a standard OpenAI-compatible chat-completions endpoint. */
+const OPEN_CATALOG_PROVIDERS = new Set(["opencode", "opencode-go"]);
+
 export async function discoverProviderModels(provider: LlmProviderConfig): Promise<DiscoveredProviderModel[]> {
   if (provider.transport === "github-copilot-sdk" || provider.id === "github-copilot") {
     throw new Error("GitHub Copilot model discovery must use the Copilot SDK adapter.");
@@ -308,6 +311,7 @@ export async function discoverProviderModels(provider: LlmProviderConfig): Promi
   const providerBaseUrl = trimTrailingSlash(provider.baseUrl?.trim() || defaults?.baseUrl || "");
   const isGitHub = provider.id === "github-models";
   const isKnownPiProvider = !!defaults?.piProvider;
+  const isOpenCatalog = OPEN_CATALOG_PROVIDERS.has(provider.id);
 
   return rawModels
     .map((raw: any): DiscoveredProviderModel | null => {
@@ -323,13 +327,19 @@ export async function discoverProviderModels(provider: LlmProviderConfig): Promi
       const defaultReasoningEffort = reasoningEffort(
         raw?.defaultReasoningEffort || raw?.default_reasoning_effort,
       );
+      // A model is "supported" when Rusty can usefully send prompts to it.
+      // For open catalogs (OpenCode, OpenCode-Go) every model listed uses a
+      // standard OpenAI-compatible endpoint, so Pi metadata enriches but
+      // never gates support.
       const supported = isGitHub
         ? githubModelSupported(raw)
         : provider.id === "openai"
           ? openAiModelSupported(remoteId, !!piModel)
           : provider.id === "anthropic"
             ? true
-            : isKnownPiProvider ? !!piModel : true;
+            : isOpenCatalog
+              ? true
+              : isKnownPiProvider ? !!piModel : true;
       const inferredReasoning = provider.id === "openai"
         ? /^(gpt-5|o\d(?:-|$))/.test(remoteId.toLowerCase())
         : raw?.capabilities?.thinking?.supported === true;
