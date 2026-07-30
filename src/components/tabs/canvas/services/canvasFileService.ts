@@ -101,6 +101,8 @@ const saveCanvasNow = async (
     edgeReconciliationStatus: context.edgeReconciliationStatus,
     reconciliationSnapshot: context.reconciliationSnapshot,
     isPipelineApplied: context.isPipelineApplied || false,
+    contextNodesHidden: context.contextNodesHidden ?? false,
+    contextRevealedTasks: context.contextRevealedTasks ?? [],
     vfsContents: vfsSnapshot.contents,
     vfsTracker: vfsSnapshot.tracker
   };

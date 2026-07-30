@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect, memo, useContext } from "react";
+import React, { useState, useRef, useEffect, memo, useContext, useCallback } from "react";
 import { Handle, Position } from "@xyflow/react";
-import { Sparkles, AlertCircle, CheckCircle2, Loader2, Pencil, Check, Trash2, Octagon, Minimize2, Maximize2, Settings } from "lucide-react";
+import { Sparkles, AlertCircle, CheckCircle2, Loader2, Pencil, Check, Trash2, Octagon, Minimize2, Maximize2, Settings, Eye, EyeOff } from "lucide-react";
 import { useWorkspaceStore } from "../../store";
 import { CanvasTabContext } from "../tabs/canvas/CanvasTabContext";
 import styles from "./TaskNode.module.css";
@@ -8,9 +8,17 @@ import styles from "./TaskNode.module.css";
 export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data }) => {
   const { tabId } = useContext(CanvasTabContext);
   const updateTaskNode = useWorkspaceStore((state) => state.updateTaskNode);
+  const updateCanvasContext = useWorkspaceStore((state) => state.updateCanvasContext);
   const nodeStatus = useWorkspaceStore((state) => (state.canvasContexts[tabId] || { nodeStatus: {} }).nodeStatus[id] || "idle");
   const deleteNode = useWorkspaceStore((state) => state.deleteNode);
   const setSelectedNodeId = useWorkspaceStore((state) => state.setSelectedNodeId);
+
+  // Context node reveal state
+  const canvasContext = useWorkspaceStore((state) => state.canvasContexts[tabId]);
+  const contextNodesHidden = canvasContext?.contextNodesHidden ?? false;
+  const contextRevealedTasks = canvasContext?.contextRevealedTasks ?? [];
+  const isContextRevealed = contextRevealedTasks.includes(id);
+
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(data.name || "AI Executor Node");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -24,6 +32,15 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
   const setIsMinimized = (val: boolean) => {
     updateTaskNode(id, { isMinimized: val });
   };
+
+  // Toggle this task node's context reveal status
+  const toggleContextReveal = useCallback(() => {
+    const currentRevealed = useWorkspaceStore.getState().canvasContexts[tabId]?.contextRevealedTasks ?? [];
+    const newRevealed = currentRevealed.includes(id)
+      ? currentRevealed.filter((tid: string) => tid !== id)
+      : [...currentRevealed, id];
+    updateCanvasContext(tabId, { contextRevealedTasks: newRevealed });
+  }, [tabId, id, updateCanvasContext]);
 
   // Auto-resize the prompt textarea based on content length
   useEffect(() => {
@@ -75,6 +92,22 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
         </div>
         
         <div className={styles.actions}>
+          {/* Context reveal toggle — visible when context nodes are hidden */}
+          {contextNodesHidden && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleContextReveal();
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              className={`nodrag ${styles.iconButton} ${isContextRevealed ? styles.positive : ""}`}
+              title={isContextRevealed ? "Hide connected context nodes" : "Reveal connected context nodes"}
+            >
+              {isContextRevealed ? <Eye size={14} /> : <EyeOff size={14} />}
+            </button>
+          )}
+
           {isEditing ? (
             <button
               onClick={(e) => {
@@ -181,9 +214,9 @@ export const TaskNode: React.FC<{ id: string; data: any }> = memo(({ id, data })
             setSelectedNodeId(id);
             // Programmatically select this node in the Zustand store context
             const store = useWorkspaceStore.getState();
-            const canvasContext = store.canvasContexts[tabId];
-            if (canvasContext) {
-              const updatedNodes = canvasContext.nodes.map((n) => ({
+            const canvasCtx = store.canvasContexts[tabId];
+            if (canvasCtx) {
+              const updatedNodes = canvasCtx.nodes.map((n) => ({
                 ...n,
                 selected: n.id === id,
               }));

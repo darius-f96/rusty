@@ -201,6 +201,8 @@ export const createCanvasSlice: WorkspaceSliceCreator = (set, get) => ({
           edgeReconciliationStatus: data.edgeReconciliationStatus || {},
           reconciliationSnapshot: data.reconciliationSnapshot,
           isPipelineApplied: data.isPipelineApplied || false,
+          contextNodesHidden: data.contextNodesHidden ?? false,
+          contextRevealedTasks: data.contextRevealedTasks ?? [],
           ...(!tabExists ? { hasBeenSaved: true } : {}),
         },
       };

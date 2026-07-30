@@ -3,6 +3,7 @@
  *
  * Top-right toolbar for the Rusty canvas. Contains:
  * - Global Chat Node navigation button
+ * - Hide Context Nodes toggle button
  * - Boundary navigation dropdown
  * - Add Node dropdown (task, context, MCP, sticky, boundary, global chat)
  * - Pipeline Actions dropdown (reconcile, save, apply)
@@ -24,6 +25,8 @@ import {
   Square,
   StickyNote,
   Plug,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import type { Node, ReactFlowInstance } from "@xyflow/react";
 import { focusCanvasNode } from "../../../../services/canvasNodeNavigation";
@@ -38,6 +41,8 @@ interface RustyTabToolbarProps {
   isReconciliationRunning: boolean;
   isPipelineApplied: boolean;
   rfInstance: ReactFlowInstance | null;
+  contextNodesHidden: boolean;
+  onToggleContextNodesHidden: () => void;
   /** Called when a node creation action should be dispatched. */
   onAddTaskNode: (x: number, y: number) => void;
   onAddContextNode: (x: number, y: number) => void;
@@ -58,6 +63,8 @@ export const RustyTabToolbar: React.FC<RustyTabToolbarProps> = ({
   isReconciliationRunning,
   isPipelineApplied,
   rfInstance,
+  contextNodesHidden,
+  onToggleContextNodesHidden,
   onAddTaskNode,
   onAddContextNode,
   onAddMcpNode,
@@ -95,6 +102,12 @@ export const RustyTabToolbar: React.FC<RustyTabToolbarProps> = ({
         tabId={tabId}
         globalChatNode={globalChatNode}
         hasGlobalChatNode={hasGlobalChatNode}
+      />
+
+      {/* Hide Context Nodes toggle */}
+      <HideContextNodesButton
+        hidden={contextNodesHidden}
+        onToggle={onToggleContextNodesHidden}
       />
 
       {/* Boundary navigation */}
@@ -175,6 +188,41 @@ const GlobalChatNavButton: React.FC<{
   >
     <Globe size={14} className="text-[var(--color-status-warning)]" />
     <span>Jump to Global Node</span>
+  </button>
+);
+
+/* ------------------------------------------------------------------ */
+/*  Hide Context Nodes Button                                          */
+/* ------------------------------------------------------------------ */
+
+/** Toggle button to hide/show all context nodes on the canvas. */
+const HideContextNodesButton: React.FC<{
+  hidden: boolean;
+  onToggle: () => void;
+}> = ({ hidden, onToggle }) => (
+  <button
+    type="button"
+    onClick={(event) => {
+      event.stopPropagation();
+      onToggle();
+    }}
+    title={
+      hidden
+        ? "Show context nodes"
+        : "Hide context nodes"
+    }
+    className={`bg-[var(--bg-sidebar)] border ${
+      hidden
+        ? "border-[var(--accent-color)] text-[var(--accent-color)]"
+        : "border-[var(--border-color)] text-[var(--text-light)]"
+    } hover:bg-[var(--bg-header)] text-xs font-mono font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition-all shadow-md hover:border-[var(--border-active)] cursor-pointer nodrag`}
+  >
+    {hidden ? (
+      <EyeOff size={14} className="text-[var(--accent-color)]" />
+    ) : (
+      <Eye size={14} className="text-[var(--text-muted)]" />
+    )}
+    <span>{hidden ? "Hidden" : "Context"}</span>
   </button>
 );
 

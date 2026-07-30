@@ -11,6 +11,8 @@ export const createEmptyCanvasContext = (): CanvasContext => ({
   globalChatHistory: {},
   edgeReconciliationStatus: {},
   isPipelineApplied: false,
+  contextNodesHidden: false,
+  contextRevealedTasks: [],
 });
 
 export function getActiveCanvasTabId(state: WorkspaceState): string {

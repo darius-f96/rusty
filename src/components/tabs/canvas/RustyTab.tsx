@@ -122,6 +122,7 @@ const RustyTabContent: React.FC<RustyTabProps> = ({ tab, onExecuteNode, onStopEx
   const selectedNodeId = useWorkspaceStore((state) => state.selectedNodeId);
   const setSelectedNodeId = useWorkspaceStore((state) => state.setSelectedNodeId);
   const setSelectedEdgeId = useWorkspaceStore((state) => state.setSelectedEdgeId);
+  const updateCanvasContext = useWorkspaceStore((state) => state.updateCanvasContext);
 
   /* ---- Store action creators ---- */
   const storeActions = useStoreActions();
@@ -137,8 +138,39 @@ const RustyTabContent: React.FC<RustyTabProps> = ({ tab, onExecuteNode, onStopEx
   const connectionStartRef = useRef<any>(null);
   const initRef = useRef(false);
 
+  /* ---- Context node visibility state ---- */
+  const contextNodesHidden = context.contextNodesHidden ?? false;
+  const contextRevealedTasks = context.contextRevealedTasks ?? [];
+
+  /** Toggles context node visibility mode. */
+  const handleToggleContextNodesHidden = useCallback(() => {
+    updateCanvasContext(tab.id, { contextNodesHidden: !contextNodesHidden });
+  }, [updateCanvasContext, tab.id, contextNodesHidden]);
+
   /* ---- Derived data ---- */
-  const flowNodes = useMemo(() => buildFlowNodes(nodes), [nodes]);
+  const flowNodes = useMemo(() => {
+    const built = buildFlowNodes(nodes);
+    if (!contextNodesHidden) return built;
+    // When context nodes are hidden, only keep context nodes that are
+    // connected to a task in the revealed-tasks set.
+    const revealedContextIds = new Set<string>();
+    if (contextRevealedTasks.length > 0) {
+      edges.forEach((edge: { source: string; target: string; targetHandle?: string }) => {
+        if (
+          contextRevealedTasks.includes(edge.target) &&
+          edge.targetHandle?.startsWith("context-in")
+        ) {
+          revealedContextIds.add(edge.source);
+        }
+      });
+    }
+    return built.filter((node: { type?: string; id: string }) => {
+      if (node.type === "contextNode" && !revealedContextIds.has(node.id)) {
+        return false;
+      }
+      return true;
+    });
+  }, [nodes, edges, contextNodesHidden, contextRevealedTasks]);
 
   const selectedNodes = useMemo(
     () => flowNodes.filter((n: { selected?: boolean }) => n.selected),
@@ -614,6 +646,8 @@ const RustyTabContent: React.FC<RustyTabProps> = ({ tab, onExecuteNode, onStopEx
             isReconciliationRunning={isReconciliationRunning}
             isPipelineApplied={isPipelineApplied}
             rfInstance={rfInstance}
+            contextNodesHidden={contextNodesHidden}
+            onToggleContextNodesHidden={handleToggleContextNodesHidden}
             onAddTaskNode={(x, y) => storeActions.addTaskNode(x, y, tab.id)}
             onAddContextNode={(x, y) =>
               storeActions.addContextNode(x, y, undefined, tab.id)
