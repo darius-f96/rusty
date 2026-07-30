@@ -155,7 +155,7 @@ const RustyTabContent: React.FC<RustyTabProps> = ({ tab, onExecuteNode, onStopEx
     // connected to a task in the revealed-tasks set.
     const revealedContextIds = new Set<string>();
     if (contextRevealedTasks.length > 0) {
-      edges.forEach((edge: { source: string; target: string; targetHandle?: string }) => {
+      edges.forEach((edge: { source: string; target: string; targetHandle?: string | null }) => {
         if (
           contextRevealedTasks.includes(edge.target) &&
           edge.targetHandle?.startsWith("context-in")
