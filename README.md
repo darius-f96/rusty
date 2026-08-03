@@ -42,13 +42,13 @@ sudo apt install ./Rusty-IDE_<version>_amd64.deb
 
 # Fedora / RHEL / openSUSE
 sudo dnf install ./Rusty-IDE-<version>-1.x86_64.rpm
-
-# Any distro — portable, no install
-chmod +x Rusty-IDE_<version>_amd64.AppImage
-./Rusty-IDE_<version>_amd64.AppImage
 ```
 
-Then launch from your app menu or run `tauri-app` (deb/rpm) / the AppImage.
+Then launch from your app menu or run `tauri-app`.
+
+> An AppImage isn't published — the bundled agent sidecar payload trips the
+> AppImage tooling. Build one from source via [BUILD.md](BUILD.md) if you need
+> a portable single-file binary.
 
 > **Running under WSLg (WSL2 GUI):** works, but webkit rendering can come up
 > blank or slow. If the window is black, force the software/compositing
