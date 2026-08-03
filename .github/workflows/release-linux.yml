@@ -57,18 +57,18 @@ jobs:
           chmod +x rusty-node-x86_64-unknown-linux-gnu
           rm -rf node-v22.23.1-linux-x64*
 
-      # AppImage is intentionally excluded: the bundled sidecar payload (~850MB,
-      # incl. codex musl binaries) reliably trips linuxdeploy's dependency scan
-      # ("failed to run linuxdeploy"). deb + rpm cover Debian/Ubuntu/Mint and
-      # Fedora/RHEL/openSUSE. Build an AppImage from source if you need one.
-      - name: Build (deb + rpm)
-        run: npm run tauri build -- --bundles deb,rpm
+      # Only deb is built. The ~850MB bundled sidecar payload (codex musl binaries,
+      # large node_modules) makes the rpm bundler's xz pass take 30min+ and trips
+      # the AppImage bundler ("failed to run linuxdeploy") outright. deb covers
+      # Debian/Ubuntu/Mint. rpm/AppImage can be revisited once the payload is trimmed.
+      - name: Build (deb)
+        run: npm run tauri build -- --bundles deb
 
       - name: Collect artifacts
         run: |
           mkdir -p dist-artifacts
           find src-tauri/target/release/bundle \
-            \( -name '*.deb' -o -name '*.rpm' \) \
+            -name '*.deb' \
             -exec cp {} dist-artifacts/ \;
           ls -lh dist-artifacts
 
@@ -87,5 +87,5 @@ jobs:
           gh release create "${{ github.ref_name }}" dist-artifacts/* \
             --repo "${{ github.repository }}" \
             --title "Rusty-IDE ${{ github.ref_name }}" \
-            --notes "Linux build (x86_64). deb + rpm." \
+            --notes "Linux build (x86_64). deb." \
             || gh release upload "${{ github.ref_name }}" dist-artifacts/* --clobber
