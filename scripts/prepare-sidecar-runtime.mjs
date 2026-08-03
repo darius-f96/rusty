@@ -24,7 +24,8 @@ await Promise.all([
 // shipped copy. They're build-time only, never imported by server.js at runtime, and
 // macOS notarization rejects the app if any bundled Mach-O binary is unsigned —
 // pruning avoids having to sign build tooling we don't ship on purpose.
-execFileSync("npm", ["prune", "--omit=dev"], { cwd: runtimeDir, stdio: "inherit" });
+// shell: true so Windows resolves npm.cmd (execFileSync won't find bare "npm" there → ENOENT).
+execFileSync("npm", ["prune", "--omit=dev"], { cwd: runtimeDir, stdio: "inherit", shell: true });
 
 // Everything left under node_modules IS shipped and loaded at runtime (native FFI/
 // clipboard/terminal addons pulled in by the Copilot/Codex/Pi SDKs). Every Mach-O
