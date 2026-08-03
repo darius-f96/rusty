@@ -1052,7 +1052,7 @@ fn spawn_sidecar(app: &tauri::App) {
     }
 
     // Resolve the bundled Node binary declared via `externalBin` in tauri.conf.json.
-    let sidecar_cmd = match app.shell().sidecar("node") {
+    let sidecar_cmd = match app.shell().sidecar("rusty-node") {
         Ok(cmd) => cmd,
         Err(e) => {
             eprintln!("[sidecar] failed to resolve bundled node binary: {}", e);

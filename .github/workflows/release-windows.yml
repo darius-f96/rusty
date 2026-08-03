@@ -38,7 +38,7 @@ jobs:
           npm --prefix agent-sidecar install
 
       # externalBin in tauri.conf.json is "bin/node"; Tauri appends the target
-      # triple, so on Windows it resolves to bin/node-x86_64-pc-windows-msvc.exe.
+      # triple, so on Windows it resolves to bin/rusty-node-x86_64-pc-windows-msvc.exe.
       # The dir is gitignored and absent on a fresh checkout, so fetch it here.
       - name: Download bundled Node runtime
         shell: pwsh
@@ -47,7 +47,7 @@ jobs:
           Set-Location src-tauri/bin
           curl.exe -LO https://nodejs.org/dist/v22.23.1/node-v22.23.1-win-x64.zip
           tar.exe xf node-v22.23.1-win-x64.zip
-          Copy-Item node-v22.23.1-win-x64/node.exe node-x86_64-pc-windows-msvc.exe
+          Copy-Item node-v22.23.1-win-x64/node.exe rusty-node-x86_64-pc-windows-msvc.exe
           Remove-Item -Recurse -Force node-v22.23.1-win-x64*
 
       # Produces both installers. No code signing — the .exe/.msi are unsigned,
