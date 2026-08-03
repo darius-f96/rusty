@@ -37,7 +37,7 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
-            patchelf libssl-dev rpm
+            patchelf libssl-dev rpm libfuse2
 
       - name: Install dependencies
         run: |
@@ -58,6 +58,13 @@ jobs:
           rm -rf node-v22.23.1-linux-x64*
 
       - name: Build (deb + AppImage + rpm)
+        env:
+          # linuxdeploy/appimagetool are themselves AppImages; runners lack FUSE,
+          # so tell them to self-extract instead of mounting.
+          APPIMAGE_EXTRACT_AND_RUN: 1
+          # The bundled sidecar ships non-glibc binaries (codex musl, etc.) that
+          # linuxdeploy's strip pass chokes on; skip stripping.
+          NO_STRIP: "true"
         run: npm run tauri build -- --bundles deb,appimage,rpm
 
       - name: Collect artifacts
